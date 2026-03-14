@@ -137,6 +137,40 @@ func closeJobChannels(jobID string) {
 
 // --- API endpoints ---
 
+// TriggerInternalParams is the request body for TriggerCheckInternal.
+type TriggerInternalParams struct {
+	UserID string `json:"user_id"`
+	SubURL string `json:"sub_url"`
+}
+
+// TriggerCheckInternal triggers a check job from an internal caller (e.g., scheduler).
+// Does not require auth — caller supplies userID and subURL directly.
+//
+//encore:api private method=POST path=/internal/check/:subscriptionID
+func TriggerCheckInternal(ctx context.Context, subscriptionID string, p *TriggerInternalParams) (*TriggerResponse, error) {
+	var runningCount int
+	if err := db.QueryRow(ctx, `
+		SELECT COUNT(*) FROM check_jobs
+		WHERE subscription_id = $1 AND status = 'running'
+	`, subscriptionID).Scan(&runningCount); err != nil {
+		return nil, errs.B().Code(errs.Internal).Msg("db error").Err()
+	}
+	if runningCount > 0 {
+		return nil, errs.B().Code(errs.FailedPrecondition).Msg("a check is already running").Err()
+	}
+
+	jobID := uuid.New().String()
+	if _, err := db.Exec(ctx, `
+		INSERT INTO check_jobs (id, subscription_id, user_id, sub_url, status, created_at)
+		VALUES ($1, $2, $3, $4, 'queued', $5)
+	`, jobID, subscriptionID, p.UserID, p.SubURL, time.Now()); err != nil {
+		return nil, errs.B().Code(errs.Internal).Msg("failed to create job").Err()
+	}
+
+	go runJob(context.Background(), jobID, subscriptionID, p.UserID)
+	return &TriggerResponse{JobID: jobID}, nil
+}
+
 // TriggerCheck creates a new check job for the given subscription.
 //
 //encore:api auth method=POST path=/check/:subscriptionID
