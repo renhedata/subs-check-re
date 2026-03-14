@@ -170,3 +170,20 @@ func Delete(ctx context.Context, id string) (*DeleteResponse, error) {
 	}
 	return &DeleteResponse{OK: true}, nil
 }
+
+// GetSubscription returns a subscription by ID, verifying ownership.
+// Used internally by the checker service.
+//
+//encore:api auth method=GET path=/subscriptions/:id
+func GetSubscription(ctx context.Context, id string) (*Subscription, error) {
+	uid := encauth.Data().(*authsvc.UserClaims).UserID
+	var s Subscription
+	err := db.QueryRow(ctx, `
+		SELECT id, user_id, name, url, enabled, cron_expr, created_at, last_run_at
+		FROM subscriptions WHERE id = $1 AND user_id = $2
+	`, id, uid).Scan(&s.ID, &s.UserID, &s.Name, &s.URL, &s.Enabled, &s.CronExpr, &s.CreatedAt, &s.LastRunAt)
+	if err != nil {
+		return nil, errs.B().Code(errs.NotFound).Msg("subscription not found").Err()
+	}
+	return &s, nil
+}

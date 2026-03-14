@@ -1,0 +1,56 @@
+// services/checker/checker_test.go
+package checker
+
+import (
+	"context"
+	"testing"
+
+	"encore.dev/beta/auth"
+	"encore.dev/et"
+
+	authsvc "subs-check-re/services/auth"
+)
+
+func withAuth() context.Context {
+	et.OverrideAuthInfo(auth.UID("test-user-id"), &authsvc.UserClaims{UserID: "test-user-id"})
+	return context.Background()
+}
+
+func TestTriggerCheckMissingSubscription(t *testing.T) {
+	ctx := withAuth()
+	_, err := TriggerCheck(ctx, "nonexistent-sub-id")
+	if err == nil {
+		t.Error("expected error for missing subscription")
+	}
+}
+
+func TestGetResultsNoJobs(t *testing.T) {
+	ctx := withAuth()
+	_, err := GetResults(ctx, "nonexistent-sub-id")
+	if err == nil {
+		t.Error("expected error when no jobs exist")
+	}
+}
+
+func TestParseProxies(t *testing.T) {
+	// Clash YAML format
+	yaml := []byte(`
+proxies:
+  - name: "test-node"
+    type: ss
+    server: 1.2.3.4
+    port: 8388
+    cipher: chacha20-ietf-poly1305
+    password: "testpass"
+`)
+	proxies, err := parseProxies(yaml)
+	if err != nil {
+		t.Fatalf("parseProxies failed: %v", err)
+	}
+	if len(proxies) != 1 {
+		t.Errorf("expected 1 proxy, got %d", len(proxies))
+	}
+	if proxies[0]["name"] != "test-node" {
+		t.Errorf("expected name 'test-node', got %v", proxies[0]["name"])
+	}
+}
