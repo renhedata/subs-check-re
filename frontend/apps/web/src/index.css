@@ -1,1 +1,33 @@
 @import "@frontend/ui/globals.css";
+
+/* GitHub dark palette — overrides the shared dark vars */
+.dark {
+	--background: #0d1117;
+	--foreground: #f0f6fc;
+	--card: #161b22;
+	--card-foreground: #f0f6fc;
+	--popover: #161b22;
+	--popover-foreground: #f0f6fc;
+	--primary: #58a6ff;
+	--primary-foreground: #0d1117;
+	--secondary: #21262d;
+	--secondary-foreground: #f0f6fc;
+	--muted: #21262d;
+	--muted-foreground: #8b949e;
+	--accent: #21262d;
+	--accent-foreground: #f0f6fc;
+	--destructive: #f85149;
+	--border: #30363d;
+	--input: #30363d;
+	--ring: #58a6ff;
+	--radius: 0.5rem;
+}
+
+@layer base {
+	html {
+		color-scheme: dark;
+	}
+	body {
+		background-color: #0d1117;
+	}
+}
