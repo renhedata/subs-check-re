@@ -1,144 +1,218 @@
-// frontend/apps/web/src/routes/subscriptions/index.tsx
 import { useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Plus, Play, Trash2 } from "lucide-react";
+import { Clock, Loader2, Play, Plus, Trash2 } from "lucide-react";
 import { Button } from "@frontend/ui/components/button";
 import { Input } from "@frontend/ui/components/input";
 import { Label } from "@frontend/ui/components/label";
-import { Card, CardContent } from "@frontend/ui/components/card";
+import { Skeleton } from "@frontend/ui/components/skeleton";
 
 import { api, ApiError, type Subscription } from "@/lib/api";
 
 export const Route = createFileRoute("/subscriptions/")({
-  component: SubscriptionsPage,
+	component: SubscriptionsPage,
 });
 
 function SubscriptionsPage() {
-  const navigate = useNavigate();
-  const qc = useQueryClient();
-  const [name, setName] = useState("");
-  const [url, setUrl] = useState("");
-  const [adding, setAdding] = useState(false);
+	const navigate = useNavigate();
+	const qc = useQueryClient();
+	const [name, setName] = useState("");
+	const [url, setUrl] = useState("");
+	const [adding, setAdding] = useState(false);
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["subscriptions"],
-    queryFn: () => api.get<{ subscriptions: Subscription[] }>("/subscriptions"),
-  });
+	const { data, isLoading } = useQuery({
+		queryKey: ["subscriptions"],
+		queryFn: () => api.get<{ subscriptions: Subscription[] }>("/subscriptions"),
+	});
 
-  const deleteMut = useMutation({
-    mutationFn: (id: string) => api.delete(`/subscriptions/${id}`),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["subscriptions"] });
-      toast.success("Deleted");
-    },
-    onError: (e) => toast.error(e instanceof ApiError ? e.message : "Delete failed"),
-  });
+	const deleteMut = useMutation({
+		mutationFn: (id: string) => api.delete(`/subscriptions/${id}`),
+		onSuccess: () => {
+			qc.invalidateQueries({ queryKey: ["subscriptions"] });
+			toast.success("Deleted");
+		},
+		onError: (e) => toast.error(e instanceof ApiError ? e.message : "Delete failed"),
+	});
 
-  const triggerMut = useMutation({
-    mutationFn: (id: string) => api.post<{ job_id: string }>(`/check/${id}`),
-    onSuccess: (resp, id) => {
-      toast.success("Check started");
-      navigate({ to: "/subscriptions/$id", params: { id }, search: { job: resp.job_id } });
-    },
-    onError: (e) => toast.error(e instanceof ApiError ? e.message : "Failed to start check"),
-  });
+	const triggerMut = useMutation({
+		mutationFn: (id: string) => api.post<{ job_id: string }>(`/check/${id}`),
+		onSuccess: (resp, id) => {
+			toast.success("Check started");
+			navigate({ to: "/subscriptions/$id", params: { id }, search: { job: resp.job_id } });
+		},
+		onError: (e) => toast.error(e instanceof ApiError ? e.message : "Failed to start check"),
+	});
 
-  const createMut = useMutation({
-    mutationFn: () => api.post<Subscription>("/subscriptions", { name, url }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["subscriptions"] });
-      setName("");
-      setUrl("");
-      setAdding(false);
-      toast.success("Subscription added");
-    },
-    onError: (e) => toast.error(e instanceof ApiError ? e.message : "Failed to add"),
-  });
+	const createMut = useMutation({
+		mutationFn: () => api.post<Subscription>("/subscriptions", { name, url }),
+		onSuccess: () => {
+			qc.invalidateQueries({ queryKey: ["subscriptions"] });
+			setName("");
+			setUrl("");
+			setAdding(false);
+			toast.success("Subscription added");
+		},
+		onError: (e) => toast.error(e instanceof ApiError ? e.message : "Failed to add"),
+	});
 
-  const subs = data?.subscriptions ?? [];
+	const subs = data?.subscriptions ?? [];
 
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Subscriptions</h1>
-        <Button onClick={() => setAdding(!adding)} size="sm">
-          <Plus className="mr-1 h-4 w-4" /> Add
-        </Button>
-      </div>
+	return (
+		<div className="space-y-5">
+			<div className="flex items-center justify-between">
+				<h1 className="text-lg font-semibold text-[#f0f6fc]">Subscriptions</h1>
+				<button
+					type="button"
+					onClick={() => setAdding(!adding)}
+					className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
+					style={{ background: "#238636" }}
+				>
+					<Plus size={13} strokeWidth={1.5} />
+					Add
+				</button>
+			</div>
 
-      {adding && (
-        <Card>
-          <CardContent className="pt-4 space-y-3">
-            <div className="space-y-1">
-              <Label>Name (optional)</Label>
-              <Input placeholder="My Sub" value={name} onChange={(e) => setName(e.target.value)} />
-            </div>
-            <div className="space-y-1">
-              <Label>Subscription URL</Label>
-              <Input placeholder="https://..." value={url} onChange={(e) => setUrl(e.target.value)} />
-            </div>
-            <div className="flex gap-2">
-              <Button onClick={() => createMut.mutate()} disabled={!url || createMut.isPending}>
-                {createMut.isPending ? "Adding..." : "Add"}
-              </Button>
-              <Button variant="outline" onClick={() => setAdding(false)}>
-                Cancel
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+			{adding && (
+				<div
+					className="rounded-lg border p-4 space-y-3"
+					style={{ background: "#161b22", borderColor: "#30363d" }}
+				>
+					<div className="space-y-1.5">
+						<Label className="text-[#8b949e] text-xs">Name (optional)</Label>
+						<Input
+							placeholder="My Sub"
+							value={name}
+							onChange={(e) => setName(e.target.value)}
+							className="h-8 text-sm"
+						/>
+					</div>
+					<div className="space-y-1.5">
+						<Label className="text-[#8b949e] text-xs">Subscription URL</Label>
+						<Input
+							placeholder="https://..."
+							value={url}
+							onChange={(e) => setUrl(e.target.value)}
+							className="h-8 text-sm"
+						/>
+					</div>
+					<div className="flex gap-2">
+						<Button
+							size="sm"
+							onClick={() => createMut.mutate()}
+							disabled={!url || createMut.isPending}
+							style={{ background: "#238636", color: "#fff" }}
+							className="border-0"
+						>
+							{createMut.isPending ? (
+								<Loader2 size={13} className="animate-spin" />
+							) : (
+								"Add"
+							)}
+						</Button>
+						<Button size="sm" variant="outline" onClick={() => setAdding(false)}>
+							Cancel
+						</Button>
+					</div>
+				</div>
+			)}
 
-      {isLoading && <p className="text-muted-foreground">Loading...</p>}
+			<div className="space-y-2">
+				{isLoading
+					? Array.from({ length: 3 }).map((_, i) => (
+							<div
+								key={i}
+								className="rounded-lg border p-4"
+								style={{ background: "#161b22", borderColor: "#30363d" }}
+							>
+								<Skeleton className="h-4 w-48 mb-2" />
+								<Skeleton className="h-3 w-72" />
+							</div>
+						))
+					: subs.map((sub) => <SubRow key={sub.id} sub={sub} deleteMut={deleteMut} triggerMut={triggerMut} />)}
 
-      <div className="space-y-3">
-        {subs.map((sub) => (
-          <Card key={sub.id}>
-            <CardContent className="flex items-center justify-between py-4">
-              <div>
-                <Link
-                  to="/subscriptions/$id"
-                  params={{ id: sub.id }}
-                  className="font-medium hover:underline"
-                >
-                  {sub.name || sub.url}
-                </Link>
-                {sub.name && (
-                  <p className="text-sm text-muted-foreground truncate max-w-md">{sub.url}</p>
-                )}
-                {sub.cron_expr && (
-                  <p className="text-xs text-muted-foreground">⏱ {sub.cron_expr}</p>
-                )}
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => triggerMut.mutate(sub.id)}
-                  disabled={triggerMut.isPending}
-                >
-                  <Play className="h-3 w-3 mr-1" /> Check
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => deleteMut.mutate(sub.id)}
-                  disabled={deleteMut.isPending}
-                >
-                  <Trash2 className="h-3 w-3" />
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-        {!isLoading && subs.length === 0 && (
-          <p className="text-center text-muted-foreground py-8">
-            No subscriptions yet. Add one above.
-          </p>
-        )}
-      </div>
-    </div>
-  );
+				{!isLoading && subs.length === 0 && (
+					<p className="py-10 text-center text-sm" style={{ color: "#8b949e" }}>
+						No subscriptions yet. Add one above.
+					</p>
+				)}
+			</div>
+		</div>
+	);
+}
+
+function SubRow({
+	sub,
+	deleteMut,
+	triggerMut,
+}: {
+	sub: Subscription;
+	deleteMut: { mutate: (id: string) => void; isPending: boolean };
+	triggerMut: { mutate: (id: string) => void; isPending: boolean };
+}) {
+	return (
+		<div
+			className="flex items-center gap-3 rounded-lg border px-4 py-3"
+			style={{ background: "#161b22", borderColor: "#30363d" }}
+		>
+			{/* Status dot */}
+			<div
+				className="h-2 w-2 flex-shrink-0 rounded-full"
+				style={{ background: sub.last_run_at ? "#3fb950" : "#30363d" }}
+			/>
+
+			{/* Info */}
+			<div className="flex-1 min-w-0">
+				<Link
+					to="/subscriptions/$id"
+					params={{ id: sub.id }}
+					className="text-sm font-medium hover:underline"
+					style={{ color: "#58a6ff" }}
+				>
+					{sub.name || sub.url}
+				</Link>
+				{sub.name && (
+					<p
+						className="mt-0.5 truncate font-mono text-xs"
+						style={{ color: "#8b949e" }}
+					>
+						{sub.url}
+					</p>
+				)}
+				{sub.cron_expr && (
+					<p className="mt-0.5 flex items-center gap-1 text-xs" style={{ color: "#6e7681" }}>
+						<Clock size={10} strokeWidth={1.5} />
+						{sub.cron_expr}
+					</p>
+				)}
+			</div>
+
+			{/* Actions */}
+			<div className="flex items-center gap-2 flex-shrink-0">
+				<button
+					type="button"
+					onClick={() => triggerMut.mutate(sub.id)}
+					disabled={triggerMut.isPending}
+					className="flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs transition-colors hover:bg-white/5 disabled:opacity-50"
+					style={{ borderColor: "#30363d", color: "#8b949e" }}
+				>
+					{triggerMut.isPending ? (
+						<Loader2 size={11} className="animate-spin" />
+					) : (
+						<Play size={11} strokeWidth={1.5} />
+					)}
+					Check
+				</button>
+				<button
+					type="button"
+					onClick={() => deleteMut.mutate(sub.id)}
+					disabled={deleteMut.isPending}
+					className="rounded-md p-1.5 transition-colors hover:bg-[#f85149]/10 hover:text-[#f85149] disabled:opacity-50"
+					style={{ color: "#6e7681" }}
+				>
+					<Trash2 size={13} strokeWidth={1.5} />
+				</button>
+			</div>
+		</div>
+	);
 }
