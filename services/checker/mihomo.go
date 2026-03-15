@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	proxyTimeout = 15 * time.Second
+	proxyTimeout = 10 * time.Second
 	aliveTestURL = "http://www.gstatic.com/generate_204"
 	ipLookupURL  = "http://ip-api.com/json/?fields=query,countryCode"
 )
@@ -71,19 +71,29 @@ func newProxyClient(mapping map[string]any) *proxyClient {
 	}
 }
 
+// get performs a GET request using the given context, honoring cancellation.
+func get(ctx context.Context, client *http.Client, url string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	return client.Do(req)
+}
+
 // isAlive returns true if the proxy can reach the connectivity test URL.
-func isAlive(client *http.Client) bool {
-	resp, err := client.Get(aliveTestURL)
+func isAlive(ctx context.Context, client *http.Client) bool {
+	resp, err := get(ctx, client, aliveTestURL)
 	if err != nil {
 		return false
 	}
 	defer resp.Body.Close()
+	io.Copy(io.Discard, resp.Body)
 	return resp.StatusCode >= 200 && resp.StatusCode < 302
 }
 
 // getProxyInfo retrieves the external IP and country code via the proxy.
-func getProxyInfo(client *http.Client) (ip, country string) {
-	resp, err := client.Get(ipLookupURL)
+func getProxyInfo(ctx context.Context, client *http.Client) (ip, country string) {
+	resp, err := get(ctx, client, ipLookupURL)
 	if err != nil {
 		return "", ""
 	}
@@ -105,17 +115,37 @@ func getProxyInfo(client *http.Client) (ip, country string) {
 }
 
 // measureLatency measures round-trip latency in milliseconds.
-func measureLatency(client *http.Client) int {
+func measureLatency(ctx context.Context, client *http.Client) int {
 	start := time.Now()
-	resp, err := client.Get(aliveTestURL)
+	resp, err := get(ctx, client, aliveTestURL)
 	if err != nil {
 		return 0
 	}
 	defer resp.Body.Close()
+	io.Copy(io.Discard, resp.Body)
 	if resp.StatusCode < 200 || resp.StatusCode >= 302 {
 		return 0
 	}
 	return int(time.Since(start).Milliseconds())
+}
+
+// measureSpeed downloads a fixed-size file and returns throughput in KB/s.
+func measureSpeed(ctx context.Context, client *http.Client, speedTestURL string) int {
+	start := time.Now()
+	resp, err := get(ctx, client, speedTestURL)
+	if err != nil {
+		return 0
+	}
+	defer resp.Body.Close()
+	n, err := io.Copy(io.Discard, resp.Body)
+	if err != nil || n == 0 {
+		return 0
+	}
+	elapsed := time.Since(start).Seconds()
+	if elapsed == 0 {
+		return 0
+	}
+	return int(float64(n) / 1024 / elapsed)
 }
 
 // nodeCheckResult holds the outcome of checking a single node.
@@ -124,6 +154,7 @@ type nodeCheckResult struct {
 	NodeName  string
 	Alive     bool
 	LatencyMs int
+	SpeedKbps int
 	IP        string
 	Country   string
 	Netflix   bool
@@ -136,7 +167,7 @@ type nodeCheckResult struct {
 }
 
 // checkNode runs all checks for a single proxy mapping and returns the result.
-func checkNode(nodeID string, mapping map[string]any) nodeCheckResult {
+func checkNode(ctx context.Context, nodeID string, mapping map[string]any, speedTestURL string) nodeCheckResult {
 	name, _ := mapping["name"].(string)
 	result := nodeCheckResult{NodeID: nodeID, NodeName: name}
 
@@ -146,26 +177,27 @@ func checkNode(nodeID string, mapping map[string]any) nodeCheckResult {
 	}
 	defer pc.close()
 
-	if !isAlive(pc.Client) {
+	if !isAlive(ctx, pc.Client) {
 		return result
 	}
 	result.Alive = true
-	result.LatencyMs = measureLatency(pc.Client)
+	result.LatencyMs = measureLatency(ctx, pc.Client)
+	result.SpeedKbps = measureSpeed(ctx, pc.Client, speedTestURL)
 
 	// Reuse same transport with shorter timeout for media checks
 	mediaClient := &http.Client{
 		Transport: pc.Transport,
-		Timeout:   10 * time.Second,
+		Timeout:   8 * time.Second,
 	}
 
-	result.IP, result.Country = getProxyInfo(mediaClient)
-	result.Netflix, _ = checkNetflix(mediaClient)
-	result.YouTube, _ = checkYouTube(mediaClient)
-	result.OpenAI, _ = checkOpenAI(mediaClient)
-	result.Claude, _ = checkClaude(mediaClient)
-	result.Gemini, _ = checkGemini(mediaClient)
-	result.Disney, _ = checkDisney(mediaClient)
-	result.TikTok, _ = checkTikTok(mediaClient)
+	result.IP, result.Country = getProxyInfo(ctx, mediaClient)
+	result.Netflix, _ = checkNetflix(ctx, mediaClient)
+	result.YouTube, _ = checkYouTube(ctx, mediaClient)
+	result.OpenAI, _ = checkOpenAI(ctx, mediaClient)
+	result.Claude, _ = checkClaude(ctx, mediaClient)
+	result.Gemini, _ = checkGemini(ctx, mediaClient)
+	result.Disney, _ = checkDisney(ctx, mediaClient)
+	result.TikTok, _ = checkTikTok(ctx, mediaClient)
 
 	return result
 }

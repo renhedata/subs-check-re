@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 
 	authsvc "subs-check-re/services/auth"
+	settingssvc "subs-check-re/services/settings"
 	subsvc "subs-check-re/services/subscription"
 )
 
@@ -65,6 +66,7 @@ type NodeResult struct {
 	NodeType  string `json:"node_type"`
 	Alive     bool   `json:"alive"`
 	LatencyMs int    `json:"latency_ms"`
+	SpeedKbps int    `json:"speed_kbps"`
 	Country   string `json:"country"`
 	IP        string `json:"ip"`
 	Netflix   bool   `json:"netflix"`
@@ -85,9 +87,12 @@ type ResultsResponse struct {
 // --- In-process SSE channels ---
 
 type progressUpdate struct {
-	Progress int    `json:"progress"`
-	Total    int    `json:"total"`
-	NodeName string `json:"node_name,omitempty"`
+	Progress  int    `json:"progress"`
+	Total     int    `json:"total"`
+	NodeName  string `json:"node_name,omitempty"`
+	Alive     bool   `json:"alive"`
+	LatencyMs int    `json:"latency_ms,omitempty"`
+	SpeedKbps int    `json:"speed_kbps,omitempty"`
 }
 
 var (
@@ -159,11 +164,18 @@ func TriggerCheckInternal(ctx context.Context, subscriptionID string, p *Trigger
 		return nil, errs.B().Code(errs.FailedPrecondition).Msg("a check is already running").Err()
 	}
 
+	// Fetch user's configured speed test URL for scheduled runs
+	speedCfg, _ := settingssvc.GetSpeedTestURLForUser(ctx, p.UserID)
+	speedTestURL := ""
+	if speedCfg != nil {
+		speedTestURL = speedCfg.SpeedTestURL
+	}
+
 	jobID := uuid.New().String()
 	if _, err := db.Exec(ctx, `
-		INSERT INTO check_jobs (id, subscription_id, user_id, sub_url, status, created_at)
-		VALUES ($1, $2, $3, $4, 'queued', $5)
-	`, jobID, subscriptionID, p.UserID, p.SubURL, time.Now()); err != nil {
+		INSERT INTO check_jobs (id, subscription_id, user_id, sub_url, speed_test_url, status, created_at)
+		VALUES ($1, $2, $3, $4, $5, 'queued', $6)
+	`, jobID, subscriptionID, p.UserID, p.SubURL, speedTestURL, time.Now()); err != nil {
 		return nil, errs.B().Code(errs.Internal).Msg("failed to create job").Err()
 	}
 
@@ -195,11 +207,18 @@ func TriggerCheck(ctx context.Context, subscriptionID string) (*TriggerResponse,
 		return nil, errs.B().Code(errs.FailedPrecondition).Msg("a check is already running for this subscription").Err()
 	}
 
+	// Fetch user's configured speed test URL (empty = use default)
+	speedCfg, _ := settingssvc.GetSpeedTestURLForUser(ctx, claims.UserID)
+	speedTestURL := ""
+	if speedCfg != nil {
+		speedTestURL = speedCfg.SpeedTestURL
+	}
+
 	jobID := uuid.New().String()
 	if _, err := db.Exec(ctx, `
-		INSERT INTO check_jobs (id, subscription_id, user_id, sub_url, status, created_at)
-		VALUES ($1, $2, $3, $4, 'queued', $5)
-	`, jobID, subscriptionID, claims.UserID, sub.URL, time.Now()); err != nil {
+		INSERT INTO check_jobs (id, subscription_id, user_id, sub_url, speed_test_url, status, created_at)
+		VALUES ($1, $2, $3, $4, $5, 'queued', $6)
+	`, jobID, subscriptionID, claims.UserID, sub.URL, speedTestURL, time.Now()); err != nil {
 		return nil, errs.B().Code(errs.Internal).Msg("failed to create job").Err()
 	}
 
@@ -211,7 +230,7 @@ func TriggerCheck(ctx context.Context, subscriptionID string) (*TriggerResponse,
 
 // GetProgress streams real-time check progress via SSE.
 //
-//encore:api auth raw method=GET path=/check/:jobID/progress
+//encore:api public raw method=GET path=/check/:jobID/progress
 func GetProgress(w http.ResponseWriter, req *http.Request) {
 	// Extract jobID from path: /check/<jobID>/progress
 	parts := strings.Split(strings.Trim(req.URL.Path, "/"), "/")
@@ -297,12 +316,12 @@ func GetResults(ctx context.Context, subscriptionID string) (*ResultsResponse, e
 
 	rows, err := db.Query(ctx, `
 		SELECT cr.node_id, n.name, n.type,
-		       cr.alive, cr.latency_ms, cr.country, cr.ip,
+		       cr.alive, cr.latency_ms, cr.speed_kbps, cr.country, cr.ip,
 		       cr.netflix, cr.youtube, cr.openai, cr.claude, cr.gemini, cr.disney, cr.tiktok
 		FROM check_results cr
 		JOIN nodes n ON n.id = cr.node_id
 		WHERE cr.job_id = $1
-		ORDER BY cr.alive DESC, cr.latency_ms ASC NULLS LAST
+		ORDER BY cr.alive DESC, cr.speed_kbps DESC NULLS LAST, cr.latency_ms ASC NULLS LAST
 	`, job.ID)
 	if err != nil {
 		return nil, errs.B().Code(errs.Internal).Msg("db error").Err()
@@ -314,7 +333,7 @@ func GetResults(ctx context.Context, subscriptionID string) (*ResultsResponse, e
 		var r NodeResult
 		if err := rows.Scan(
 			&r.NodeID, &r.NodeName, &r.NodeType,
-			&r.Alive, &r.LatencyMs, &r.Country, &r.IP,
+			&r.Alive, &r.LatencyMs, &r.SpeedKbps, &r.Country, &r.IP,
 			&r.Netflix, &r.YouTube, &r.OpenAI, &r.Claude, &r.Gemini, &r.Disney, &r.TikTok,
 		); err != nil {
 			return nil, errs.B().Code(errs.Internal).Msg("scan failed").Err()
@@ -329,7 +348,11 @@ func GetResults(ctx context.Context, subscriptionID string) (*ResultsResponse, e
 
 // --- Async job runner ---
 
-const checkConcurrency = 20
+const (
+	checkConcurrency      = 20
+	nodeTimeout           = 90 * time.Second
+	defaultSpeedTestURL   = "https://speed.cloudflare.com/__down?bytes=204800"
+)
 
 func runJob(ctx context.Context, jobID, subscriptionID, userID string) {
 	markFailed := func() {
@@ -340,11 +363,14 @@ func runJob(ctx context.Context, jobID, subscriptionID, userID string) {
 	// Mark as running
 	db.Exec(ctx, `UPDATE check_jobs SET status='running' WHERE id=$1`, jobID)
 
-	// Get subscription URL from job row
-	var subURL string
-	if err := db.QueryRow(ctx, `SELECT sub_url FROM check_jobs WHERE id=$1`, jobID).Scan(&subURL); err != nil || subURL == "" {
+	// Get subscription URL and speed test URL from job row
+	var subURL, speedTestURL string
+	if err := db.QueryRow(ctx, `SELECT sub_url, COALESCE(speed_test_url, '') FROM check_jobs WHERE id=$1`, jobID).Scan(&subURL, &speedTestURL); err != nil || subURL == "" {
 		markFailed()
 		return
+	}
+	if speedTestURL == "" {
+		speedTestURL = defaultSpeedTestURL
 	}
 
 	// Fetch and parse proxies from subscription URL
@@ -390,26 +416,32 @@ func runJob(ctx context.Context, jobID, subscriptionID, userID string) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			defer func() { recover() }() // prevent a mihomo panic from killing the worker
 			for t := range taskCh {
-				res := checkNode(t.nodeID, t.proxy)
+				nodeCtx, cancel := context.WithTimeout(ctx, nodeTimeout)
+				res := checkNode(nodeCtx, t.nodeID, t.proxy, speedTestURL)
+				cancel()
 
 				resultID := uuid.New().String()
 				db.Exec(ctx, `
 					INSERT INTO check_results
-					  (id, job_id, node_id, checked_at, alive, latency_ms, country, ip,
+					  (id, job_id, node_id, checked_at, alive, latency_ms, speed_kbps, country, ip,
 					   netflix, youtube, openai, claude, gemini, disney, tiktok)
-					VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+					VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
 				`, resultID, jobID, t.nodeID, time.Now(),
-					res.Alive, res.LatencyMs, res.Country, res.IP,
+					res.Alive, res.LatencyMs, res.SpeedKbps, res.Country, res.IP,
 					res.Netflix, res.YouTube, res.OpenAI,
 					res.Claude, res.Gemini, res.Disney, res.TikTok,
 				)
 
 				db.Exec(ctx, `UPDATE check_jobs SET progress=progress+1 WHERE id=$1`, jobID)
 				broadcastProgress(jobID, progressUpdate{
-					Progress: t.index + 1,
-					Total:    total,
-					NodeName: res.NodeName,
+					Progress:  t.index + 1,
+					Total:     total,
+					NodeName:  res.NodeName,
+					Alive:     res.Alive,
+					LatencyMs: res.LatencyMs,
+					SpeedKbps: res.SpeedKbps,
 				})
 			}
 		}()

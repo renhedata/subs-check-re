@@ -1,8 +1,12 @@
 {
   "mcpServers": {
-    "encore": {
-      "command": "encore",
-      "args": ["mcp", "run", "--app=hy6u8"]
+    "encore-mcp": {
+        "args": [
+            "mcp",
+            "run",
+            "--app=subs-check-uqti"
+        ],
+        "command": "encore"
     },
     "better-t-stack": {
       "command": "bunx",

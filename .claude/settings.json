@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(wait)",
+      "Bash(find /Users/ashark/tmp/subs-check -name *.go)",
+      "WebFetch(domain:ui.shadcn.com)"
+    ]
+  }
+}

@@ -2,15 +2,16 @@
 package checker
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"strings"
 )
 
 // checkNetflix returns true if the proxy can access non-originals Netflix content.
-func checkNetflix(client *http.Client) (bool, error) {
+func checkNetflix(ctx context.Context, client *http.Client) (bool, error) {
 	for _, titleID := range []string{"81280792", "70143836"} {
-		req, err := http.NewRequest("GET", "https://www.netflix.com/title/"+titleID, nil)
+		req, err := http.NewRequestWithContext(ctx, "GET", "https://www.netflix.com/title/"+titleID, nil)
 		if err != nil {
 			return false, err
 		}
@@ -29,8 +30,8 @@ func checkNetflix(client *http.Client) (bool, error) {
 }
 
 // checkYouTube returns "YES" if YouTube Premium is available, else "".
-func checkYouTube(client *http.Client) (string, error) {
-	req, err := http.NewRequest("GET", "https://www.youtube.com/premium", nil)
+func checkYouTube(ctx context.Context, client *http.Client) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", "https://www.youtube.com/premium", nil)
 	if err != nil {
 		return "", err
 	}
@@ -54,8 +55,8 @@ func checkYouTube(client *http.Client) (string, error) {
 }
 
 // checkOpenAI returns true if OpenAI API is reachable.
-func checkOpenAI(client *http.Client) (bool, error) {
-	resp, err := client.Get("https://api.openai.com/")
+func checkOpenAI(ctx context.Context, client *http.Client) (bool, error) {
+	resp, err := get(ctx, client, "https://api.openai.com/")
 	if err != nil {
 		return false, err
 	}
@@ -65,8 +66,8 @@ func checkOpenAI(client *http.Client) (bool, error) {
 }
 
 // checkClaude returns true if Anthropic Claude API is reachable.
-func checkClaude(client *http.Client) (bool, error) {
-	resp, err := client.Get("https://api.anthropic.com/")
+func checkClaude(ctx context.Context, client *http.Client) (bool, error) {
+	resp, err := get(ctx, client, "https://api.anthropic.com/")
 	if err != nil {
 		return false, err
 	}
@@ -76,8 +77,8 @@ func checkClaude(client *http.Client) (bool, error) {
 }
 
 // checkGemini returns true if Google Gemini API is reachable.
-func checkGemini(client *http.Client) (bool, error) {
-	resp, err := client.Get("https://generativelanguage.googleapis.com/")
+func checkGemini(ctx context.Context, client *http.Client) (bool, error) {
+	resp, err := get(ctx, client, "https://generativelanguage.googleapis.com/")
 	if err != nil {
 		return false, err
 	}
@@ -87,8 +88,8 @@ func checkGemini(client *http.Client) (bool, error) {
 }
 
 // checkDisney returns true if Disney+ is accessible in the proxy's region.
-func checkDisney(client *http.Client) (bool, error) {
-	resp, err := client.Get("https://www.disneyplus.com/")
+func checkDisney(ctx context.Context, client *http.Client) (bool, error) {
+	resp, err := get(ctx, client, "https://www.disneyplus.com/")
 	if err != nil {
 		return false, err
 	}
@@ -101,8 +102,8 @@ func checkDisney(client *http.Client) (bool, error) {
 }
 
 // checkTikTok returns "YES" if TikTok is accessible, else "".
-func checkTikTok(client *http.Client) (string, error) {
-	resp, err := client.Get("https://www.tiktok.com/")
+func checkTikTok(ctx context.Context, client *http.Client) (string, error) {
+	resp, err := get(ctx, client, "https://www.tiktok.com/")
 	if err != nil {
 		return "", err
 	}
