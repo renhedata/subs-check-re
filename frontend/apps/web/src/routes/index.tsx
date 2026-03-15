@@ -1,58 +1,110 @@
 // frontend/apps/web/src/routes/index.tsx
+
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@frontend/ui/components/card";
+import { CheckCircle, Clock, FileText } from "lucide-react";
+import { Skeleton } from "@frontend/ui/components/skeleton";
 
 import { api, type Subscription } from "@/lib/api";
 import { isAuthenticated } from "@/lib/auth";
 
 export const Route = createFileRoute("/")({
-  beforeLoad: () => {
-    if (!isAuthenticated()) throw redirect({ to: "/login" });
-  },
-  component: DashboardPage,
+	beforeLoad: () => {
+		if (!isAuthenticated()) throw redirect({ to: "/login" });
+	},
+	component: DashboardPage,
 });
 
+function StatCard({
+	label,
+	value,
+	icon: Icon,
+	valueColor,
+	sub,
+	loading,
+}: {
+	label: string;
+	value: number;
+	icon: React.ElementType;
+	valueColor?: string;
+	sub?: string;
+	loading: boolean;
+}) {
+	return (
+		<div
+			className="rounded-lg border p-4"
+			style={{ background: "#161b22", borderColor: "#30363d" }}
+		>
+			<div className="mb-2 flex items-center gap-1.5">
+				<Icon size={13} strokeWidth={1.5} className="text-[#8b949e]" />
+				<span
+					className="text-[11px] font-medium uppercase tracking-[0.4px]"
+					style={{ color: "#8b949e" }}
+				>
+					{label}
+				</span>
+			</div>
+			{loading ? (
+				<Skeleton className="h-8 w-12" />
+			) : (
+				<p
+					className="text-[28px] font-bold leading-none"
+					style={{ color: valueColor ?? "#f0f6fc" }}
+				>
+					{value}
+				</p>
+			)}
+			{sub && !loading && (
+				<p className="mt-1 text-[11px]" style={{ color: "#8b949e" }}>
+					{sub}
+				</p>
+			)}
+		</div>
+	);
+}
+
 function DashboardPage() {
-  const { data } = useQuery({
-    queryKey: ["subscriptions"],
-    queryFn: () => api.get<{ subscriptions: Subscription[] }>("/subscriptions"),
-  });
+	const { data, isLoading } = useQuery({
+		queryKey: ["subscriptions"],
+		queryFn: () => api.get<{ subscriptions: Subscription[] }>("/subscriptions"),
+	});
 
-  const subs = data?.subscriptions ?? [];
-  const enabled = subs.filter((s) => s.enabled).length;
+	const subs = data?.subscriptions ?? [];
+	const enabled = subs.filter((s) => s.enabled).length;
+	const scheduled = subs.filter((s) => s.cron_expr).length;
 
-  return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Dashboard</h1>
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Total Subscriptions
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold">{subs.length}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Active</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold">{enabled}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Scheduled</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold">{subs.filter((s) => s.cron_expr).length}</p>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  );
+	return (
+		<div className="space-y-6">
+			<div>
+				<h1 className="text-lg font-semibold text-[#f0f6fc]">Dashboard</h1>
+				<p className="mt-0.5 text-sm" style={{ color: "#8b949e" }}>
+					Overview of your proxy subscriptions
+				</p>
+			</div>
+
+			<div className="grid gap-3 sm:grid-cols-3">
+				<StatCard
+					label="Subscriptions"
+					icon={FileText}
+					value={subs.length}
+					loading={isLoading}
+				/>
+				<StatCard
+					label="Active"
+					icon={CheckCircle}
+					value={enabled}
+					valueColor="#3fb950"
+					sub={`of ${subs.length} total`}
+					loading={isLoading}
+				/>
+				<StatCard
+					label="Scheduled"
+					icon={Clock}
+					value={scheduled}
+					sub="cron jobs"
+					loading={isLoading}
+				/>
+			</div>
+		</div>
+	);
 }
