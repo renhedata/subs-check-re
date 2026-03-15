@@ -1,8 +1,3 @@
-import { useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
-import { Clock, Loader2, Plus, Trash2 } from "lucide-react";
 import { Button } from "@frontend/ui/components/button";
 import { Input } from "@frontend/ui/components/input";
 import { Label } from "@frontend/ui/components/label";
@@ -13,8 +8,13 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@frontend/ui/components/select";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { createFileRoute } from "@tanstack/react-router";
+import { Clock, Loader2, Plus, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { toast } from "sonner";
 
-import { api, ApiError, type ScheduledJob, type Subscription } from "@/lib/api";
+import { ApiError, api, type ScheduledJob, type Subscription } from "@/lib/api";
 
 export const Route = createFileRoute("/scheduler")({
 	component: SchedulerPage,
@@ -37,7 +37,8 @@ function SchedulerPage() {
 	});
 
 	const createMut = useMutation({
-		mutationFn: () => api.post("/scheduler", { subscription_id: subId, cron_expr: cronExpr }),
+		mutationFn: () =>
+			api.post("/scheduler", { subscription_id: subId, cron_expr: cronExpr }),
 		onSuccess: () => {
 			qc.invalidateQueries({ queryKey: ["scheduler"] });
 			setAdding(false);
@@ -62,17 +63,17 @@ function SchedulerPage() {
 
 	function subName(subId: string) {
 		const s = subs.find((s) => s.id === subId);
-		return s ? s.name || s.url : subId.slice(0, 8) + "…";
+		return s ? s.name || s.url : `${subId.slice(0, 8)}…`;
 	}
 
 	return (
 		<div className="space-y-5">
 			<div className="flex items-center justify-between">
-				<h1 className="text-lg font-semibold text-[#f0f6fc]">Scheduler</h1>
+				<h1 className="font-semibold text-[#f0f6fc] text-lg">Scheduler</h1>
 				<button
 					type="button"
 					onClick={() => setAdding(!adding)}
-					className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
+					className="flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium text-sm text-white transition-opacity hover:opacity-90"
 					style={{ background: "#238636" }}
 				>
 					<Plus size={13} strokeWidth={1.5} />
@@ -82,11 +83,11 @@ function SchedulerPage() {
 
 			{adding && (
 				<div
-					className="rounded-lg border p-4 space-y-3"
+					className="space-y-3 rounded-lg border p-4"
 					style={{ background: "#161b22", borderColor: "#30363d" }}
 				>
 					<div className="space-y-1.5">
-						<Label className="text-xs text-[#8b949e]">Subscription</Label>
+						<Label className="text-[#8b949e] text-xs">Subscription</Label>
 						<Select value={subId} onValueChange={(v) => setSubId(v ?? "")}>
 							<SelectTrigger className="h-8 text-sm">
 								<SelectValue placeholder="Select subscription…" />
@@ -101,12 +102,12 @@ function SchedulerPage() {
 						</Select>
 					</div>
 					<div className="space-y-1.5">
-						<Label className="text-xs text-[#8b949e]">Cron Expression</Label>
+						<Label className="text-[#8b949e] text-xs">Cron Expression</Label>
 						<Input
 							placeholder="0 */6 * * *  (every 6 hours)"
 							value={cronExpr}
 							onChange={(e) => setCronExpr(e.target.value)}
-							className="h-8 text-sm font-mono"
+							className="h-8 font-mono text-sm"
 						/>
 					</div>
 					<div className="flex gap-2">
@@ -117,9 +118,17 @@ function SchedulerPage() {
 							style={{ background: "#238636", color: "#fff" }}
 							className="border-0"
 						>
-							{createMut.isPending ? <Loader2 size={13} className="animate-spin" /> : "Save"}
+							{createMut.isPending ? (
+								<Loader2 size={13} className="animate-spin" />
+							) : (
+								"Save"
+							)}
 						</Button>
-						<Button size="sm" variant="outline" onClick={() => setAdding(false)}>
+						<Button
+							size="sm"
+							variant="outline"
+							onClick={() => setAdding(false)}
+						>
 							Cancel
 						</Button>
 					</div>
@@ -136,8 +145,10 @@ function SchedulerPage() {
 						<div className="flex items-center gap-3">
 							<Clock size={13} strokeWidth={1.5} style={{ color: "#8b949e" }} />
 							<div>
-								<p className="font-mono text-sm text-[#f0f6fc]">{job.cron_expr}</p>
-								<p className="text-xs mt-0.5" style={{ color: "#8b949e" }}>
+								<p className="font-mono text-[#f0f6fc] text-sm">
+									{job.cron_expr}
+								</p>
+								<p className="mt-0.5 text-xs" style={{ color: "#8b949e" }}>
 									{subName(job.subscription_id)}
 								</p>
 							</div>

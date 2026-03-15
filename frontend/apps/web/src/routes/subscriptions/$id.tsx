@@ -1,11 +1,15 @@
-import { useEffect, useRef, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { createFileRoute } from "@tanstack/react-router";
 import { RefreshCw } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { z } from "zod";
-
-import { api, type CheckJob, type NodeResult, type Subscription } from "@/lib/api";
 import { NodeTable } from "@/components/node-table";
+import {
+	api,
+	type CheckJob,
+	type NodeResult,
+	type Subscription,
+} from "@/lib/api";
 
 const searchSchema = z.object({
 	job: z.string().optional(),
@@ -43,7 +47,7 @@ function JobStatusBadge({ status }: { status: CheckJob["status"] }) {
 	const s = map[status];
 	return (
 		<span
-			className="rounded-full px-2 py-0.5 text-[10px] font-medium"
+			className="rounded-full px-2 py-0.5 font-medium text-[10px]"
 			style={{ background: s.bg, color: s.color }}
 		>
 			{status}
@@ -79,7 +83,11 @@ function SubscriptionDetailPage() {
 	// biome-ignore lint/correctness/useExhaustiveDependencies: intentionally narrow deps to avoid re-running on every render
 	useEffect(() => {
 		const job = resultsQuery.data?.job;
-		if (job && (job.status === "running" || job.status === "queued") && !jobId) {
+		if (
+			job &&
+			(job.status === "running" || job.status === "queued") &&
+			!jobId
+		) {
 			setJobId(job.id);
 		}
 	}, [resultsQuery.data?.job?.id, resultsQuery.data?.job?.status, jobId]);
@@ -98,18 +106,19 @@ function SubscriptionDetailPage() {
 		};
 		es.onerror = () => es.close();
 		return () => es.close();
-	}, [jobId]);
+	}, [jobId, resultsQuery.refetch]);
 
 	const job = resultsQuery.data?.job;
 	const results = resultsQuery.data?.results ?? [];
-	const progressPct =
-		progress?.total ? ((progress.progress ?? 0) / progress.total) * 100 : 0;
+	const progressPct = progress?.total
+		? ((progress.progress ?? 0) / progress.total) * 100
+		: 0;
 
 	return (
 		<div className="space-y-5">
 			{/* Header */}
 			<div>
-				<h1 className="text-lg font-semibold text-[#f0f6fc]">
+				<h1 className="font-semibold text-[#f0f6fc] text-lg">
 					{sub?.name || sub?.url || "Subscription Detail"}
 				</h1>
 				<p className="mt-0.5 font-mono text-xs" style={{ color: "#6e7681" }}>
@@ -121,8 +130,16 @@ function SubscriptionDetailPage() {
 			{progress && !progress.done && (
 				<div className="space-y-1.5">
 					<div className="flex items-center justify-between">
-						<div className="flex items-center gap-1.5 text-sm" style={{ color: "#f0f6fc" }}>
-							<RefreshCw size={13} strokeWidth={1.5} className="animate-spin" style={{ color: "#58a6ff" }} />
+						<div
+							className="flex items-center gap-1.5 text-sm"
+							style={{ color: "#f0f6fc" }}
+						>
+							<RefreshCw
+								size={13}
+								strokeWidth={1.5}
+								className="animate-spin"
+								style={{ color: "#58a6ff" }}
+							/>
 							Checking nodes…
 						</div>
 						<span className="text-xs" style={{ color: "#8b949e" }}>
@@ -153,14 +170,19 @@ function SubscriptionDetailPage() {
 								</span>
 							) : null}
 							{progress.alive && progress.speed_kbps ? (
-								<span className="ml-1.5 font-medium" style={{ color: "#58a6ff" }}>
+								<span
+									className="ml-1.5 font-medium"
+									style={{ color: "#58a6ff" }}
+								>
 									{progress.speed_kbps >= 1024
 										? `${(progress.speed_kbps / 1024).toFixed(1)}MB/s`
 										: `${progress.speed_kbps}KB/s`}
 								</span>
 							) : null}
 							{progress.alive === false ? (
-								<span className="ml-2" style={{ color: "#f85149" }}>dead</span>
+								<span className="ml-2" style={{ color: "#f85149" }}>
+									dead
+								</span>
 							) : null}
 						</p>
 					)}
@@ -178,10 +200,14 @@ function SubscriptionDetailPage() {
 			)}
 
 			{resultsQuery.isLoading && (
-				<p className="text-sm" style={{ color: "#8b949e" }}>Loading results…</p>
+				<p className="text-sm" style={{ color: "#8b949e" }}>
+					Loading results…
+				</p>
 			)}
 			{resultsQuery.isError && (
-				<p className="text-sm" style={{ color: "#8b949e" }}>No check results yet.</p>
+				<p className="text-sm" style={{ color: "#8b949e" }}>
+					No check results yet.
+				</p>
 			)}
 
 			<NodeTable results={results} />
