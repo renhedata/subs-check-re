@@ -1,148 +1,190 @@
-// frontend/apps/web/src/routes/subscriptions/$id.tsx
 import { useEffect, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { RefreshCw } from "lucide-react";
 import { z } from "zod";
 
-import { api, type CheckJob, type NodeResult } from "@/lib/api";
+import { api, type CheckJob, type NodeResult, type Subscription } from "@/lib/api";
 import { NodeTable } from "@/components/node-table";
 
 const searchSchema = z.object({
-  job: z.string().optional(),
+	job: z.string().optional(),
 });
 
 export const Route = createFileRoute("/subscriptions/$id")({
-  validateSearch: searchSchema,
-  component: SubscriptionDetailPage,
+	validateSearch: searchSchema,
+	component: SubscriptionDetailPage,
 });
 
 interface SSEProgress {
-  progress?: number;
-  total?: number;
-  node_name?: string;
-  alive?: boolean;
-  latency_ms?: number;
-  speed_kbps?: number;
-  done?: boolean;
-  status?: string;
+	progress?: number;
+	total?: number;
+	node_name?: string;
+	alive?: boolean;
+	latency_ms?: number;
+	speed_kbps?: number;
+	done?: boolean;
+	status?: string;
+}
+
+function latencyColor(ms: number): string {
+	if (ms < 50) return "#3fb950";
+	if (ms <= 200) return "#d29922";
+	return "#f85149";
+}
+
+function JobStatusBadge({ status }: { status: CheckJob["status"] }) {
+	const map: Record<CheckJob["status"], { bg: string; color: string }> = {
+		queued: { bg: "#1a2a3a", color: "#58a6ff" },
+		running: { bg: "#1a2a3a", color: "#58a6ff" },
+		completed: { bg: "#1a4731", color: "#3fb950" },
+		failed: { bg: "#3d1a1a", color: "#f85149" },
+	};
+	const s = map[status];
+	return (
+		<span
+			className="rounded-full px-2 py-0.5 text-[10px] font-medium"
+			style={{ background: s.bg, color: s.color }}
+		>
+			{status}
+		</span>
+	);
 }
 
 function SubscriptionDetailPage() {
-  const { id } = Route.useParams();
-  const { job: jobIdFromSearch } = Route.useSearch();
-  const [jobId, setJobId] = useState<string | null>(jobIdFromSearch ?? null);
-  const [progress, setProgress] = useState<SSEProgress | null>(null);
-  const esRef = useRef<EventSource | null>(null);
+	const { id } = Route.useParams();
+	const { job: jobIdFromSearch } = Route.useSearch();
+	const [jobId, setJobId] = useState<string | null>(jobIdFromSearch ?? null);
+	const [progress, setProgress] = useState<SSEProgress | null>(null);
+	const esRef = useRef<EventSource | null>(null);
 
-  const resultsQuery = useQuery({
-    queryKey: ["results", id],
-    queryFn: () =>
-      api.get<{ job: CheckJob; results: NodeResult[] }>(`/check/${id}/results`),
-    retry: false,
-    staleTime: 0, // always refetch on navigate to pick up latest results
-  });
+	const resultsQuery = useQuery({
+		queryKey: ["results", id],
+		queryFn: () =>
+			api.get<{ job: CheckJob; results: NodeResult[] }>(`/check/${id}/results`),
+		retry: false,
+		staleTime: 0,
+	});
 
-  // If the latest job is still running (e.g., navigated back), attach SSE to it
-  useEffect(() => {
-    const job = resultsQuery.data?.job;
-    if (job && (job.status === "running" || job.status === "queued") && !jobId) {
-      setJobId(job.id);
-    }
-  }, [resultsQuery.data?.job?.id, resultsQuery.data?.job?.status]);
+	// Resolve subscription name from cache
+	const subsQuery = useQuery({
+		queryKey: ["subscriptions"],
+		queryFn: () => api.get<{ subscriptions: Subscription[] }>("/subscriptions"),
+		staleTime: 30_000,
+	});
+	const sub = subsQuery.data?.subscriptions.find(
+		(s) => s.id === (resultsQuery.data?.job.subscription_id ?? id),
+	);
 
-  // Start SSE when jobId is set
-  // Note: GetProgress is public (job UUID acts as capability token)
-  useEffect(() => {
-    if (!jobId) return;
+	// biome-ignore lint/correctness/useExhaustiveDependencies: intentionally narrow deps to avoid re-running on every render
+	useEffect(() => {
+		const job = resultsQuery.data?.job;
+		if (job && (job.status === "running" || job.status === "queued") && !jobId) {
+			setJobId(job.id);
+		}
+	}, [resultsQuery.data?.job?.id, resultsQuery.data?.job?.status, jobId]);
 
-    const es = new EventSource(`/api/check/${jobId}/progress`);
-    esRef.current = es;
+	useEffect(() => {
+		if (!jobId) return;
+		const es = new EventSource(`/api/check/${jobId}/progress`);
+		esRef.current = es;
+		es.onmessage = (e) => {
+			const data: SSEProgress = JSON.parse(e.data);
+			setProgress(data);
+			if (data.done) {
+				es.close();
+				resultsQuery.refetch();
+			}
+		};
+		es.onerror = () => es.close();
+		return () => es.close();
+	}, [jobId]);
 
-    es.onmessage = (e) => {
-      const data: SSEProgress = JSON.parse(e.data);
-      setProgress(data);
-      if (data.done) {
-        es.close();
-        resultsQuery.refetch();
-      }
-    };
-    es.onerror = () => {
-      es.close();
-    };
+	const job = resultsQuery.data?.job;
+	const results = resultsQuery.data?.results ?? [];
+	const progressPct =
+		progress?.total ? ((progress.progress ?? 0) / progress.total) * 100 : 0;
 
-    return () => {
-      es.close();
-    };
-  }, [jobId]);
+	return (
+		<div className="space-y-5">
+			{/* Header */}
+			<div>
+				<h1 className="text-lg font-semibold text-[#f0f6fc]">
+					{sub?.name || sub?.url || "Subscription Detail"}
+				</h1>
+				<p className="mt-0.5 font-mono text-xs" style={{ color: "#6e7681" }}>
+					{id.slice(0, 8)}…
+				</p>
+			</div>
 
-  const job = resultsQuery.data?.job;
-  const results = resultsQuery.data?.results ?? [];
+			{/* Progress bar */}
+			{progress && !progress.done && (
+				<div className="space-y-1.5">
+					<div className="flex items-center justify-between">
+						<div className="flex items-center gap-1.5 text-sm" style={{ color: "#f0f6fc" }}>
+							<RefreshCw size={13} strokeWidth={1.5} className="animate-spin" style={{ color: "#58a6ff" }} />
+							Checking nodes…
+						</div>
+						<span className="text-xs" style={{ color: "#8b949e" }}>
+							{progress.progress ?? 0} / {progress.total ?? "?"}
+						</span>
+					</div>
+					<div
+						className="h-[3px] w-full overflow-hidden rounded-sm"
+						style={{ background: "#21262d" }}
+					>
+						<div
+							className="h-full rounded-sm transition-[width] duration-300 ease-out"
+							style={{
+								width: `${progressPct}%`,
+								background: "linear-gradient(90deg, #1f6feb, #58a6ff)",
+							}}
+						/>
+					</div>
+					{progress.node_name && (
+						<p className="font-mono text-[11px]" style={{ color: "#8b949e" }}>
+							↳ {progress.node_name}
+							{progress.alive && progress.latency_ms ? (
+								<span
+									className="ml-2 font-medium"
+									style={{ color: latencyColor(progress.latency_ms) }}
+								>
+									{progress.latency_ms}ms
+								</span>
+							) : null}
+							{progress.alive && progress.speed_kbps ? (
+								<span className="ml-1.5 font-medium" style={{ color: "#58a6ff" }}>
+									{progress.speed_kbps >= 1024
+										? `${(progress.speed_kbps / 1024).toFixed(1)}MB/s`
+										: `${progress.speed_kbps}KB/s`}
+								</span>
+							) : null}
+							{progress.alive === false ? (
+								<span className="ml-2" style={{ color: "#f85149" }}>dead</span>
+							) : null}
+						</p>
+					)}
+				</div>
+			)}
 
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Subscription Detail</h1>
-        <span className="text-sm text-muted-foreground font-mono">{id.slice(0, 8)}…</span>
-      </div>
+			{/* Job summary */}
+			{job && (
+				<div className="flex items-center gap-3 text-sm">
+					<JobStatusBadge status={job.status} />
+					<span style={{ color: "#8b949e" }}>
+						{results.filter((r) => r.alive).length} / {job.total} alive
+					</span>
+				</div>
+			)}
 
-      {/* Progress bar */}
-      {progress && !progress.done && (
-        <div className="space-y-2">
-          <div className="flex justify-between text-sm">
-            <span>Checking nodes…</span>
-            <span>
-              {progress.progress ?? 0} / {progress.total ?? "?"}
-            </span>
-          </div>
-          <div className="h-2 w-full rounded bg-muted overflow-hidden">
-            <div
-              className="h-full bg-primary transition-all"
-              style={{
-                width: progress.total
-                  ? `${((progress.progress ?? 0) / progress.total) * 100}%`
-                  : "0%",
-              }}
-            />
-          </div>
-          {progress.node_name && (
-            <p className="text-xs text-muted-foreground truncate">
-              ↳ {progress.node_name}
-              {progress.alive ? (
-                <>
-                  {progress.latency_ms ? (
-                    <span className="ml-2 text-green-600 font-medium">{progress.latency_ms}ms</span>
-                  ) : null}
-                  {progress.speed_kbps ? (
-                    <span className="ml-1 text-blue-500 font-medium">
-                      {progress.speed_kbps >= 1024
-                        ? `${(progress.speed_kbps / 1024).toFixed(1)}MB/s`
-                        : `${progress.speed_kbps}KB/s`}
-                    </span>
-                  ) : null}
-                </>
-              ) : progress.alive === false ? (
-                <span className="ml-2 text-red-500">dead</span>
-              ) : null}
-            </p>
-          )}
-        </div>
-      )}
+			{resultsQuery.isLoading && (
+				<p className="text-sm" style={{ color: "#8b949e" }}>Loading results…</p>
+			)}
+			{resultsQuery.isError && (
+				<p className="text-sm" style={{ color: "#8b949e" }}>No check results yet.</p>
+			)}
 
-      {/* Job status */}
-      {job && (
-        <div className="flex gap-4 text-sm">
-          <span>
-            Status: <strong>{job.status}</strong>
-          </span>
-          <span>Nodes: {job.total}</span>
-          <span>Available: {results.filter((r) => r.alive).length}</span>
-        </div>
-      )}
-
-      {resultsQuery.isLoading && <p className="text-muted-foreground">Loading results…</p>}
-      {resultsQuery.isError && <p className="text-muted-foreground">No check results yet.</p>}
-
-      <NodeTable results={results} />
-    </div>
-  );
+			<NodeTable results={results} />
+		</div>
+	);
 }

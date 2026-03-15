@@ -1,77 +1,138 @@
-// frontend/apps/web/src/components/node-table.tsx
 import type { NodeResult } from "@/lib/api";
 
 interface Props {
-  results: NodeResult[];
+	results: NodeResult[];
+}
+
+function latencyColor(ms: number): string {
+	if (ms < 50) return "#3fb950";
+	if (ms <= 200) return "#d29922";
+	return "#f85149";
+}
+
+function UnlockBadge({ label, style }: { label: string; style: "media" | "ai" | "other" }) {
+	const styles = {
+		media: { background: "#3d1a1a", color: "#f85149" },
+		ai: { background: "#1a3a1a", color: "#3fb950" },
+		other: { background: "#1a2a3a", color: "#58a6ff" },
+	};
+	return (
+		<span
+			className="rounded px-1.5 py-0.5 text-[10px] font-semibold"
+			style={styles[style]}
+		>
+			{label}
+		</span>
+	);
+}
+
+function StatusBadge({ alive }: { alive: boolean }) {
+	return alive ? (
+		<span
+			className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium"
+			style={{ background: "#1a4731", color: "#3fb950" }}
+		>
+			<span className="h-1.5 w-1.5 rounded-full" style={{ background: "#3fb950" }} />
+			alive
+		</span>
+	) : (
+		<span
+			className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium"
+			style={{ background: "#3d1a1a", color: "#f85149" }}
+		>
+			<span className="h-1.5 w-1.5 rounded-full" style={{ background: "#f85149" }} />
+			dead
+		</span>
+	);
 }
 
 export function NodeTable({ results }: Props) {
-  const alive = results.filter((r) => r.alive);
-  const dead = results.filter((r) => !r.alive);
-  const sorted = [...alive, ...dead];
+	const alive = results.filter((r) => r.alive);
+	const dead = results.filter((r) => !r.alive);
+	const sorted = [...alive, ...dead];
 
-  if (sorted.length === 0) {
-    return <p className="text-muted-foreground text-sm">No results yet.</p>;
-  }
+	if (sorted.length === 0) {
+		return (
+			<p className="text-sm" style={{ color: "#8b949e" }}>
+				No results yet.
+			</p>
+		);
+	}
 
-  return (
-    <div className="overflow-x-auto rounded border">
-      <table className="w-full text-sm">
-        <thead className="bg-muted text-left">
-          <tr>
-            <th className="px-3 py-2">Node</th>
-            <th className="px-3 py-2">Status</th>
-            <th className="px-3 py-2">Latency</th>
-            <th className="px-3 py-2">Speed</th>
-            <th className="px-3 py-2">Country</th>
-            <th className="px-3 py-2">Platforms</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map((r) => (
-            <tr key={r.node_id} className="border-t hover:bg-muted/40">
-              <td className="px-3 py-2 max-w-[200px] truncate font-mono text-xs">{r.node_name}</td>
-              <td className="px-3 py-2">
-                <span className={r.alive ? "text-green-600" : "text-red-500"}>
-                  {r.alive ? "✓ alive" : "✗ dead"}
-                </span>
-              </td>
-              <td className="px-3 py-2">{r.alive ? `${r.latency_ms}ms` : "—"}</td>
-              <td className="px-3 py-2">
-                {r.alive && r.speed_kbps
-                  ? r.speed_kbps >= 1024
-                    ? `${(r.speed_kbps / 1024).toFixed(1)} MB/s`
-                    : `${r.speed_kbps} KB/s`
-                  : "—"}
-              </td>
-              <td className="px-3 py-2">{r.country || "—"}</td>
-              <td className="px-3 py-2 flex gap-1 flex-wrap">
-                {r.netflix && (
-                  <span className="rounded bg-red-100 px-1 text-red-700 text-xs">NF</span>
-                )}
-                {r.youtube && (
-                  <span className="rounded bg-red-100 px-1 text-red-700 text-xs">YT</span>
-                )}
-                {r.openai && (
-                  <span className="rounded bg-green-100 px-1 text-green-700 text-xs">GPT</span>
-                )}
-                {r.claude && (
-                  <span className="rounded bg-orange-100 px-1 text-orange-700 text-xs">CL</span>
-                )}
-                {r.gemini && (
-                  <span className="rounded bg-blue-100 px-1 text-blue-700 text-xs">GM</span>
-                )}
-                {r.disney && (
-                  <span className="rounded bg-blue-100 px-1 text-blue-700 text-xs">D+</span>
-                )}
-                {r.tiktok && (
-                  <span className="rounded bg-gray-100 px-1 text-xs">TK</span>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
+	return (
+		<div className="overflow-x-auto rounded-lg border" style={{ borderColor: "#30363d" }}>
+			<table className="w-full border-collapse">
+				<thead>
+					<tr style={{ borderBottom: "1px solid #30363d" }}>
+						{["Node", "Status", "Latency", "Speed", "Country", "Unlocks"].map((h) => (
+							<th
+								key={h}
+								className="px-3 py-2 text-left text-[11px] font-medium uppercase tracking-[0.4px]"
+								style={{ color: "#8b949e" }}
+							>
+								{h}
+							</th>
+						))}
+					</tr>
+				</thead>
+				<tbody>
+					{sorted.map((r) => (
+						<tr
+							key={r.node_id}
+							className="transition-colors hover:bg-white/[0.02]"
+							style={{ borderBottom: "1px solid #21262d" }}
+						>
+							<td
+								className="max-w-[180px] truncate px-3 py-2 font-mono text-[11px]"
+								style={{ color: r.alive ? "#f0f6fc" : "#6e7681" }}
+							>
+								{r.node_name}
+							</td>
+							<td className="px-3 py-2">
+								<StatusBadge alive={r.alive} />
+							</td>
+							<td className="px-3 py-2 text-xs font-medium">
+								{r.alive ? (
+									<span style={{ color: latencyColor(r.latency_ms) }}>
+										{r.latency_ms}ms
+									</span>
+								) : (
+									<span style={{ color: "#6e7681" }}>—</span>
+								)}
+							</td>
+							<td className="px-3 py-2 text-xs">
+								{r.alive && r.speed_kbps ? (
+									<span style={{ color: "#58a6ff" }}>
+										{r.speed_kbps >= 1024
+											? `${(r.speed_kbps / 1024).toFixed(1)} MB/s`
+											: `${r.speed_kbps} KB/s`}
+									</span>
+								) : (
+									<span style={{ color: "#6e7681" }}>—</span>
+								)}
+							</td>
+							<td
+								className="px-3 py-2 text-xs"
+								style={{ color: r.alive ? "#f0f6fc" : "#6e7681" }}
+							>
+								{r.country || "—"}
+							</td>
+							<td className="px-3 py-2">
+								<div className="flex flex-wrap gap-1">
+									{/* netflix/openai/claude/gemini/disney are boolean; youtube/tiktok are string (unlock region or empty) */}
+									{r.netflix && <UnlockBadge label="NF" style="media" />}
+									{r.youtube && <UnlockBadge label="YT" style="media" />}
+									{r.openai && <UnlockBadge label="GPT" style="ai" />}
+									{r.claude && <UnlockBadge label="CL" style="ai" />}
+									{r.gemini && <UnlockBadge label="GM" style="ai" />}
+									{r.disney && <UnlockBadge label="D+" style="other" />}
+									{r.tiktok && <UnlockBadge label="TK" style="other" />}
+								</div>
+							</td>
+						</tr>
+					))}
+				</tbody>
+			</table>
+		</div>
+	);
 }
