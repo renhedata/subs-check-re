@@ -1,51 +1,59 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@frontend/ui/components/sonner";
-import { HeadContent, Outlet, createRootRouteWithContext } from "@tanstack/react-router";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+	createRootRouteWithContext,
+	HeadContent,
+	Outlet,
+} from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 
-import Header from "@/components/header";
-import { ThemeProvider } from "@/components/theme-provider";
+import { Sidebar } from "@/components/sidebar";
+import { isAuthenticated } from "@/lib/auth";
 
 import "../index.css";
 
-export interface RouterAppContext {}
+// biome-ignore lint/complexity/noBannedTypes: intentionally empty context for TanStack Router
+export type RouterAppContext = {};
 
 const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: { staleTime: 30_000, retry: 2 },
-  },
+	defaultOptions: {
+		queries: { staleTime: 30_000, retry: 2 },
+	},
 });
 
 export const Route = createRootRouteWithContext<RouterAppContext>()({
-  component: RootComponent,
-  head: () => ({
-    meta: [
-      { title: "subs-check-re" },
-      { name: "description", content: "Proxy subscription checker" },
-    ],
-    links: [{ rel: "icon", href: "/favicon.ico" }],
-  }),
+	component: RootComponent,
+	head: () => ({
+		meta: [
+			{ title: "subs-check" },
+			{ name: "description", content: "Proxy subscription checker" },
+		],
+		links: [{ rel: "icon", href: "/favicon.ico" }],
+	}),
 });
 
 function RootComponent() {
-  return (
-    <QueryClientProvider client={queryClient}>
-      <HeadContent />
-      <ThemeProvider
-        attribute="class"
-        defaultTheme="dark"
-        disableTransitionOnChange
-        storageKey="vite-ui-theme"
-      >
-        <div className="grid grid-rows-[auto_1fr] h-svh">
-          <Header />
-          <main className="container mx-auto max-w-5xl px-4 py-6 overflow-y-auto">
-            <Outlet />
-          </main>
-        </div>
-        <Toaster richColors />
-      </ThemeProvider>
-      <TanStackRouterDevtools position="bottom-left" />
-    </QueryClientProvider>
-  );
+	const authed = isAuthenticated();
+
+	return (
+		<QueryClientProvider client={queryClient}>
+			<HeadContent />
+			{authed ? (
+				<div className="flex h-screen overflow-hidden">
+					<Sidebar />
+					<main className="flex-1 overflow-y-auto px-6 py-6">
+						<div className="mx-auto max-w-5xl">
+							<Outlet />
+						</div>
+					</main>
+				</div>
+			) : (
+				<div className="flex min-h-screen items-center justify-center">
+					<Outlet />
+				</div>
+			)}
+			<Toaster richColors />
+			<TanStackRouterDevtools position="bottom-left" />
+		</QueryClientProvider>
+	);
 }
