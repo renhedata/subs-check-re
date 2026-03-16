@@ -84,6 +84,44 @@ type ResultsResponse struct {
 	Results []NodeResult `json:"results"`
 }
 
+// CheckOptions controls which tests are run per node.
+type CheckOptions struct {
+	SpeedTest bool     `json:"speed_test"`
+	MediaApps []string `json:"media_apps"`
+}
+
+func defaultCheckOptions() CheckOptions {
+	return CheckOptions{
+		SpeedTest: true,
+		MediaApps: []string{"openai", "claude", "gemini", "netflix", "youtube", "disney", "tiktok"},
+	}
+}
+
+func applyOptionDefaults(o *CheckOptions) {
+	if o.SpeedTest == false && len(o.MediaApps) == 0 {
+		*o = defaultCheckOptions()
+		return
+	}
+	if o.MediaApps == nil {
+		o.MediaApps = defaultCheckOptions().MediaApps
+	}
+}
+
+func hasApp(opts CheckOptions, app string) bool {
+	for _, a := range opts.MediaApps {
+		if a == app {
+			return true
+		}
+	}
+	return false
+}
+
+// TriggerParams is the optional request body for POST /check/:subscriptionID.
+type TriggerParams struct {
+	SpeedTest *bool    `json:"speed_test"`
+	MediaApps []string `json:"media_apps"`
+}
+
 // --- In-process SSE channels ---
 
 type progressUpdate struct {
@@ -144,8 +182,9 @@ func closeJobChannels(jobID string) {
 
 // TriggerInternalParams is the request body for TriggerCheckInternal.
 type TriggerInternalParams struct {
-	UserID string `json:"user_id"`
-	SubURL string `json:"sub_url"`
+	UserID  string       `json:"user_id"`
+	SubURL  string       `json:"sub_url"`
+	Options CheckOptions `json:"options"`
 }
 
 // TriggerCheckInternal triggers a check job from an internal caller (e.g., scheduler).
@@ -171,11 +210,14 @@ func TriggerCheckInternal(ctx context.Context, subscriptionID string, p *Trigger
 		speedTestURL = speedCfg.SpeedTestURL
 	}
 
+	applyOptionDefaults(&p.Options)
+	optsJSON, _ := json.Marshal(p.Options)
+
 	jobID := uuid.New().String()
 	if _, err := db.Exec(ctx, `
-		INSERT INTO check_jobs (id, subscription_id, user_id, sub_url, speed_test_url, status, created_at)
-		VALUES ($1, $2, $3, $4, $5, 'queued', $6)
-	`, jobID, subscriptionID, p.UserID, p.SubURL, speedTestURL, time.Now()); err != nil {
+		INSERT INTO check_jobs (id, subscription_id, user_id, sub_url, speed_test_url, options_json, status, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, 'queued', $7)
+	`, jobID, subscriptionID, p.UserID, p.SubURL, speedTestURL, optsJSON, time.Now()); err != nil {
 		return nil, errs.B().Code(errs.Internal).Msg("failed to create job").Err()
 	}
 
@@ -186,7 +228,7 @@ func TriggerCheckInternal(ctx context.Context, subscriptionID string, p *Trigger
 // TriggerCheck creates a new check job for the given subscription.
 //
 //encore:api auth method=POST path=/check/:subscriptionID
-func TriggerCheck(ctx context.Context, subscriptionID string) (*TriggerResponse, error) {
+func TriggerCheck(ctx context.Context, subscriptionID string, p *TriggerParams) (*TriggerResponse, error) {
 	claims := encauth.Data().(*authsvc.UserClaims)
 
 	// Verify ownership and get subscription URL
@@ -214,11 +256,22 @@ func TriggerCheck(ctx context.Context, subscriptionID string) (*TriggerResponse,
 		speedTestURL = speedCfg.SpeedTestURL
 	}
 
+	opts := defaultCheckOptions()
+	if p != nil {
+		if p.SpeedTest != nil {
+			opts.SpeedTest = *p.SpeedTest
+		}
+		if p.MediaApps != nil {
+			opts.MediaApps = p.MediaApps
+		}
+	}
+	optsJSON, _ := json.Marshal(opts)
+
 	jobID := uuid.New().String()
 	if _, err := db.Exec(ctx, `
-		INSERT INTO check_jobs (id, subscription_id, user_id, sub_url, speed_test_url, status, created_at)
-		VALUES ($1, $2, $3, $4, $5, 'queued', $6)
-	`, jobID, subscriptionID, claims.UserID, sub.URL, speedTestURL, time.Now()); err != nil {
+		INSERT INTO check_jobs (id, subscription_id, user_id, sub_url, speed_test_url, options_json, status, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, 'queued', $7)
+	`, jobID, subscriptionID, claims.UserID, sub.URL, speedTestURL, optsJSON, time.Now()); err != nil {
 		return nil, errs.B().Code(errs.Internal).Msg("failed to create job").Err()
 	}
 
@@ -363,14 +416,21 @@ func runJob(ctx context.Context, jobID, subscriptionID, userID string) {
 	// Mark as running
 	db.Exec(ctx, `UPDATE check_jobs SET status='running' WHERE id=$1`, jobID)
 
-	// Get subscription URL and speed test URL from job row
+	// Get subscription URL, speed test URL, and options from job row
 	var subURL, speedTestURL string
-	if err := db.QueryRow(ctx, `SELECT sub_url, COALESCE(speed_test_url, '') FROM check_jobs WHERE id=$1`, jobID).Scan(&subURL, &speedTestURL); err != nil || subURL == "" {
+	var optsJSON []byte
+	if err := db.QueryRow(ctx,
+		`SELECT sub_url, COALESCE(speed_test_url, ''), COALESCE(options_json, '{}') FROM check_jobs WHERE id=$1`,
+		jobID).Scan(&subURL, &speedTestURL, &optsJSON); err != nil || subURL == "" {
 		markFailed()
 		return
 	}
 	if speedTestURL == "" {
 		speedTestURL = defaultSpeedTestURL
+	}
+	var opts CheckOptions
+	if err := json.Unmarshal(optsJSON, &opts); err != nil {
+		opts = defaultCheckOptions()
 	}
 
 	// Fetch and parse proxies from subscription URL
@@ -419,7 +479,7 @@ func runJob(ctx context.Context, jobID, subscriptionID, userID string) {
 			defer func() { recover() }() // prevent a mihomo panic from killing the worker
 			for t := range taskCh {
 				nodeCtx, cancel := context.WithTimeout(ctx, nodeTimeout)
-				res := checkNode(nodeCtx, t.nodeID, t.proxy, speedTestURL)
+				res := checkNode(nodeCtx, t.nodeID, t.proxy, speedTestURL, opts)
 				cancel()
 
 				resultID := uuid.New().String()
@@ -453,12 +513,12 @@ func runJob(ctx context.Context, jobID, subscriptionID, userID string) {
 	close(taskCh)
 	wg.Wait()
 
-	// Mark completed
-	db.Exec(ctx, `UPDATE check_jobs SET status='completed', finished_at=$2 WHERE id=$1`, jobID, time.Now())
-
-	// Count available nodes
+	// Count available BEFORE updating (count query must run first).
 	var available int
 	db.QueryRow(ctx, `SELECT COUNT(*) FROM check_results WHERE job_id=$1 AND alive=true`, jobID).Scan(&available)
+
+	db.Exec(ctx, `UPDATE check_jobs SET status='completed', finished_at=$2, available=$3 WHERE id=$1`,
+		jobID, time.Now(), available)
 
 	// Publish completion event for notify service
 	JobCompletedTopic.Publish(ctx, &JobCompletedEvent{

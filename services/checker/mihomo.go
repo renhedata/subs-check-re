@@ -174,7 +174,7 @@ type nodeCheckResult struct {
 }
 
 // checkNode runs all checks for a single proxy mapping and returns the result.
-func checkNode(ctx context.Context, nodeID string, mapping map[string]any, speedTestURL string) nodeCheckResult {
+func checkNode(ctx context.Context, nodeID string, mapping map[string]any, speedTestURL string, opts CheckOptions) nodeCheckResult {
 	name, _ := mapping["name"].(string)
 	result := nodeCheckResult{NodeID: nodeID, NodeName: name}
 
@@ -189,22 +189,38 @@ func checkNode(ctx context.Context, nodeID string, mapping map[string]any, speed
 	}
 	result.Alive = true
 	result.LatencyMs = measureLatency(ctx, pc.Client)
-	result.SpeedKbps = measureSpeed(ctx, pc.Client.Transport, speedTestURL)
-
-	// Reuse same transport with shorter timeout for media checks
-	mediaClient := &http.Client{
-		Transport: pc.Transport,
-		Timeout:   8 * time.Second,
+	if opts.SpeedTest {
+		result.SpeedKbps = measureSpeed(ctx, pc.Client.Transport, speedTestURL)
 	}
 
-	result.IP, result.Country = getProxyInfo(ctx, mediaClient)
-	result.Netflix, _ = checkNetflix(ctx, mediaClient)
-	result.YouTube, _ = checkYouTube(ctx, mediaClient)
-	result.OpenAI, _ = checkOpenAI(ctx, mediaClient)
-	result.Claude, _ = checkClaude(ctx, mediaClient)
-	result.Gemini, _ = checkGemini(ctx, mediaClient)
-	result.Disney, _ = checkDisney(ctx, mediaClient)
-	result.TikTok, _ = checkTikTok(ctx, mediaClient)
+	if len(opts.MediaApps) > 0 {
+		mediaClient := &http.Client{
+			Transport: pc.Transport,
+			Timeout:   8 * time.Second,
+		}
+		result.IP, result.Country = getProxyInfo(ctx, mediaClient)
+		if hasApp(opts, "netflix") {
+			result.Netflix, _ = checkNetflix(ctx, mediaClient)
+		}
+		if hasApp(opts, "youtube") {
+			result.YouTube, _ = checkYouTube(ctx, mediaClient)
+		}
+		if hasApp(opts, "openai") {
+			result.OpenAI, _ = checkOpenAI(ctx, mediaClient)
+		}
+		if hasApp(opts, "claude") {
+			result.Claude, _ = checkClaude(ctx, mediaClient)
+		}
+		if hasApp(opts, "gemini") {
+			result.Gemini, _ = checkGemini(ctx, mediaClient)
+		}
+		if hasApp(opts, "disney") {
+			result.Disney, _ = checkDisney(ctx, mediaClient)
+		}
+		if hasApp(opts, "tiktok") {
+			result.TikTok, _ = checkTikTok(ctx, mediaClient)
+		}
+	}
 
 	return result
 }

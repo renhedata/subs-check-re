@@ -21,7 +21,7 @@ func withAuth() context.Context {
 
 func TestTriggerCheckMissingSubscription(t *testing.T) {
 	ctx := withAuth()
-	_, err := TriggerCheck(ctx, "nonexistent-sub-id")
+	_, err := TriggerCheck(ctx, "nonexistent-sub-id", nil)
 	if err == nil {
 		t.Error("expected error for missing subscription")
 	}
@@ -55,6 +55,26 @@ proxies:
 	}
 	if proxies[0]["name"] != "test-node" {
 		t.Errorf("expected name 'test-node', got %v", proxies[0]["name"])
+	}
+}
+
+func TestDefaultCheckOptionsHasAllPlatforms(t *testing.T) {
+	opts := defaultCheckOptions()
+	if !opts.SpeedTest {
+		t.Error("expected SpeedTest=true by default")
+	}
+	wantPlatforms := []string{"openai", "claude", "gemini", "netflix", "youtube", "disney", "tiktok"}
+	for _, p := range wantPlatforms {
+		found := false
+		for _, m := range opts.MediaApps {
+			if m == p {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("expected platform %q in default MediaApps", p)
+		}
 	}
 }
 
