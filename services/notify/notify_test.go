@@ -38,6 +38,33 @@ func TestCreateAndListChannel(t *testing.T) {
 	}
 }
 
+func TestUpdateChannel(t *testing.T) {
+	ctx := withAuth()
+	ch, err := CreateChannel(ctx, &CreateChannelParams{
+		Name: "Before",
+		Type: "webhook",
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	newName := "After"
+	enabled := false
+	updated, err := UpdateChannel(ctx, ch.ID, &UpdateChannelParams{
+		Name:    &newName,
+		Enabled: &enabled,
+	})
+	if err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if updated.Name != "After" {
+		t.Errorf("expected name 'After', got %q", updated.Name)
+	}
+	if updated.Enabled {
+		t.Error("expected enabled=false after update")
+	}
+}
+
 func TestCreateInvalidType(t *testing.T) {
 	ctx := withAuth()
 	_, err := CreateChannel(ctx, &CreateChannelParams{

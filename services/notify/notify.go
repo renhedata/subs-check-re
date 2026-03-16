@@ -216,6 +216,53 @@ func CreateChannel(ctx context.Context, p *CreateChannelParams) (*Channel, error
 	}, nil
 }
 
+// UpdateChannelParams is the request body for PUT /notify/channels/:id.
+type UpdateChannelParams struct {
+	Name    *string         `json:"name"`
+	Config  json.RawMessage `json:"config"`
+	Enabled *bool           `json:"enabled"`
+}
+
+// UpdateChannel modifies an existing notification channel.
+//
+//encore:api auth method=PUT path=/notify/channels/:id
+func UpdateChannel(ctx context.Context, id string, p *UpdateChannelParams) (*Channel, error) {
+	claims := encauth.Data().(*authsvc.UserClaims)
+
+	result, err := db.Exec(ctx, `
+		UPDATE notify_channels
+		SET
+			name    = COALESCE($3, name),
+			config  = COALESCE($4, config),
+			enabled = COALESCE($5, enabled)
+		WHERE id=$1 AND user_id=$2
+	`, id, claims.UserID, p.Name, nullableJSON(p.Config), p.Enabled)
+	if err != nil {
+		return nil, errs.B().Code(errs.Internal).Msg("update failed").Err()
+	}
+	if result.RowsAffected() == 0 {
+		return nil, errs.B().Code(errs.NotFound).Msg("channel not found").Err()
+	}
+
+	var c Channel
+	if err := db.QueryRow(ctx, `
+		SELECT id, user_id, name, type, config, enabled, created_at
+		FROM notify_channels WHERE id=$1
+	`, id).Scan(&c.ID, &c.UserID, &c.Name, &c.Type, &c.Config, &c.Enabled, &c.CreatedAt); err != nil {
+		return nil, errs.B().Code(errs.Internal).Msg("fetch after update failed").Err()
+	}
+	return &c, nil
+}
+
+// nullableJSON returns nil if the raw message is empty, otherwise the raw bytes.
+// Used so that an absent JSON field does not overwrite an existing DB value.
+func nullableJSON(r json.RawMessage) []byte {
+	if len(r) == 0 {
+		return nil
+	}
+	return []byte(r)
+}
+
 // DeleteChannel removes a notification channel.
 //
 //encore:api auth method=DELETE path=/notify/channels/:id
