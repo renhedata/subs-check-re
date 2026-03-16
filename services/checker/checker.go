@@ -84,6 +84,36 @@ type ResultsResponse struct {
 	Results []NodeResult `json:"results"`
 }
 
+// JobSummary is one entry in the job history list.
+type JobSummary struct {
+	ID             string     `json:"id"`
+	SubscriptionID string     `json:"subscription_id"`
+	Status         string     `json:"status"`
+	Total          int        `json:"total"`
+	Available      int        `json:"available"`
+	SpeedTest      bool       `json:"speed_test"`
+	MediaApps      []string   `json:"media_apps"`
+	CreatedAt      time.Time  `json:"created_at"`
+	FinishedAt     *time.Time `json:"finished_at,omitempty"`
+}
+
+// ListJobsResponse is returned by GET /check/:subscriptionID/jobs.
+type ListJobsResponse struct {
+	Jobs  []JobSummary `json:"jobs"`
+	Total int          `json:"total"`
+}
+
+// ListJobsParams are the query parameters for GET /check/:subscriptionID/jobs.
+type ListJobsParams struct {
+	Limit  int `query:"limit"`
+	Offset int `query:"offset"`
+}
+
+// GetResultsParams are the query parameters for GET /check/:subscriptionID/results.
+type GetResultsParams struct {
+	JobID string `query:"job_id"`
+}
+
 // CheckOptions controls which tests are run per node.
 type CheckOptions struct {
 	SpeedTest bool     `json:"speed_test"`
@@ -347,24 +377,96 @@ func writeSSE(w http.ResponseWriter, f http.Flusher, v any) {
 	f.Flush()
 }
 
+// ListJobs returns paginated check job history for a subscription.
+//
+//encore:api auth method=GET path=/check/:subscriptionID/jobs
+func ListJobs(ctx context.Context, subscriptionID string, p *ListJobsParams) (*ListJobsResponse, error) {
+	claims := encauth.Data().(*authsvc.UserClaims)
+
+	limit := p.Limit
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	offset := p.Offset
+	if offset < 0 {
+		offset = 0
+	}
+
+	var total int
+	if err := db.QueryRow(ctx,
+		`SELECT COUNT(*) FROM check_jobs WHERE subscription_id=$1 AND user_id=$2`,
+		subscriptionID, claims.UserID).Scan(&total); err != nil {
+		return nil, errs.B().Code(errs.Internal).Msg("db error").Err()
+	}
+
+	rows, err := db.Query(ctx, `
+		SELECT id, subscription_id, status, total, available,
+		       COALESCE(options_json, '{}'), created_at, finished_at
+		FROM check_jobs
+		WHERE subscription_id=$1 AND user_id=$2
+		ORDER BY created_at DESC
+		LIMIT $3 OFFSET $4
+	`, subscriptionID, claims.UserID, limit, offset)
+	if err != nil {
+		return nil, errs.B().Code(errs.Internal).Msg("db error").Err()
+	}
+	defer rows.Close()
+
+	var jobs []JobSummary
+	for rows.Next() {
+		var j JobSummary
+		var optsJSON []byte
+		if err := rows.Scan(&j.ID, &j.SubscriptionID, &j.Status, &j.Total, &j.Available,
+			&optsJSON, &j.CreatedAt, &j.FinishedAt); err != nil {
+			return nil, errs.B().Code(errs.Internal).Msg("scan error").Err()
+		}
+		var opts CheckOptions
+		if err := json.Unmarshal(optsJSON, &opts); err == nil {
+			j.SpeedTest = opts.SpeedTest
+			j.MediaApps = opts.MediaApps
+		}
+		jobs = append(jobs, j)
+	}
+	if jobs == nil {
+		jobs = []JobSummary{}
+	}
+	return &ListJobsResponse{Jobs: jobs, Total: total}, nil
+}
+
 // GetResults returns the latest check results for a subscription.
 //
 //encore:api auth method=GET path=/check/:subscriptionID/results
-func GetResults(ctx context.Context, subscriptionID string) (*ResultsResponse, error) {
+func GetResults(ctx context.Context, subscriptionID string, p *GetResultsParams) (*ResultsResponse, error) {
 	claims := encauth.Data().(*authsvc.UserClaims)
 
 	var job Job
-	err := db.QueryRow(ctx, `
-		SELECT id, subscription_id, status, total, progress, created_at, finished_at
-		FROM check_jobs
-		WHERE subscription_id = $1 AND user_id = $2
-		ORDER BY created_at DESC LIMIT 1
-	`, subscriptionID, claims.UserID).Scan(
-		&job.ID, &job.SubscriptionID, &job.Status,
-		&job.Total, &job.Progress, &job.CreatedAt, &job.FinishedAt,
-	)
-	if err != nil {
-		return nil, errs.B().Code(errs.NotFound).Msg("no check jobs found").Err()
+	if p != nil && p.JobID != "" {
+		// Specific job requested — verify ownership.
+		err := db.QueryRow(ctx, `
+			SELECT id, subscription_id, status, total, progress, created_at, finished_at
+			FROM check_jobs
+			WHERE id=$1 AND subscription_id=$2 AND user_id=$3
+		`, p.JobID, subscriptionID, claims.UserID).Scan(
+			&job.ID, &job.SubscriptionID, &job.Status,
+			&job.Total, &job.Progress, &job.CreatedAt, &job.FinishedAt,
+		)
+		if err != nil {
+			return nil, errs.B().Code(errs.NotFound).Msg("job not found").Err()
+		}
+	} else {
+		// Latest completed job.
+		err := db.QueryRow(ctx, `
+			SELECT id, subscription_id, status, total, progress, created_at, finished_at
+			FROM check_jobs
+			WHERE subscription_id=$1 AND user_id=$2 AND status='completed'
+			ORDER BY created_at DESC LIMIT 1
+		`, subscriptionID, claims.UserID).Scan(
+			&job.ID, &job.SubscriptionID, &job.Status,
+			&job.Total, &job.Progress, &job.CreatedAt, &job.FinishedAt,
+		)
+		if err != nil {
+			return nil, errs.B().Code(errs.NotFound).Msg("no check jobs found").Err()
+		}
 	}
 
 	rows, err := db.Query(ctx, `

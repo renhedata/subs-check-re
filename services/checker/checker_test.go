@@ -29,9 +29,28 @@ func TestTriggerCheckMissingSubscription(t *testing.T) {
 
 func TestGetResultsNoJobs(t *testing.T) {
 	ctx := withAuth()
-	_, err := GetResults(ctx, "nonexistent-sub-id")
+	_, err := GetResults(ctx, "nonexistent-sub-id", nil)
 	if err == nil {
 		t.Error("expected error when no jobs exist")
+	}
+}
+
+func TestListJobsEmpty(t *testing.T) {
+	ctx := withAuth()
+	resp, err := ListJobs(ctx, "nonexistent-sub-id", &ListJobsParams{Limit: 20, Offset: 0})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(resp.Jobs) != 0 {
+		t.Errorf("expected 0 jobs, got %d", len(resp.Jobs))
+	}
+}
+
+func TestGetResultsWithJobIDNotFound(t *testing.T) {
+	ctx := withAuth()
+	_, err := GetResults(ctx, "nonexistent-sub-id", &GetResultsParams{JobID: "nonexistent-job"})
+	if err == nil {
+		t.Error("expected error for nonexistent job")
 	}
 }
 
