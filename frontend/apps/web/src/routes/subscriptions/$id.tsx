@@ -1,10 +1,12 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { z } from "zod";
 import { NodeTable } from "@/components/node-table";
 import {
+	ApiError,
 	api,
 	type CheckJob,
 	type NodeResult,
@@ -108,6 +110,19 @@ function SubscriptionDetailPage() {
 			setJobId(job.id);
 		}
 	}, [resultsQuery.data?.job?.id, resultsQuery.data?.job?.status, jobId]);
+
+	const cancelMut = useMutation({
+		mutationFn: (jid: string) => api.delete(`/check/${jid}`),
+		onSuccess: () => {
+			setJobId(null);
+			setProgress(null);
+			qc.invalidateQueries({ queryKey: ["jobs", id] });
+			resultsQuery.refetch();
+			toast.success("Check cancelled");
+		},
+		onError: (e) =>
+			toast.error(e instanceof ApiError ? e.message : "Cancel failed"),
+	});
 
 	// Clear log when a new job starts
 	// biome-ignore lint/correctness/useExhaustiveDependencies: clear log only when jobId changes
@@ -214,9 +229,23 @@ function SubscriptionDetailPage() {
 							/>
 							Checking nodes…
 						</div>
-						<span className="font-mono text-xs" style={{ color: "#8b949e" }}>
-							{progress.progress ?? 0} / {progress.total ?? "?"}
-						</span>
+						<div className="flex items-center gap-2">
+							<span className="font-mono text-xs" style={{ color: "#8b949e" }}>
+								{progress.progress ?? 0} / {progress.total ?? "?"}
+							</span>
+							{jobId && (
+								<button
+									type="button"
+									onClick={() => cancelMut.mutate(jobId)}
+									disabled={cancelMut.isPending}
+									className="flex items-center gap-1 rounded border px-2 py-0.5 text-[11px] transition-colors hover:border-[#f85149]/60 hover:bg-[#f85149]/10 hover:text-[#f85149] disabled:opacity-50"
+									style={{ borderColor: "#30363d", color: "#6e7681" }}
+								>
+									<Square size={9} strokeWidth={2} />
+									Stop
+								</button>
+							)}
+						</div>
 					</div>
 
 					{/* Progress bar */}
