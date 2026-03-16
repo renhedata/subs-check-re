@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { RefreshCw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -61,11 +61,26 @@ function SubscriptionDetailPage() {
 	const [jobId, setJobId] = useState<string | null>(jobIdFromSearch ?? null);
 	const [progress, setProgress] = useState<SSEProgress | null>(null);
 	const esRef = useRef<EventSource | null>(null);
+	const qc = useQueryClient();
+	const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+
+	const jobsQuery = useQuery({
+		queryKey: ["jobs", id],
+		queryFn: () =>
+			api.get<{ jobs: CheckJob[]; total: number }>(
+				`/check/${id}/jobs?limit=10`,
+			),
+		staleTime: 5_000,
+	});
 
 	const resultsQuery = useQuery({
-		queryKey: ["results", id],
-		queryFn: () =>
-			api.get<{ job: CheckJob; results: NodeResult[] }>(`/check/${id}/results`),
+		queryKey: ["results", id, selectedJobId],
+		queryFn: () => {
+			const qs = selectedJobId ? `?job_id=${selectedJobId}` : "";
+			return api.get<{ job: CheckJob; results: NodeResult[] }>(
+				`/check/${id}/results${qs}`,
+			);
+		},
 		retry: false,
 		staleTime: 0,
 	});
@@ -101,12 +116,14 @@ function SubscriptionDetailPage() {
 			setProgress(data);
 			if (data.done) {
 				es.close();
+				setSelectedJobId(null);
 				resultsQuery.refetch();
+				qc.invalidateQueries({ queryKey: ["jobs", id] });
 			}
 		};
 		es.onerror = () => es.close();
 		return () => es.close();
-	}, [jobId, resultsQuery.refetch]);
+	}, [jobId, resultsQuery.refetch, qc, id]);
 
 	const job = resultsQuery.data?.job;
 	const results = resultsQuery.data?.results ?? [];
@@ -125,6 +142,39 @@ function SubscriptionDetailPage() {
 					{id.slice(0, 8)}…
 				</p>
 			</div>
+
+			{/* Job history pills */}
+			{(jobsQuery.data?.jobs.length ?? 0) > 0 && (
+				<div className="flex flex-wrap gap-1.5">
+					{jobsQuery.data?.jobs.map((j) => {
+						const active =
+							selectedJobId === j.id ||
+							(!selectedJobId && j.id === resultsQuery.data?.job.id);
+						return (
+							<button
+								key={j.id}
+								type="button"
+								onClick={() => setSelectedJobId(j.id)}
+								className="rounded-full border px-2.5 py-0.5 font-mono text-[11px] transition-colors"
+								style={{
+									borderColor: active ? "#58a6ff" : "#30363d",
+									color: active ? "#58a6ff" : "#6e7681",
+									background: active ? "#1a2a3a" : "transparent",
+								}}
+							>
+								{new Date(j.created_at).toLocaleString(undefined, {
+									month: "short",
+									day: "numeric",
+									hour: "2-digit",
+									minute: "2-digit",
+								})}
+								{" · "}
+								{j.available}/{j.total}
+							</button>
+						);
+					})}
+				</div>
+			)}
 
 			{/* Progress bar */}
 			{progress && !progress.done && (
@@ -204,10 +254,15 @@ function SubscriptionDetailPage() {
 					Loading results…
 				</p>
 			)}
-			{resultsQuery.isError && (
-				<p className="text-sm" style={{ color: "#8b949e" }}>
-					No check results yet.
-				</p>
+			{resultsQuery.isError && !resultsQuery.isLoading && (
+				<div className="py-12 text-center">
+					<p className="text-sm" style={{ color: "#8b949e" }}>
+						No checks run yet.
+					</p>
+					<p className="mt-1 text-xs" style={{ color: "#6e7681" }}>
+						Click Check on the subscriptions page to start a check.
+					</p>
+				</div>
 			)}
 
 			<NodeTable results={results} />

@@ -9,7 +9,7 @@ import {
 } from "@frontend/ui/components/select";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { Loader2, Plus, Trash2 } from "lucide-react";
+import { Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -22,6 +22,9 @@ export const Route = createFileRoute("/settings/notify")({
 function NotifyPage() {
 	const qc = useQueryClient();
 	const [adding, setAdding] = useState(false);
+	const [editingId, setEditingId] = useState<string | null>(null);
+	const [editName, setEditName] = useState("");
+	const [editEnabled, setEditEnabled] = useState(true);
 	const [type, setType] = useState<"webhook" | "telegram">("webhook");
 	const [name, setName] = useState("");
 	const [webhookUrl, setWebhookUrl] = useState("");
@@ -59,6 +62,23 @@ function NotifyPage() {
 			qc.invalidateQueries({ queryKey: ["notify-channels"] });
 			toast.success("Removed");
 		},
+	});
+
+	const updateMut = useMutation({
+		mutationFn: ({
+			id,
+			data,
+		}: {
+			id: string;
+			data: { name?: string; enabled?: boolean };
+		}) => api.put(`/notify/channels/${id}`, data),
+		onSuccess: () => {
+			qc.invalidateQueries({ queryKey: ["notify-channels"] });
+			setEditingId(null);
+			toast.success("Updated");
+		},
+		onError: (e) =>
+			toast.error(e instanceof ApiError ? e.message : "Update failed"),
 	});
 
 	const channels = channelsQuery.data?.channels ?? [];
@@ -172,28 +192,99 @@ function NotifyPage() {
 				{channels.map((ch) => (
 					<div
 						key={ch.id}
-						className="flex items-center justify-between rounded-lg border px-4 py-3"
+						className="rounded-lg border"
 						style={{ background: "#161b22", borderColor: "#30363d" }}
 					>
-						<div>
-							<p className="font-medium text-[#f0f6fc] text-sm">
-								{ch.name || ch.id}
-							</p>
-							<p
-								className="mt-0.5 text-[11px] uppercase tracking-[0.4px]"
-								style={{ color: "#8b949e" }}
-							>
-								{ch.type}
-							</p>
+						<div className="flex items-center justify-between px-4 py-3">
+							<div>
+								<p className="font-medium text-[#f0f6fc] text-sm">
+									{ch.name || ch.id}
+								</p>
+								<p
+									className="mt-0.5 text-[11px] uppercase tracking-[0.4px]"
+									style={{ color: "#8b949e" }}
+								>
+									{ch.type} · {ch.enabled ? "enabled" : "disabled"}
+								</p>
+							</div>
+							<div className="flex items-center gap-1.5">
+								<button
+									type="button"
+									onClick={() => {
+										setEditingId(editingId === ch.id ? null : ch.id);
+										setEditName(ch.name);
+										setEditEnabled(ch.enabled);
+									}}
+									className="rounded-md p-1.5 transition-colors hover:bg-white/5"
+									style={{ color: "#6e7681" }}
+								>
+									<Pencil size={13} strokeWidth={1.5} />
+								</button>
+								<button
+									type="button"
+									onClick={() => deleteMut.mutate(ch.id)}
+									disabled={deleteMut.isPending}
+									className="rounded-md p-1.5 transition-colors hover:bg-[#f85149]/10 hover:text-[#f85149] disabled:opacity-50"
+									style={{ color: "#6e7681" }}
+								>
+									<Trash2 size={13} strokeWidth={1.5} />
+								</button>
+							</div>
 						</div>
-						<button
-							type="button"
-							onClick={() => deleteMut.mutate(ch.id)}
-							className="rounded-md p-1.5 transition-colors hover:bg-[#f85149]/10 hover:text-[#f85149]"
-							style={{ color: "#6e7681" }}
-						>
-							<Trash2 size={13} strokeWidth={1.5} />
-						</button>
+						{editingId === ch.id && (
+							<div
+								className="space-y-3 border-t px-4 py-3"
+								style={{ borderColor: "#30363d" }}
+							>
+								<div className="space-y-1.5">
+									<Label className="text-[#8b949e] text-xs">Name</Label>
+									<Input
+										value={editName}
+										onChange={(e) => setEditName(e.target.value)}
+										className="h-8 text-sm"
+									/>
+								</div>
+								<label className="flex cursor-pointer select-none items-center gap-2">
+									<input
+										type="checkbox"
+										checked={editEnabled}
+										onChange={(e) => setEditEnabled(e.target.checked)}
+										className="accent-[#58a6ff]"
+									/>
+									<span className="text-xs" style={{ color: "#8b949e" }}>
+										Enabled
+									</span>
+								</label>
+								<div className="flex gap-2">
+									<button
+										type="button"
+										onClick={() =>
+											updateMut.mutate({
+												id: ch.id,
+												data: { name: editName, enabled: editEnabled },
+											})
+										}
+										disabled={updateMut.isPending}
+										className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-white disabled:opacity-50"
+										style={{ background: "#238636" }}
+									>
+										{updateMut.isPending ? (
+											<Loader2 size={13} className="animate-spin" />
+										) : (
+											"Save"
+										)}
+									</button>
+									<button
+										type="button"
+										onClick={() => setEditingId(null)}
+										className="rounded-md border px-3 py-1.5 text-sm"
+										style={{ borderColor: "#30363d", color: "#8b949e" }}
+									>
+										Cancel
+									</button>
+								</div>
+							</div>
+						)}
 					</div>
 				))}
 				{!channelsQuery.isLoading && channels.length === 0 && (

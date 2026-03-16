@@ -10,6 +10,16 @@ import { toast } from "sonner";
 
 import { ApiError, api, type Subscription } from "@/lib/api";
 
+const MEDIA_APPS = [
+	"openai",
+	"claude",
+	"gemini",
+	"netflix",
+	"youtube",
+	"disney",
+	"tiktok",
+] as const;
+
 export const Route = createFileRoute("/subscriptions/")({
 	component: SubscriptionsPage,
 });
@@ -37,8 +47,14 @@ function SubscriptionsPage() {
 	});
 
 	const triggerMut = useMutation({
-		mutationFn: (id: string) => api.post<{ job_id: string }>(`/check/${id}`),
-		onSuccess: (resp, id) => {
+		mutationFn: ({
+			id,
+			opts,
+		}: {
+			id: string;
+			opts: { speed_test: boolean; media_apps: string[] };
+		}) => api.post<{ job_id: string }>(`/check/${id}`, opts),
+		onSuccess: (resp, { id }) => {
 			toast.success("Check started");
 			navigate({
 				to: "/subscriptions/$id",
@@ -166,74 +182,156 @@ function SubRow({
 }: {
 	sub: Subscription;
 	deleteMut: { mutate: (id: string) => void; isPending: boolean };
-	triggerMut: { mutate: (id: string) => void; isPending: boolean };
+	triggerMut: {
+		mutate: (args: {
+			id: string;
+			opts: { speed_test: boolean; media_apps: string[] };
+		}) => void;
+		isPending: boolean;
+	};
 }) {
+	const [showOpts, setShowOpts] = useState(false);
+	const [speedTest, setSpeedTest] = useState(true);
+	const [mediaApps, setMediaApps] = useState<string[]>([...MEDIA_APPS]);
+
+	function toggleApp(app: string) {
+		setMediaApps((prev) =>
+			prev.includes(app) ? prev.filter((a) => a !== app) : [...prev, app],
+		);
+	}
+
+	function handleCheck() {
+		triggerMut.mutate({
+			id: sub.id,
+			opts: { speed_test: speedTest, media_apps: mediaApps },
+		});
+		setShowOpts(false);
+	}
+
 	return (
 		<div
-			className="flex items-center gap-3 rounded-lg border px-4 py-3"
+			className="rounded-lg border"
 			style={{ background: "#161b22", borderColor: "#30363d" }}
 		>
-			{/* Status dot */}
-			<div
-				className="h-2 w-2 flex-shrink-0 rounded-full"
-				style={{ background: sub.last_run_at ? "#3fb950" : "#30363d" }}
-			/>
-
-			{/* Info */}
-			<div className="min-w-0 flex-1">
-				<Link
-					to="/subscriptions/$id"
-					params={{ id: sub.id }}
-					className="font-medium text-sm hover:underline"
-					style={{ color: "#58a6ff" }}
-				>
-					{sub.name || sub.url}
-				</Link>
-				{sub.name && (
-					<p
-						className="mt-0.5 truncate font-mono text-xs"
-						style={{ color: "#8b949e" }}
+			<div className="flex items-center gap-3 px-4 py-3">
+				{/* Status dot */}
+				<div
+					className="h-2 w-2 flex-shrink-0 rounded-full"
+					style={{ background: sub.last_run_at ? "#3fb950" : "#30363d" }}
+				/>
+				{/* Info */}
+				<div className="min-w-0 flex-1">
+					<Link
+						to="/subscriptions/$id"
+						params={{ id: sub.id }}
+						className="font-medium text-sm hover:underline"
+						style={{ color: "#58a6ff" }}
 					>
-						{sub.url}
-					</p>
-				)}
-				{sub.cron_expr && (
-					<p
-						className="mt-0.5 flex items-center gap-1 text-xs"
+						{sub.name || sub.url}
+					</Link>
+					{sub.name && (
+						<p
+							className="mt-0.5 truncate font-mono text-xs"
+							style={{ color: "#8b949e" }}
+						>
+							{sub.url}
+						</p>
+					)}
+					{sub.cron_expr && (
+						<p
+							className="mt-0.5 flex items-center gap-1 text-xs"
+							style={{ color: "#6e7681" }}
+						>
+							<Clock size={10} strokeWidth={1.5} />
+							{sub.cron_expr}
+						</p>
+					)}
+				</div>
+				{/* Actions */}
+				<div className="flex flex-shrink-0 items-center gap-2">
+					<button
+						type="button"
+						onClick={() => setShowOpts(!showOpts)}
+						className="flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs transition-colors hover:bg-white/5"
+						style={{ borderColor: "#30363d", color: "#8b949e" }}
+					>
+						<Play size={11} strokeWidth={1.5} />
+						Check
+					</button>
+					<button
+						type="button"
+						onClick={() => deleteMut.mutate(sub.id)}
+						disabled={deleteMut.isPending}
+						className="rounded-md p-1.5 transition-colors hover:bg-[#f85149]/10 hover:text-[#f85149] disabled:opacity-50"
 						style={{ color: "#6e7681" }}
 					>
-						<Clock size={10} strokeWidth={1.5} />
-						{sub.cron_expr}
-					</p>
-				)}
+						<Trash2 size={13} strokeWidth={1.5} />
+					</button>
+				</div>
 			</div>
 
-			{/* Actions */}
-			<div className="flex flex-shrink-0 items-center gap-2">
-				<button
-					type="button"
-					onClick={() => triggerMut.mutate(sub.id)}
-					disabled={triggerMut.isPending}
-					className="flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs transition-colors hover:bg-white/5 disabled:opacity-50"
-					style={{ borderColor: "#30363d", color: "#8b949e" }}
+			{showOpts && (
+				<div
+					className="space-y-3 border-t px-4 py-3"
+					style={{ borderColor: "#30363d" }}
 				>
-					{triggerMut.isPending ? (
-						<Loader2 size={11} className="animate-spin" />
-					) : (
-						<Play size={11} strokeWidth={1.5} />
-					)}
-					Check
-				</button>
-				<button
-					type="button"
-					onClick={() => deleteMut.mutate(sub.id)}
-					disabled={deleteMut.isPending}
-					className="rounded-md p-1.5 transition-colors hover:bg-[#f85149]/10 hover:text-[#f85149] disabled:opacity-50"
-					style={{ color: "#6e7681" }}
-				>
-					<Trash2 size={13} strokeWidth={1.5} />
-				</button>
-			</div>
+					<label className="flex cursor-pointer select-none items-center gap-2">
+						<input
+							type="checkbox"
+							checked={speedTest}
+							onChange={(e) => setSpeedTest(e.target.checked)}
+							className="accent-[#58a6ff]"
+						/>
+						<span className="text-xs" style={{ color: "#8b949e" }}>
+							Speed test
+						</span>
+					</label>
+					<div className="flex flex-wrap gap-2">
+						{MEDIA_APPS.map((app) => (
+							<label
+								key={app}
+								className="flex cursor-pointer select-none items-center gap-1"
+							>
+								<input
+									type="checkbox"
+									checked={mediaApps.includes(app)}
+									onChange={() => toggleApp(app)}
+									className="accent-[#58a6ff]"
+								/>
+								<span
+									className="text-[11px] uppercase"
+									style={{ color: "#8b949e" }}
+								>
+									{app}
+								</span>
+							</label>
+						))}
+					</div>
+					<div className="flex gap-2">
+						<button
+							type="button"
+							onClick={handleCheck}
+							disabled={triggerMut.isPending}
+							className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-white disabled:opacity-50"
+							style={{ background: "#238636" }}
+						>
+							{triggerMut.isPending ? (
+								<Loader2 size={13} className="animate-spin" />
+							) : (
+								"Start"
+							)}
+						</button>
+						<button
+							type="button"
+							onClick={() => setShowOpts(false)}
+							className="rounded-md border px-3 py-1.5 text-sm"
+							style={{ borderColor: "#30363d", color: "#8b949e" }}
+						>
+							Cancel
+						</button>
+					</div>
+				</div>
+			)}
 		</div>
 	);
 }

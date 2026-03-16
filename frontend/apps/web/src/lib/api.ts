@@ -65,12 +65,20 @@ export interface Subscription {
 	last_run_at: string | null;
 }
 
+export interface CheckOptions {
+	speed_test: boolean;
+	media_apps: string[];
+}
+
 export interface CheckJob {
 	id: string;
 	subscription_id: string;
 	status: "queued" | "running" | "completed" | "failed";
 	total: number;
 	progress: number;
+	available: number;
+	speed_test: boolean;
+	media_apps: string[];
 	created_at: string;
 	finished_at?: string;
 }
@@ -112,4 +120,5 @@ export interface NotifyChannel {
 
 export interface UserSettings {
 	speed_test_url: string;
+	api_key?: string;
 }
