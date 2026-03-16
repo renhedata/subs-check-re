@@ -4,7 +4,7 @@ import { Label } from "@frontend/ui/components/label";
 import { Skeleton } from "@frontend/ui/components/skeleton";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { Clock, Loader2, Play, Plus, Trash2 } from "lucide-react";
+import { Clock, Loader2, Pencil, Play, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -44,6 +44,28 @@ function SubscriptionsPage() {
 		},
 		onError: (e) =>
 			toast.error(e instanceof ApiError ? e.message : "Delete failed"),
+	});
+
+	const updateMut = useMutation({
+		mutationFn: ({
+			id,
+			data,
+		}: {
+			id: string;
+			data: {
+				name?: string;
+				url?: string;
+				enabled?: boolean;
+				cron_expr?: string;
+				clear_cron_expr?: boolean;
+			};
+		}) => api.put<Subscription>(`/subscriptions/${id}`, data),
+		onSuccess: () => {
+			qc.invalidateQueries({ queryKey: ["subscriptions"] });
+			toast.success("Updated");
+		},
+		onError: (e) =>
+			toast.error(e instanceof ApiError ? e.message : "Update failed"),
 	});
 
 	const triggerMut = useMutation({
@@ -161,6 +183,7 @@ function SubscriptionsPage() {
 								key={sub.id}
 								sub={sub}
 								deleteMut={deleteMut}
+								updateMut={updateMut}
 								triggerMut={triggerMut}
 							/>
 						))}
@@ -178,10 +201,24 @@ function SubscriptionsPage() {
 function SubRow({
 	sub,
 	deleteMut,
+	updateMut,
 	triggerMut,
 }: {
 	sub: Subscription;
 	deleteMut: { mutate: (id: string) => void; isPending: boolean };
+	updateMut: {
+		mutate: (args: {
+			id: string;
+			data: {
+				name?: string;
+				url?: string;
+				enabled?: boolean;
+				cron_expr?: string;
+				clear_cron_expr?: boolean;
+			};
+		}) => void;
+		isPending: boolean;
+	};
 	triggerMut: {
 		mutate: (args: {
 			id: string;
@@ -191,6 +228,25 @@ function SubRow({
 	};
 }) {
 	const [showOpts, setShowOpts] = useState(false);
+	const [showEdit, setShowEdit] = useState(false);
+	const [editName, setEditName] = useState(sub.name);
+	const [editUrl, setEditUrl] = useState(sub.url);
+	const [editCron, setEditCron] = useState(sub.cron_expr ?? "");
+	const [editEnabled, setEditEnabled] = useState(sub.enabled);
+
+	function handleSaveEdit() {
+		updateMut.mutate({
+			id: sub.id,
+			data: {
+				name: editName || undefined,
+				url: editUrl || undefined,
+				enabled: editEnabled,
+				cron_expr: editCron || undefined,
+				clear_cron_expr: editCron === "" && !!sub.cron_expr,
+			},
+		});
+		setShowEdit(false);
+	}
 	const [speedTest, setSpeedTest] = useState(true);
 	const [mediaApps, setMediaApps] = useState<string[]>([...MEDIA_APPS]);
 
@@ -264,6 +320,21 @@ function SubRow({
 					</button>
 					<button
 						type="button"
+						onClick={() => {
+							setEditName(sub.name);
+							setEditUrl(sub.url);
+							setEditCron(sub.cron_expr ?? "");
+							setEditEnabled(sub.enabled);
+							setShowEdit(!showEdit);
+							setShowOpts(false);
+						}}
+						className="rounded-md p-1.5 transition-colors hover:bg-white/5"
+						style={{ color: "#6e7681" }}
+					>
+						<Pencil size={13} strokeWidth={1.5} />
+					</button>
+					<button
+						type="button"
 						onClick={() => deleteMut.mutate(sub.id)}
 						disabled={deleteMut.isPending}
 						className="rounded-md p-1.5 transition-colors hover:bg-[#f85149]/10 hover:text-[#f85149] disabled:opacity-50"
@@ -328,6 +399,79 @@ function SubRow({
 						<button
 							type="button"
 							onClick={() => setShowOpts(false)}
+							className="rounded-md border px-3 py-1.5 text-sm"
+							style={{ borderColor: "#30363d", color: "#8b949e" }}
+						>
+							Cancel
+						</button>
+					</div>
+				</div>
+			)}
+
+			{showEdit && (
+				<div
+					className="space-y-3 border-t px-4 py-3"
+					style={{ borderColor: "#30363d" }}
+				>
+					<div className="grid gap-3 sm:grid-cols-2">
+						<div className="space-y-1.5">
+							<Label className="text-[#8b949e] text-xs">Name</Label>
+							<Input
+								value={editName}
+								onChange={(e) => setEditName(e.target.value)}
+								placeholder="My Subscription"
+								className="h-8 text-sm"
+							/>
+						</div>
+						<div className="space-y-1.5">
+							<Label className="text-[#8b949e] text-xs">URL</Label>
+							<Input
+								value={editUrl}
+								onChange={(e) => setEditUrl(e.target.value)}
+								placeholder="https://..."
+								className="h-8 font-mono text-sm"
+							/>
+						</div>
+						<div className="space-y-1.5">
+							<Label className="text-[#8b949e] text-xs">
+								Cron schedule (optional)
+							</Label>
+							<Input
+								value={editCron}
+								onChange={(e) => setEditCron(e.target.value)}
+								placeholder="0 */6 * * *"
+								className="h-8 font-mono text-sm"
+							/>
+						</div>
+					</div>
+					<label className="flex cursor-pointer select-none items-center gap-2">
+						<input
+							type="checkbox"
+							checked={editEnabled}
+							onChange={(e) => setEditEnabled(e.target.checked)}
+							className="accent-[#58a6ff]"
+						/>
+						<span className="text-xs" style={{ color: "#8b949e" }}>
+							Enabled
+						</span>
+					</label>
+					<div className="flex gap-2">
+						<button
+							type="button"
+							onClick={handleSaveEdit}
+							disabled={updateMut.isPending}
+							className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-white disabled:opacity-50"
+							style={{ background: "#238636" }}
+						>
+							{updateMut.isPending ? (
+								<Loader2 size={13} className="animate-spin" />
+							) : (
+								"Save"
+							)}
+						</button>
+						<button
+							type="button"
+							onClick={() => setShowEdit(false)}
 							className="rounded-md border px-3 py-1.5 text-sm"
 							style={{ borderColor: "#30363d", color: "#8b949e" }}
 						>
