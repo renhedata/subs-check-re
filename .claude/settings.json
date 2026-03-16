@@ -3,7 +3,19 @@
     "allow": [
       "Bash(wait)",
       "Bash(find /Users/ashark/tmp/subs-check -name *.go)",
-      "WebFetch(domain:ui.shadcn.com)"
+      "WebFetch(domain:ui.shadcn.com)",
+      "Read(//Users/ashark/.claude/plugins/cache/claude-plugins-official/superpowers/5.0.2/skills/brainstorming/**)",
+      "Bash(/Users/ashark/.claude/plugins/cache/claude-plugins-official/superpowers/5.0.2/scripts/start-server.sh --project-dir /Users/ashark/Code/subs-check-re)",
+      "Bash(/Users/ashark/.claude/plugins/cache/claude-plugins-official/superpowers/5.0.2/skills/brainstorming/scripts/start-server.sh --project-dir /Users/ashark/Code/subs-check-re)",
+      "Read(//Users/ashark/.claude/plugins/cache/claude-plugins-official/superpowers/5.0.2/skills/writing-plans/**)",
+      "Bash(timeout 10 bun dev:web)",
+      "Bash(timeout 15 bun dev:web)",
+      "Bash(bun check-types:*)",
+      "Bash(bunx tsc:*)",
+      "Bash(bun check:*)",
+      "Bash(git rm:*)",
+      "Bash(bun install:*)",
+      "Bash(bun run:*)"
     ]
   }
 }
