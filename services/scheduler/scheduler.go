@@ -3,6 +3,7 @@ package scheduler
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -38,7 +39,7 @@ func initService() (*Service, error) {
 	// Load all enabled scheduled jobs from DB on startup
 	ctx := context.Background()
 	rows, err := db.Query(ctx, `
-		SELECT subscription_id, cron_expr, sub_url, user_id
+		SELECT subscription_id, cron_expr, sub_url, user_id, COALESCE(options_json, '{}')
 		FROM scheduled_jobs WHERE enabled = true
 	`)
 	if err != nil {
@@ -48,22 +49,28 @@ func initService() (*Service, error) {
 
 	for rows.Next() {
 		var subID, cronExpr, subURL, userID string
-		if err := rows.Scan(&subID, &cronExpr, &subURL, &userID); err != nil {
+		var optsJSON []byte
+		if err := rows.Scan(&subID, &cronExpr, &subURL, &userID, &optsJSON); err != nil {
 			continue
 		}
-		svc.registerCron(subID, cronExpr, subURL, userID)
+		var opts checkersvc.CheckOptions
+		if err := json.Unmarshal(optsJSON, &opts); err != nil {
+			opts = defaultCheckOptions()
+		}
+		svc.registerCron(subID, cronExpr, subURL, userID, opts)
 	}
 
 	svc.cron.Start()
 	return svc, nil
 }
 
-func (s *Service) registerCron(subscriptionID, cronExpr, subURL, userID string) {
+func (s *Service) registerCron(subscriptionID, cronExpr, subURL, userID string, opts checkersvc.CheckOptions) {
 	entryID, err := s.cron.AddFunc(cronExpr, func() {
 		ctx := context.Background()
 		checkersvc.TriggerCheckInternal(ctx, subscriptionID, &checkersvc.TriggerInternalParams{ //nolint
-			UserID: userID,
-			SubURL: subURL,
+			UserID:  userID,
+			SubURL:  subURL,
+			Options: opts,
 		})
 	})
 	if err == nil {
@@ -78,6 +85,13 @@ func (s *Service) removeCron(subscriptionID string) {
 	}
 }
 
+func defaultCheckOptions() checkersvc.CheckOptions {
+	return checkersvc.CheckOptions{
+		SpeedTest: true,
+		MediaApps: []string{"openai", "claude", "gemini", "netflix", "youtube", "disney", "tiktok"},
+	}
+}
+
 // --- Types ---
 
 // ScheduledJob represents a cron schedule entry.
@@ -86,6 +100,8 @@ type ScheduledJob struct {
 	SubscriptionID string    `json:"subscription_id"`
 	CronExpr       string    `json:"cron_expr"`
 	Enabled        bool      `json:"enabled"`
+	SpeedTest      bool      `json:"speed_test"`
+	MediaApps      []string  `json:"media_apps"`
 	CreatedAt      time.Time `json:"created_at"`
 }
 
@@ -96,8 +112,9 @@ type ListResponse struct {
 
 // CreateParams is the request body for POST /scheduler.
 type CreateParams struct {
-	SubscriptionID string `json:"subscription_id"`
-	CronExpr       string `json:"cron_expr"`
+	SubscriptionID string                    `json:"subscription_id"`
+	CronExpr       string                    `json:"cron_expr"`
+	Options        *checkersvc.CheckOptions  `json:"options"`
 }
 
 // DeleteResponse is the response for DELETE /scheduler/:id.
@@ -113,7 +130,7 @@ type DeleteResponse struct {
 func (s *Service) List(ctx context.Context) (*ListResponse, error) {
 	claims := encauth.Data().(*authsvc.UserClaims)
 	rows, err := db.Query(ctx, `
-		SELECT id, subscription_id, cron_expr, enabled, created_at
+		SELECT id, subscription_id, cron_expr, enabled, created_at, COALESCE(options_json, '{}')
 		FROM scheduled_jobs WHERE user_id = $1 ORDER BY created_at DESC
 	`, claims.UserID)
 	if err != nil {
@@ -124,9 +141,16 @@ func (s *Service) List(ctx context.Context) (*ListResponse, error) {
 	var jobs []ScheduledJob
 	for rows.Next() {
 		var j ScheduledJob
-		if err := rows.Scan(&j.ID, &j.SubscriptionID, &j.CronExpr, &j.Enabled, &j.CreatedAt); err != nil {
+		var optsJSON []byte
+		if err := rows.Scan(&j.ID, &j.SubscriptionID, &j.CronExpr, &j.Enabled, &j.CreatedAt, &optsJSON); err != nil {
 			return nil, errs.B().Code(errs.Internal).Msg("scan failed").Err()
 		}
+		var opts checkersvc.CheckOptions
+		if err := json.Unmarshal(optsJSON, &opts); err != nil {
+			opts = defaultCheckOptions()
+		}
+		j.SpeedTest = opts.SpeedTest
+		j.MediaApps = opts.MediaApps
 		jobs = append(jobs, j)
 	}
 	if jobs == nil {
@@ -157,24 +181,33 @@ func (s *Service) Create(ctx context.Context, p *CreateParams) (*ScheduledJob, e
 		return nil, errs.B().Code(errs.NotFound).Msg("subscription not found").Err()
 	}
 
+	// Resolve options with defaults
+	opts := defaultCheckOptions()
+	if p.Options != nil {
+		opts = *p.Options
+	}
+	optsJSON, _ := json.Marshal(opts)
+
 	id := uuid.New().String()
 	if _, err := db.Exec(ctx, `
-		INSERT INTO scheduled_jobs (id, subscription_id, user_id, sub_url, cron_expr, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6)
-		ON CONFLICT (subscription_id) DO UPDATE SET cron_expr = $5, sub_url = $4, enabled = true
-	`, id, p.SubscriptionID, claims.UserID, sub.URL, p.CronExpr, time.Now()); err != nil {
+		INSERT INTO scheduled_jobs (id, subscription_id, user_id, sub_url, cron_expr, options_json, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		ON CONFLICT (subscription_id) DO UPDATE SET cron_expr = $5, sub_url = $4, options_json = $6, enabled = true
+	`, id, p.SubscriptionID, claims.UserID, sub.URL, p.CronExpr, optsJSON, time.Now()); err != nil {
 		return nil, errs.B().Code(errs.Internal).Msg("failed to create scheduled job").Err()
 	}
 
 	// Register/update in-memory cron
 	s.removeCron(p.SubscriptionID)
-	s.registerCron(p.SubscriptionID, p.CronExpr, sub.URL, claims.UserID)
+	s.registerCron(p.SubscriptionID, p.CronExpr, sub.URL, claims.UserID, opts)
 
 	return &ScheduledJob{
 		ID:             id,
 		SubscriptionID: p.SubscriptionID,
 		CronExpr:       p.CronExpr,
 		Enabled:        true,
+		SpeedTest:      opts.SpeedTest,
+		MediaApps:      opts.MediaApps,
 	}, nil
 }
 
