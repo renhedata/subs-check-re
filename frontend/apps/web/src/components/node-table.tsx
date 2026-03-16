@@ -10,7 +10,13 @@ function latencyColor(ms: number): string {
 	return "#f85149";
 }
 
-function UnlockBadge({ label, style }: { label: string; style: "media" | "ai" | "other" }) {
+function UnlockBadge({
+	label,
+	style,
+}: {
+	label: string;
+	style: "media" | "ai" | "other";
+}) {
 	const styles = {
 		media: { background: "#3d1a1a", color: "#f85149" },
 		ai: { background: "#1a3a1a", color: "#3fb950" },
@@ -18,7 +24,7 @@ function UnlockBadge({ label, style }: { label: string; style: "media" | "ai" | 
 	};
 	return (
 		<span
-			className="rounded px-1.5 py-0.5 text-[10px] font-semibold"
+			className="rounded px-1.5 py-0.5 font-semibold text-[10px]"
 			style={styles[style]}
 		>
 			{label}
@@ -29,18 +35,24 @@ function UnlockBadge({ label, style }: { label: string; style: "media" | "ai" | 
 function StatusBadge({ alive }: { alive: boolean }) {
 	return alive ? (
 		<span
-			className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium"
+			className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium text-[10px]"
 			style={{ background: "#1a4731", color: "#3fb950" }}
 		>
-			<span className="h-1.5 w-1.5 rounded-full" style={{ background: "#3fb950" }} />
+			<span
+				className="h-1.5 w-1.5 rounded-full"
+				style={{ background: "#3fb950" }}
+			/>
 			alive
 		</span>
 	) : (
 		<span
-			className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium"
+			className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium text-[10px]"
 			style={{ background: "#3d1a1a", color: "#f85149" }}
 		>
-			<span className="h-1.5 w-1.5 rounded-full" style={{ background: "#f85149" }} />
+			<span
+				className="h-1.5 w-1.5 rounded-full"
+				style={{ background: "#f85149" }}
+			/>
 			dead
 		</span>
 	);
@@ -60,19 +72,24 @@ export function NodeTable({ results }: Props) {
 	}
 
 	return (
-		<div className="overflow-x-auto rounded-lg border" style={{ borderColor: "#30363d" }}>
+		<div
+			className="overflow-x-auto rounded-lg border"
+			style={{ borderColor: "#30363d" }}
+		>
 			<table className="w-full border-collapse">
 				<thead>
 					<tr style={{ borderBottom: "1px solid #30363d" }}>
-						{["Node", "Status", "Latency", "Speed", "Country", "Unlocks"].map((h) => (
-							<th
-								key={h}
-								className="px-3 py-2 text-left text-[11px] font-medium uppercase tracking-[0.4px]"
-								style={{ color: "#8b949e" }}
-							>
-								{h}
-							</th>
-						))}
+						{["Node", "Status", "Latency", "Speed", "Country", "Unlocks"].map(
+							(h) => (
+								<th
+									key={h}
+									className="px-3 py-2 text-left font-medium text-[11px] uppercase tracking-[0.4px]"
+									style={{ color: "#8b949e" }}
+								>
+									{h}
+								</th>
+							),
+						)}
 					</tr>
 				</thead>
 				<tbody>
@@ -91,7 +108,7 @@ export function NodeTable({ results }: Props) {
 							<td className="px-3 py-2">
 								<StatusBadge alive={r.alive} />
 							</td>
-							<td className="px-3 py-2 text-xs font-medium">
+							<td className="px-3 py-2 font-medium text-xs">
 								{r.alive ? (
 									<span style={{ color: latencyColor(r.latency_ms) }}>
 										{r.latency_ms}ms

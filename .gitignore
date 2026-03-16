@@ -39,6 +39,9 @@ build
 # Better-T-Stack
 .alchemy
 
+# Superpowers (brainstorming artifacts)
+.superpowers/
+
 # Testing
 coverage
 .nyc_output

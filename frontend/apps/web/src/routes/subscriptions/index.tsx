@@ -1,14 +1,14 @@
-import { useState } from "react";
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
-import { Clock, Loader2, Play, Plus, Trash2 } from "lucide-react";
 import { Button } from "@frontend/ui/components/button";
 import { Input } from "@frontend/ui/components/input";
 import { Label } from "@frontend/ui/components/label";
 import { Skeleton } from "@frontend/ui/components/skeleton";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { Clock, Loader2, Play, Plus, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { toast } from "sonner";
 
-import { api, ApiError, type Subscription } from "@/lib/api";
+import { ApiError, api, type Subscription } from "@/lib/api";
 
 export const Route = createFileRoute("/subscriptions/")({
 	component: SubscriptionsPage,
@@ -32,16 +32,22 @@ function SubscriptionsPage() {
 			qc.invalidateQueries({ queryKey: ["subscriptions"] });
 			toast.success("Deleted");
 		},
-		onError: (e) => toast.error(e instanceof ApiError ? e.message : "Delete failed"),
+		onError: (e) =>
+			toast.error(e instanceof ApiError ? e.message : "Delete failed"),
 	});
 
 	const triggerMut = useMutation({
 		mutationFn: (id: string) => api.post<{ job_id: string }>(`/check/${id}`),
 		onSuccess: (resp, id) => {
 			toast.success("Check started");
-			navigate({ to: "/subscriptions/$id", params: { id }, search: { job: resp.job_id } });
+			navigate({
+				to: "/subscriptions/$id",
+				params: { id },
+				search: { job: resp.job_id },
+			});
 		},
-		onError: (e) => toast.error(e instanceof ApiError ? e.message : "Failed to start check"),
+		onError: (e) =>
+			toast.error(e instanceof ApiError ? e.message : "Failed to start check"),
 	});
 
 	const createMut = useMutation({
@@ -53,7 +59,8 @@ function SubscriptionsPage() {
 			setAdding(false);
 			toast.success("Subscription added");
 		},
-		onError: (e) => toast.error(e instanceof ApiError ? e.message : "Failed to add"),
+		onError: (e) =>
+			toast.error(e instanceof ApiError ? e.message : "Failed to add"),
 	});
 
 	const subs = data?.subscriptions ?? [];
@@ -61,11 +68,11 @@ function SubscriptionsPage() {
 	return (
 		<div className="space-y-5">
 			<div className="flex items-center justify-between">
-				<h1 className="text-lg font-semibold text-[#f0f6fc]">Subscriptions</h1>
+				<h1 className="font-semibold text-[#f0f6fc] text-lg">Subscriptions</h1>
 				<button
 					type="button"
 					onClick={() => setAdding(!adding)}
-					className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
+					className="flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium text-sm text-white transition-opacity hover:opacity-90"
 					style={{ background: "#238636" }}
 				>
 					<Plus size={13} strokeWidth={1.5} />
@@ -75,7 +82,7 @@ function SubscriptionsPage() {
 
 			{adding && (
 				<div
-					className="rounded-lg border p-4 space-y-3"
+					className="space-y-3 rounded-lg border p-4"
 					style={{ background: "#161b22", borderColor: "#30363d" }}
 				>
 					<div className="space-y-1.5">
@@ -110,7 +117,11 @@ function SubscriptionsPage() {
 								"Add"
 							)}
 						</Button>
-						<Button size="sm" variant="outline" onClick={() => setAdding(false)}>
+						<Button
+							size="sm"
+							variant="outline"
+							onClick={() => setAdding(false)}
+						>
 							Cancel
 						</Button>
 					</div>
@@ -125,11 +136,18 @@ function SubscriptionsPage() {
 								className="rounded-lg border p-4"
 								style={{ background: "#161b22", borderColor: "#30363d" }}
 							>
-								<Skeleton className="h-4 w-48 mb-2" />
+								<Skeleton className="mb-2 h-4 w-48" />
 								<Skeleton className="h-3 w-72" />
 							</div>
 						))
-					: subs.map((sub) => <SubRow key={sub.id} sub={sub} deleteMut={deleteMut} triggerMut={triggerMut} />)}
+					: subs.map((sub) => (
+							<SubRow
+								key={sub.id}
+								sub={sub}
+								deleteMut={deleteMut}
+								triggerMut={triggerMut}
+							/>
+						))}
 
 				{!isLoading && subs.length === 0 && (
 					<p className="py-10 text-center text-sm" style={{ color: "#8b949e" }}>
@@ -162,11 +180,11 @@ function SubRow({
 			/>
 
 			{/* Info */}
-			<div className="flex-1 min-w-0">
+			<div className="min-w-0 flex-1">
 				<Link
 					to="/subscriptions/$id"
 					params={{ id: sub.id }}
-					className="text-sm font-medium hover:underline"
+					className="font-medium text-sm hover:underline"
 					style={{ color: "#58a6ff" }}
 				>
 					{sub.name || sub.url}
@@ -180,7 +198,10 @@ function SubRow({
 					</p>
 				)}
 				{sub.cron_expr && (
-					<p className="mt-0.5 flex items-center gap-1 text-xs" style={{ color: "#6e7681" }}>
+					<p
+						className="mt-0.5 flex items-center gap-1 text-xs"
+						style={{ color: "#6e7681" }}
+					>
 						<Clock size={10} strokeWidth={1.5} />
 						{sub.cron_expr}
 					</p>
@@ -188,7 +209,7 @@ function SubRow({
 			</div>
 
 			{/* Actions */}
-			<div className="flex items-center gap-2 flex-shrink-0">
+			<div className="flex flex-shrink-0 items-center gap-2">
 				<button
 					type="button"
 					onClick={() => triggerMut.mutate(sub.id)}

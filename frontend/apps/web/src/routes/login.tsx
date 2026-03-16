@@ -1,11 +1,11 @@
-import { useState } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { toast } from "sonner";
-import { Lock, Loader2 } from "lucide-react";
 import { Input } from "@frontend/ui/components/input";
 import { Label } from "@frontend/ui/components/label";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { Loader2, Lock } from "lucide-react";
+import { useState } from "react";
+import { toast } from "sonner";
 
-import { api, ApiError } from "@/lib/api";
+import { ApiError, api } from "@/lib/api";
 import { setToken } from "@/lib/auth";
 
 export const Route = createFileRoute("/login")({
@@ -28,12 +28,17 @@ function LoginPage() {
 				toast.success("Account created — please log in");
 				setMode("login");
 			} else {
-				const resp = await api.post<{ token: string }>("/auth/login", { username, password });
+				const resp = await api.post<{ token: string }>("/auth/login", {
+					username,
+					password,
+				});
 				setToken(resp.token);
 				navigate({ to: "/" });
 			}
 		} catch (err) {
-			toast.error(err instanceof ApiError ? err.message : "Something went wrong");
+			toast.error(
+				err instanceof ApiError ? err.message : "Something went wrong",
+			);
 		} finally {
 			setLoading(false);
 		}
@@ -46,14 +51,16 @@ function LoginPage() {
 		>
 			<div className="mb-6 flex items-center gap-2">
 				<Lock size={16} strokeWidth={1.5} style={{ color: "#58a6ff" }} />
-				<h1 className="text-base font-semibold text-[#f0f6fc]">
+				<h1 className="font-semibold text-[#f0f6fc] text-base">
 					{mode === "login" ? "Sign in" : "Create account"}
 				</h1>
 			</div>
 
 			<form onSubmit={handleSubmit} className="space-y-4">
 				<div className="space-y-1.5">
-					<Label htmlFor="username" className="text-xs text-[#8b949e]">Username</Label>
+					<Label htmlFor="username" className="text-[#8b949e] text-xs">
+						Username
+					</Label>
 					<Input
 						id="username"
 						value={username}
@@ -63,7 +70,9 @@ function LoginPage() {
 					/>
 				</div>
 				<div className="space-y-1.5">
-					<Label htmlFor="password" className="text-xs text-[#8b949e]">Password</Label>
+					<Label htmlFor="password" className="text-[#8b949e] text-xs">
+						Password
+					</Label>
 					<Input
 						id="password"
 						type="password"
@@ -76,7 +85,7 @@ function LoginPage() {
 				<button
 					type="submit"
 					disabled={loading}
-					className="flex w-full items-center justify-center gap-2 rounded-md py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+					className="flex w-full items-center justify-center gap-2 rounded-md py-2 font-medium text-sm text-white transition-opacity hover:opacity-90 disabled:opacity-50"
 					style={{ background: "#238636" }}
 				>
 					{loading ? (
@@ -92,7 +101,7 @@ function LoginPage() {
 					{mode === "login" ? "No account? " : "Have an account? "}
 					<button
 						type="button"
-						className="underline hover:text-[#f0f6fc] transition-colors"
+						className="underline transition-colors hover:text-[#f0f6fc]"
 						style={{ color: "#58a6ff" }}
 						onClick={() => setMode(mode === "login" ? "register" : "login")}
 					>

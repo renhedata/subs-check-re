@@ -1,9 +1,9 @@
 // frontend/apps/web/src/routes/index.tsx
 
-import { createFileRoute, redirect } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
-import { CheckCircle, Clock, FileText } from "lucide-react";
 import { Skeleton } from "@frontend/ui/components/skeleton";
+import { useQuery } from "@tanstack/react-query";
+import { createFileRoute, redirect } from "@tanstack/react-router";
+import { CheckCircle, Clock, FileText } from "lucide-react";
 
 import { api, type Subscription } from "@/lib/api";
 import { isAuthenticated } from "@/lib/auth";
@@ -38,7 +38,7 @@ function StatCard({
 			<div className="mb-2 flex items-center gap-1.5">
 				<Icon size={13} strokeWidth={1.5} className="text-[#8b949e]" />
 				<span
-					className="text-[11px] font-medium uppercase tracking-[0.4px]"
+					className="font-medium text-[11px] uppercase tracking-[0.4px]"
 					style={{ color: "#8b949e" }}
 				>
 					{label}
@@ -48,7 +48,7 @@ function StatCard({
 				<Skeleton className="h-8 w-12" />
 			) : (
 				<p
-					className="text-[28px] font-bold leading-none"
+					className="font-bold text-[28px] leading-none"
 					style={{ color: valueColor ?? "#f0f6fc" }}
 				>
 					{value}
@@ -76,7 +76,7 @@ function DashboardPage() {
 	return (
 		<div className="space-y-6">
 			<div>
-				<h1 className="text-lg font-semibold text-[#f0f6fc]">Dashboard</h1>
+				<h1 className="font-semibold text-[#f0f6fc] text-lg">Dashboard</h1>
 				<p className="mt-0.5 text-sm" style={{ color: "#8b949e" }}>
 					Overview of your proxy subscriptions
 				</p>
