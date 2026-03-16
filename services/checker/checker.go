@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	encauth "encore.dev/beta/auth"
@@ -167,6 +168,32 @@ var (
 	jobChannels   = make(map[string][]chan progressUpdate)
 	jobChannelsMu sync.Mutex
 )
+
+var (
+	jobCancels   = make(map[string]context.CancelFunc)
+	jobCancelsMu sync.Mutex
+)
+
+func storeJobCancel(jobID string, cancel context.CancelFunc) {
+	jobCancelsMu.Lock()
+	jobCancels[jobID] = cancel
+	jobCancelsMu.Unlock()
+}
+
+func removeJobCancel(jobID string) {
+	jobCancelsMu.Lock()
+	delete(jobCancels, jobID)
+	jobCancelsMu.Unlock()
+}
+
+func triggerJobCancel(jobID string) {
+	jobCancelsMu.Lock()
+	if fn, ok := jobCancels[jobID]; ok {
+		fn()
+		delete(jobCancels, jobID)
+	}
+	jobCancelsMu.Unlock()
+}
 
 func subscribeJobProgress(jobID string) chan progressUpdate {
 	ch := make(chan progressUpdate, 100)
@@ -377,6 +404,21 @@ func writeSSE(w http.ResponseWriter, f http.Flusher, v any) {
 	f.Flush()
 }
 
+// CancelCheck stops a running check job.
+//
+//encore:api auth method=DELETE path=/check/:jobID
+func CancelCheck(ctx context.Context, jobID string) error {
+	claims := encauth.Data().(*authsvc.UserClaims)
+	var count int
+	if err := db.QueryRow(ctx,
+		`SELECT COUNT(*) FROM check_jobs WHERE id=$1 AND user_id=$2 AND status IN ('running','queued')`,
+		jobID, claims.UserID).Scan(&count); err != nil || count == 0 {
+		return errs.B().Code(errs.NotFound).Msg("active job not found").Err()
+	}
+	triggerJobCancel(jobID)
+	return nil
+}
+
 // ListJobs returns paginated check job history for a subscription.
 //
 //encore:api auth method=GET path=/check/:subscriptionID/jobs
@@ -470,11 +512,11 @@ func GetResults(ctx context.Context, subscriptionID string, p *GetResultsParams)
 	}
 
 	rows, err := db.Query(ctx, `
-		SELECT cr.node_id, n.name, n.type,
+		SELECT cr.node_id, COALESCE(n.name, cr.node_name), COALESCE(n.type, cr.node_type),
 		       cr.alive, cr.latency_ms, cr.speed_kbps, cr.country, cr.ip,
 		       cr.netflix, cr.youtube, cr.openai, cr.claude, cr.gemini, cr.disney, cr.tiktok
 		FROM check_results cr
-		JOIN nodes n ON n.id = cr.node_id
+		LEFT JOIN nodes n ON n.id = cr.node_id
 		WHERE cr.job_id = $1
 		ORDER BY cr.alive DESC, cr.speed_kbps DESC NULLS LAST, cr.latency_ms ASC NULLS LAST
 	`, job.ID)
@@ -509,19 +551,24 @@ const (
 	defaultSpeedTestURL   = "https://speed.cloudflare.com/__down?bytes=204800"
 )
 
-func runJob(ctx context.Context, jobID, subscriptionID, userID string) {
+func runJob(parentCtx context.Context, jobID, subscriptionID, userID string) {
+	ctx, cancel := context.WithCancel(parentCtx)
+	defer cancel()
+	storeJobCancel(jobID, cancel)
+	defer removeJobCancel(jobID)
+
 	markFailed := func() {
-		db.Exec(ctx, `UPDATE check_jobs SET status='failed', finished_at=$2 WHERE id=$1`, jobID, time.Now())
+		db.Exec(context.Background(), `UPDATE check_jobs SET status='failed', finished_at=$2 WHERE id=$1`, jobID, time.Now())
 		closeJobChannels(jobID)
 	}
 
 	// Mark as running
-	db.Exec(ctx, `UPDATE check_jobs SET status='running' WHERE id=$1`, jobID)
+	db.Exec(context.Background(), `UPDATE check_jobs SET status='running' WHERE id=$1`, jobID)
 
 	// Get subscription URL, speed test URL, and options from job row
 	var subURL, speedTestURL string
 	var optsJSON []byte
-	if err := db.QueryRow(ctx,
+	if err := db.QueryRow(context.Background(),
 		`SELECT sub_url, COALESCE(speed_test_url, ''), COALESCE(options_json, '{}') FROM check_jobs WHERE id=$1`,
 		jobID).Scan(&subURL, &speedTestURL, &optsJSON); err != nil || subURL == "" {
 		markFailed()
@@ -543,10 +590,10 @@ func runJob(ctx context.Context, jobID, subscriptionID, userID string) {
 	}
 
 	total := len(proxies)
-	db.Exec(ctx, `UPDATE check_jobs SET total=$2 WHERE id=$1`, jobID, total)
+	db.Exec(context.Background(), `UPDATE check_jobs SET total=$2 WHERE id=$1`, jobID, total)
 
 	// Replace nodes for this subscription
-	db.Exec(ctx, `DELETE FROM nodes WHERE subscription_id=$1`, subscriptionID)
+	db.Exec(context.Background(), `DELETE FROM nodes WHERE subscription_id=$1`, subscriptionID)
 	nodeIDs := make([]string, len(proxies))
 	for i, p := range proxies {
 		id := uuid.New().String()
@@ -559,7 +606,7 @@ func runJob(ctx context.Context, jobID, subscriptionID, userID string) {
 			port = v
 		}
 		configJSON, _ := json.Marshal(p)
-		db.Exec(ctx, `
+		db.Exec(context.Background(), `
 			INSERT INTO nodes (id, subscription_id, name, type, server, port, config)
 			VALUES ($1, $2, $3, $4, $5, $6, $7)
 		`, id, subscriptionID, name, ptype, server, port, configJSON)
@@ -573,6 +620,7 @@ func runJob(ctx context.Context, jobID, subscriptionID, userID string) {
 	}
 	taskCh := make(chan task, checkConcurrency)
 
+	var processedCount atomic.Int64
 	var wg sync.WaitGroup
 	for i := 0; i < checkConcurrency; i++ {
 		wg.Add(1)
@@ -584,21 +632,24 @@ func runJob(ctx context.Context, jobID, subscriptionID, userID string) {
 				res := checkNode(nodeCtx, t.nodeID, t.proxy, speedTestURL, opts)
 				cancel()
 
+				nodeName := res.NodeName
+				nodeType, _ := t.proxy["type"].(string)
 				resultID := uuid.New().String()
-				db.Exec(ctx, `
+				db.Exec(context.Background(), `
 					INSERT INTO check_results
-					  (id, job_id, node_id, checked_at, alive, latency_ms, speed_kbps, country, ip,
+					  (id, job_id, node_id, node_name, node_type, checked_at, alive, latency_ms, speed_kbps, country, ip,
 					   netflix, youtube, openai, claude, gemini, disney, tiktok)
-					VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
-				`, resultID, jobID, t.nodeID, time.Now(),
+					VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+				`, resultID, jobID, t.nodeID, nodeName, nodeType, time.Now(),
 					res.Alive, res.LatencyMs, res.SpeedKbps, res.Country, res.IP,
 					res.Netflix, res.YouTube, res.OpenAI,
 					res.Claude, res.Gemini, res.Disney, res.TikTok,
 				)
 
-				db.Exec(ctx, `UPDATE check_jobs SET progress=progress+1 WHERE id=$1`, jobID)
+				n := processedCount.Add(1)
+				db.Exec(context.Background(), `UPDATE check_jobs SET progress=$2 WHERE id=$1`, jobID, n)
 				broadcastProgress(jobID, progressUpdate{
-					Progress:  t.index + 1,
+					Progress:  int(n),
 					Total:     total,
 					NodeName:  res.NodeName,
 					Alive:     res.Alive,
@@ -610,20 +661,27 @@ func runJob(ctx context.Context, jobID, subscriptionID, userID string) {
 	}
 
 	for i, p := range proxies {
-		taskCh <- task{index: i, nodeID: nodeIDs[i], proxy: p}
+		select {
+		case <-ctx.Done():
+			close(taskCh)
+			wg.Wait()
+			markFailed()
+			return
+		case taskCh <- task{index: i, nodeID: nodeIDs[i], proxy: p}:
+		}
 	}
 	close(taskCh)
 	wg.Wait()
 
 	// Count available BEFORE updating (count query must run first).
 	var available int
-	db.QueryRow(ctx, `SELECT COUNT(*) FROM check_results WHERE job_id=$1 AND alive=true`, jobID).Scan(&available)
+	db.QueryRow(context.Background(), `SELECT COUNT(*) FROM check_results WHERE job_id=$1 AND alive=true`, jobID).Scan(&available)
 
-	db.Exec(ctx, `UPDATE check_jobs SET status='completed', finished_at=$2, available=$3 WHERE id=$1`,
+	db.Exec(context.Background(), `UPDATE check_jobs SET status='completed', finished_at=$2, available=$3 WHERE id=$1`,
 		jobID, time.Now(), available)
 
 	// Publish completion event for notify service
-	JobCompletedTopic.Publish(ctx, &JobCompletedEvent{
+	JobCompletedTopic.Publish(context.Background(), &JobCompletedEvent{
 		JobID:          jobID,
 		SubscriptionID: subscriptionID,
 		UserID:         userID,

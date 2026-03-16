@@ -57,11 +57,11 @@ func Export(w http.ResponseWriter, req *http.Request) {
 
 	// Query alive nodes with their config.
 	rows, err := db.Query(ctx, `
-		SELECT n.config, n.name,
+		SELECT n.config, COALESCE(n.name, cr.node_name),
 		       cr.netflix, cr.youtube, cr.openai, cr.claude, cr.gemini, cr.disney, cr.tiktok,
 		       cr.speed_kbps, cr.latency_ms
 		FROM check_results cr
-		JOIN nodes n ON n.id = cr.node_id
+		LEFT JOIN nodes n ON n.id = cr.node_id
 		WHERE cr.job_id=$1 AND cr.alive=true
 		ORDER BY cr.speed_kbps DESC NULLS LAST, cr.latency_ms ASC NULLS LAST
 	`, jobID)
@@ -91,6 +91,9 @@ func Export(w http.ResponseWriter, req *http.Request) {
 			&nr.netflix, &nr.youtube, &nr.openai, &nr.claude, &nr.gemini, &nr.disney, &nr.tiktok,
 			new(int), new(int)); err != nil {
 			continue
+		}
+		if len(configJSON) == 0 {
+			continue // skip nodes from old checks with no config
 		}
 		if err := json.Unmarshal(configJSON, &nr.config); err != nil {
 			continue
