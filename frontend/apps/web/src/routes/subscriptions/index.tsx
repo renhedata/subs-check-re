@@ -214,39 +214,43 @@ function SubRow({
 			style={{ background: "#161b22", borderColor: "#30363d" }}
 		>
 			<div className="flex items-center gap-3 px-4 py-3">
-				{/* Status dot */}
-				<div
-					className="h-2 w-2 flex-shrink-0 rounded-full"
-					style={{ background: sub.last_run_at ? "#3fb950" : "#30363d" }}
-				/>
-				{/* Info */}
-				<div className="min-w-0 flex-1">
-					<Link
-						to="/subscriptions/$id"
-						params={{ id: sub.id }}
-						className="font-medium text-sm hover:underline"
-						style={{ color: "#58a6ff" }}
-					>
-						{sub.name || sub.url}
-					</Link>
-					{sub.name && (
+				{/* Info — entire left section navigates to detail */}
+				<Link
+					to="/subscriptions/$id"
+					params={{ id: sub.id }}
+					className="flex min-w-0 flex-1 items-center gap-3"
+				>
+					{/* Status dot */}
+					<div
+						className="h-2 w-2 flex-shrink-0 rounded-full"
+						style={{ background: sub.last_run_at ? "#3fb950" : "#30363d" }}
+					/>
+					<div className="min-w-0 flex-1">
 						<p
-							className="mt-0.5 truncate font-mono text-xs"
-							style={{ color: "#8b949e" }}
+							className="font-medium text-sm hover:underline"
+							style={{ color: "#58a6ff" }}
 						>
-							{sub.url}
+							{sub.name || sub.url}
 						</p>
-					)}
-					{sub.cron_expr && (
-						<p
-							className="mt-0.5 flex items-center gap-1 text-xs"
-							style={{ color: "#6e7681" }}
-						>
-							<Clock size={10} strokeWidth={1.5} />
-							{sub.cron_expr}
-						</p>
-					)}
-				</div>
+						{sub.name && (
+							<p
+								className="mt-0.5 truncate font-mono text-xs"
+								style={{ color: "#8b949e" }}
+							>
+								{sub.url}
+							</p>
+						)}
+						{sub.cron_expr && (
+							<p
+								className="mt-0.5 flex items-center gap-1 text-xs"
+								style={{ color: "#6e7681" }}
+							>
+								<Clock size={10} strokeWidth={1.5} />
+								{sub.cron_expr}
+							</p>
+						)}
+					</div>
+				</Link>
 				{/* Actions */}
 				<div className="flex flex-shrink-0 items-center gap-2">
 					<button

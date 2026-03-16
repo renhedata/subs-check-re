@@ -246,6 +246,11 @@ function SubscriptionDetailPage() {
 					<span style={{ color: "#8b949e" }}>
 						{results.filter((r) => r.alive).length} / {job.total} alive
 					</span>
+					{jobId && progress && !progress.done && (
+						<span className="text-[11px]" style={{ color: "#6e7681" }}>
+							· previous results
+						</span>
+					)}
 				</div>
 			)}
 
