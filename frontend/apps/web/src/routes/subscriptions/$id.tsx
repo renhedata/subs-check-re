@@ -60,6 +60,8 @@ function SubscriptionDetailPage() {
 	const { job: jobIdFromSearch } = Route.useSearch();
 	const [jobId, setJobId] = useState<string | null>(jobIdFromSearch ?? null);
 	const [progress, setProgress] = useState<SSEProgress | null>(null);
+	const [logEntries, setLogEntries] = useState<SSEProgress[]>([]);
+	const logEndRef = useRef<HTMLDivElement | null>(null);
 	const esRef = useRef<EventSource | null>(null);
 	const qc = useQueryClient();
 	const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
@@ -107,6 +109,13 @@ function SubscriptionDetailPage() {
 		}
 	}, [resultsQuery.data?.job?.id, resultsQuery.data?.job?.status, jobId]);
 
+	// Clear log when a new job starts
+	// biome-ignore lint/correctness/useExhaustiveDependencies: clear log only when jobId changes
+	useEffect(() => {
+		setLogEntries([]);
+		setProgress(null);
+	}, [jobId]);
+
 	useEffect(() => {
 		if (!jobId) return;
 		const es = new EventSource(`/api/check/${jobId}/progress`);
@@ -114,6 +123,9 @@ function SubscriptionDetailPage() {
 		es.onmessage = (e) => {
 			const data: SSEProgress = JSON.parse(e.data);
 			setProgress(data);
+			if (data.node_name) {
+				setLogEntries((prev) => [...prev, data]);
+			}
 			if (data.done) {
 				es.close();
 				setSelectedJobId(null);
@@ -124,6 +136,12 @@ function SubscriptionDetailPage() {
 		es.onerror = () => es.close();
 		return () => es.close();
 	}, [jobId, resultsQuery.refetch, qc, id]);
+
+	// Auto-scroll log to bottom
+	// biome-ignore lint/correctness/useExhaustiveDependencies: scroll on new entries
+	useEffect(() => {
+		logEndRef.current?.scrollIntoView({ behavior: "smooth" });
+	}, [logEntries.length]);
 
 	const job = resultsQuery.data?.job;
 	const results = resultsQuery.data?.results ?? [];
@@ -176,9 +194,13 @@ function SubscriptionDetailPage() {
 				</div>
 			)}
 
-			{/* Progress bar */}
+			{/* Progress + live log */}
 			{progress && !progress.done && (
-				<div className="space-y-1.5">
+				<div
+					className="space-y-2 rounded-lg border p-3"
+					style={{ background: "#0d1117", borderColor: "#30363d" }}
+				>
+					{/* Header row */}
 					<div className="flex items-center justify-between">
 						<div
 							className="flex items-center gap-1.5 text-sm"
@@ -192,49 +214,70 @@ function SubscriptionDetailPage() {
 							/>
 							Checking nodes…
 						</div>
-						<span className="text-xs" style={{ color: "#8b949e" }}>
+						<span className="font-mono text-xs" style={{ color: "#8b949e" }}>
 							{progress.progress ?? 0} / {progress.total ?? "?"}
 						</span>
 					</div>
+
+					{/* Progress bar */}
 					<div
-						className="h-[3px] w-full overflow-hidden rounded-sm"
+						className="h-[3px] w-full overflow-hidden rounded-full"
 						style={{ background: "#21262d" }}
 					>
 						<div
-							className="h-full rounded-sm transition-[width] duration-300 ease-out"
+							className="h-full rounded-full transition-[width] duration-300 ease-out"
 							style={{
 								width: `${progressPct}%`,
 								background: "linear-gradient(90deg, #1f6feb, #58a6ff)",
 							}}
 						/>
 					</div>
-					{progress.node_name && (
-						<p className="font-mono text-[11px]" style={{ color: "#8b949e" }}>
-							↳ {progress.node_name}
-							{progress.alive && progress.latency_ms ? (
-								<span
-									className="ml-2 font-medium"
-									style={{ color: latencyColor(progress.latency_ms) }}
+
+					{/* Scrollable log */}
+					{logEntries.length > 0 && (
+						<div
+							className="max-h-48 overflow-y-auto"
+							style={{ scrollbarWidth: "thin" }}
+						>
+							{logEntries.map((entry, i) => (
+								<div
+									key={i}
+									className="flex items-baseline gap-2 py-0.5 font-mono text-[11px]"
 								>
-									{progress.latency_ms}ms
-								</span>
-							) : null}
-							{progress.alive && progress.speed_kbps ? (
-								<span
-									className="ml-1.5 font-medium"
-									style={{ color: "#58a6ff" }}
-								>
-									{progress.speed_kbps >= 1024
-										? `${(progress.speed_kbps / 1024).toFixed(1)}MB/s`
-										: `${progress.speed_kbps}KB/s`}
-								</span>
-							) : null}
-							{progress.alive === false ? (
-								<span className="ml-2" style={{ color: "#f85149" }}>
-									dead
-								</span>
-							) : null}
-						</p>
+									<span
+										className="flex-shrink-0"
+										style={{ color: entry.alive ? "#3fb950" : "#f85149" }}
+									>
+										{entry.alive ? "✓" : "✗"}
+									</span>
+									<span
+										className="min-w-0 flex-1 truncate"
+										style={{ color: "#c9d1d9" }}
+									>
+										{entry.node_name}
+									</span>
+									{entry.alive && entry.latency_ms ? (
+										<span
+											className="flex-shrink-0"
+											style={{ color: latencyColor(entry.latency_ms) }}
+										>
+											{entry.latency_ms}ms
+										</span>
+									) : null}
+									{entry.alive && entry.speed_kbps ? (
+										<span
+											className="flex-shrink-0"
+											style={{ color: "#58a6ff" }}
+										>
+											{entry.speed_kbps >= 1024
+												? `${(entry.speed_kbps / 1024).toFixed(1)}MB/s`
+												: `${entry.speed_kbps}KB/s`}
+										</span>
+									) : null}
+								</div>
+							))}
+							<div ref={logEndRef} />
+						</div>
 					)}
 				</div>
 			)}
