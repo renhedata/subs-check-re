@@ -3,7 +3,10 @@ package checker
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
+	"time"
 
 	"encore.dev/beta/auth"
 	"encore.dev/et"
@@ -52,5 +55,22 @@ proxies:
 	}
 	if proxies[0]["name"] != "test-node" {
 		t.Errorf("expected name 'test-node', got %v", proxies[0]["name"])
+	}
+}
+
+func TestMeasureSpeedPartialDownload(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write(make([]byte, 512))
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+		time.Sleep(60 * time.Second)
+	}))
+	defer srv.Close()
+
+	ctx := context.Background()
+	speed := measureSpeedWithTimeout(ctx, http.DefaultTransport, srv.URL, 300*time.Millisecond)
+	if speed == 0 {
+		t.Error("expected non-zero speed for partial download")
 	}
 }

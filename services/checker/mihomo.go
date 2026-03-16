@@ -129,19 +129,26 @@ func measureLatency(ctx context.Context, client *http.Client) int {
 	return int(time.Since(start).Milliseconds())
 }
 
+const speedTestTimeout = 30 * time.Second
+
 // measureSpeed downloads a fixed-size file and returns throughput in KB/s.
-func measureSpeed(ctx context.Context, client *http.Client, speedTestURL string) int {
-	start := time.Now()
+func measureSpeed(ctx context.Context, transport http.RoundTripper, speedTestURL string) int {
+	return measureSpeedWithTimeout(ctx, transport, speedTestURL, speedTestTimeout)
+}
+
+func measureSpeedWithTimeout(ctx context.Context, transport http.RoundTripper, speedTestURL string, timeout time.Duration) int {
+	client := &http.Client{Timeout: timeout, Transport: transport}
 	resp, err := get(ctx, client, speedTestURL)
 	if err != nil {
 		return 0
 	}
 	defer resp.Body.Close()
-	n, err := io.Copy(io.Discard, resp.Body)
-	if err != nil || n == 0 {
+	startDownload := time.Now()
+	n, _ := io.Copy(io.Discard, resp.Body)
+	if n == 0 {
 		return 0
 	}
-	elapsed := time.Since(start).Seconds()
+	elapsed := time.Since(startDownload).Seconds()
 	if elapsed == 0 {
 		return 0
 	}
@@ -182,7 +189,7 @@ func checkNode(ctx context.Context, nodeID string, mapping map[string]any, speed
 	}
 	result.Alive = true
 	result.LatencyMs = measureLatency(ctx, pc.Client)
-	result.SpeedKbps = measureSpeed(ctx, pc.Client, speedTestURL)
+	result.SpeedKbps = measureSpeed(ctx, pc.Client.Transport, speedTestURL)
 
 	// Reuse same transport with shorter timeout for media checks
 	mediaClient := &http.Client{
