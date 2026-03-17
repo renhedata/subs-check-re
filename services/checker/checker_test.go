@@ -48,6 +48,15 @@ func TestListJobsEmpty(t *testing.T) {
 	}
 }
 
+func TestExportAllMissingToken(t *testing.T) {
+	req := httptest.NewRequest("GET", "/export/all", nil)
+	w := httptest.NewRecorder()
+	ExportAll(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401, got %d", w.Code)
+	}
+}
+
 func TestGetResultsWithJobIDNotFound(t *testing.T) {
 	ctx := withAuth()
 	_, err := GetResults(ctx, "nonexistent-sub-id", &GetResultsParams{JobID: "nonexistent-job"})

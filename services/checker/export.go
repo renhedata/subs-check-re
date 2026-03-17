@@ -2,20 +2,24 @@
 package checker
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	settingssvc "subs-check-re/services/settings"
+	subsvc "subs-check-re/services/subscription"
 	"gopkg.in/yaml.v3"
 )
 
 // Export generates a subscription link from the latest completed check results.
+// If subscriptionID is "all", combines nodes from all subscriptions.
 //
 //encore:api public raw method=GET path=/export/:subscriptionID
 func Export(w http.ResponseWriter, req *http.Request) {
@@ -47,6 +51,176 @@ func Export(w http.ResponseWriter, req *http.Request) {
 	}
 	userID := userResp.UserID
 
+	// Handle "all" case - combine all subscriptions.
+	if subscriptionID == "all" {
+		exportAllSubscriptions(w, req, ctx, userID, target)
+		return
+	}
+
+	// Single subscription case
+	exportSingleSubscription(w, req, ctx, subscriptionID, userID, target)
+}
+
+// ExportAll is a testable wrapper around the export-all logic.
+// It can be called directly from tests without Encore routing.
+func ExportAll(w http.ResponseWriter, req *http.Request) {
+	ctx := req.Context()
+
+	token := req.URL.Query().Get("token")
+	if token == "" {
+		http.Error(w, "token required", http.StatusUnauthorized)
+		return
+	}
+	target := req.URL.Query().Get("target")
+	if target == "" {
+		target = "clash"
+	}
+
+	// Resolve token → user_id.
+	userResp, err := settingssvc.GetUserIDByAPIKey(ctx, token)
+	if err != nil {
+		http.Error(w, "invalid token", http.StatusUnauthorized)
+		return
+	}
+	userID := userResp.UserID
+
+	exportAllSubscriptions(w, req, ctx, userID, target)
+}
+
+func exportAllSubscriptions(w http.ResponseWriter, req *http.Request, ctx context.Context, userID string, target string) {
+	// Get the latest completed job per subscription owned by this user.
+	rows, err := db.Query(ctx, `
+		SELECT DISTINCT ON (subscription_id) id AS job_id, subscription_id
+		FROM check_jobs
+		WHERE user_id = $1 AND status = 'completed'
+		ORDER BY subscription_id, created_at DESC
+	`, userID)
+	if err != nil {
+		http.Error(w, "db error", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	type jobSub struct {
+		jobID          string
+		subscriptionID string
+	}
+	var jobs []jobSub
+	var subIDs []string
+	for rows.Next() {
+		var js jobSub
+		if err := rows.Scan(&js.jobID, &js.subscriptionID); err != nil {
+			continue
+		}
+		jobs = append(jobs, js)
+		subIDs = append(subIDs, js.subscriptionID)
+	}
+
+	if len(jobs) == 0 {
+		switch target {
+		case "base64":
+			renderBase64(w, nil)
+		default:
+			renderClash(w, nil)
+		}
+		return
+	}
+
+	// Resolve subscription names via subscription service.
+	namesResp, err := subsvc.GetSubscriptionNames(ctx, &subsvc.GetSubscriptionNamesParams{
+		UserID: userID,
+		IDs:    subIDs,
+	})
+	if err != nil {
+		http.Error(w, "name lookup failed", http.StatusInternalServerError)
+		return
+	}
+	subNames := namesResp.Names
+
+	// Collect alive nodes from all jobs, prefix names with subscription name.
+	type rankedNode struct {
+		config    map[string]any
+		speedKbps int
+		latencyMs int
+	}
+	var allNodes []rankedNode
+
+	for _, js := range jobs {
+		subName := subNames[js.subscriptionID]
+		if subName == "" {
+			subName = js.subscriptionID[:8]
+		}
+
+		func() {
+			nodeRows, err := db.Query(ctx, `
+				SELECT COALESCE(n.config, cr.node_config) AS config,
+				       COALESCE(n.name, cr.node_name) AS node_name,
+				       cr.netflix, cr.youtube, cr.youtube_premium, cr.openai, cr.claude, cr.gemini, cr.grok, cr.disney, cr.tiktok,
+				       cr.speed_kbps, cr.latency_ms
+				FROM check_results cr
+				LEFT JOIN nodes n ON n.id = cr.node_id
+				WHERE cr.job_id = $1 AND cr.alive = true
+			`, js.jobID)
+			if err != nil {
+				return
+			}
+			defer nodeRows.Close()
+
+			for nodeRows.Next() {
+				var (
+					configJSON                                                                     []byte
+					name                                                                           string
+					netflix, youtube, youtubePremium, openai, claude, gemini, grok, disney, tiktok bool
+					speedKbps, latencyMs                                                           int
+				)
+				if err := nodeRows.Scan(&configJSON, &name,
+					&netflix, &youtube, &youtubePremium, &openai, &claude, &gemini, &grok, &disney, &tiktok,
+					&speedKbps, &latencyMs); err != nil {
+					continue
+				}
+				if len(configJSON) == 0 {
+					continue
+				}
+				var cfg map[string]any
+				if err := json.Unmarshal(configJSON, &cfg); err != nil {
+					continue
+				}
+				tagged := taggedName(name, netflix, youtube, youtubePremium, openai, claude, gemini, grok, disney, tiktok, speedKbps)
+				cfg["name"] = subName + "|" + tagged
+				allNodes = append(allNodes, rankedNode{config: cfg, speedKbps: speedKbps, latencyMs: latencyMs})
+			}
+		}()
+	}
+
+	// Sort all nodes by speed DESC, latency ASC.
+	sort.Slice(allNodes, func(i, j int) bool {
+		if allNodes[i].speedKbps != allNodes[j].speedKbps {
+			return allNodes[i].speedKbps > allNodes[j].speedKbps
+		}
+		return allNodes[i].latencyMs < allNodes[j].latencyMs
+	})
+
+	proxies := make([]map[string]any, len(allNodes))
+	for i, n := range allNodes {
+		proxies[i] = n.config
+	}
+
+	// Log export (best effort).
+	ip := clientIP(req)
+	db.Exec(ctx, `
+		INSERT INTO export_logs (id, subscription_id, user_id, ip, requested_at)
+		VALUES ($1, $2, $3, $4, $5)
+	`, uuid.New().String(), "all", userID, ip, time.Now()) //nolint:errcheck
+
+	switch target {
+	case "base64":
+		renderBase64(w, proxies)
+	default:
+		renderClash(w, proxies)
+	}
+}
+
+func exportSingleSubscription(w http.ResponseWriter, req *http.Request, ctx context.Context, subscriptionID string, userID string, target string) {
 	// Find latest completed job for this subscription owned by this user.
 	var jobID string
 	if err := db.QueryRow(ctx, `
