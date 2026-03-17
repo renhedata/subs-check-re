@@ -187,3 +187,41 @@ func GetSubscription(ctx context.Context, id string) (*Subscription, error) {
 	}
 	return &s, nil
 }
+
+// GetSubscriptionNamesParams is the request for the internal name-lookup endpoint.
+type GetSubscriptionNamesParams struct {
+	UserID string   `json:"user_id"`
+	IDs    []string `json:"ids"`
+}
+
+// GetSubscriptionNamesResponse maps subscription ID → name.
+type GetSubscriptionNamesResponse struct {
+	Names map[string]string `json:"names"`
+}
+
+// GetSubscriptionNames resolves subscription names by ID for internal service calls.
+//
+//encore:api private method=POST path=/internal/subscriptions/names
+func GetSubscriptionNames(ctx context.Context, p *GetSubscriptionNamesParams) (*GetSubscriptionNamesResponse, error) {
+	if len(p.IDs) == 0 {
+		return &GetSubscriptionNamesResponse{Names: map[string]string{}}, nil
+	}
+	rows, err := db.Query(ctx, `
+		SELECT id, name FROM subscriptions
+		WHERE id = ANY($1) AND user_id = $2
+	`, p.IDs, p.UserID)
+	if err != nil {
+		return nil, errs.B().Code(errs.Internal).Msg("db query failed").Err()
+	}
+	defer rows.Close()
+
+	names := make(map[string]string)
+	for rows.Next() {
+		var id, name string
+		if err := rows.Scan(&id, &name); err != nil {
+			continue
+		}
+		names[id] = name
+	}
+	return &GetSubscriptionNamesResponse{Names: names}, nil
+}
