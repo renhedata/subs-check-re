@@ -7,7 +7,6 @@ import { z } from "zod";
 import { NodeTable } from "@/components/node-table";
 import { client, isApiError } from "@/lib/client";
 import type { checker, subscription } from "@/lib/client.gen";
-type CheckJob = checker.JobSummary;
 type NodeResult = checker.NodeResult;
 type ExportLog = checker.ExportLog;
 type Subscription = subscription.Subscription;
