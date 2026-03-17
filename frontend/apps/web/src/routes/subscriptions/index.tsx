@@ -10,6 +10,7 @@ import { toast } from "sonner";
 
 import { client, isApiError } from "@/lib/client";
 import type { subscription } from "@/lib/client.gen";
+
 type Subscription = subscription.Subscription;
 
 const MEDIA_APPS = [
@@ -45,8 +46,7 @@ function SubscriptionsPage() {
 			qc.invalidateQueries({ queryKey: ["subscriptions"] });
 			toast.success("Deleted");
 		},
-		onError: (e) =>
-			toast.error(isApiError(e) ? e.message : "Delete failed"),
+		onError: (e) => toast.error(isApiError(e) ? e.message : "Delete failed"),
 	});
 
 	const updateMut = useMutation({
@@ -70,8 +70,7 @@ function SubscriptionsPage() {
 			qc.invalidateQueries({ queryKey: ["subscriptions"] });
 			toast.success("Updated");
 		},
-		onError: (e) =>
-			toast.error(isApiError(e) ? e.message : "Update failed"),
+		onError: (e) => toast.error(isApiError(e) ? e.message : "Update failed"),
 	});
 
 	const triggerMut = useMutation({
@@ -103,8 +102,7 @@ function SubscriptionsPage() {
 			setAdding(false);
 			toast.success("Subscription added");
 		},
-		onError: (e) =>
-			toast.error(isApiError(e) ? e.message : "Failed to add"),
+		onError: (e) => toast.error(isApiError(e) ? e.message : "Failed to add"),
 	});
 
 	const subs = data?.subscriptions ?? [];

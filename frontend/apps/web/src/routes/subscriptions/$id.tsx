@@ -1,15 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { ChevronDown, ChevronRight, Download, RefreshCw, Square } from "lucide-react";
+import {
+	ChevronDown,
+	ChevronRight,
+	Download,
+	RefreshCw,
+	Square,
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { NodeTable } from "@/components/node-table";
 import { client, isApiError } from "@/lib/client";
-import type { checker, subscription } from "@/lib/client.gen";
-type NodeResult = checker.NodeResult;
-type ExportLog = checker.ExportLog;
-type Subscription = subscription.Subscription;
 
 const searchSchema = z.object({
 	job: z.string().optional(),
@@ -113,8 +115,7 @@ function SubscriptionDetailPage() {
 			resultsQuery.refetch();
 			toast.success("Check cancelled");
 		},
-		onError: (e) =>
-			toast.error(isApiError(e) ? e.message : "Cancel failed"),
+		onError: (e) => toast.error(isApiError(e) ? e.message : "Cancel failed"),
 	});
 
 	// Clear log when a new job starts
@@ -126,7 +127,9 @@ function SubscriptionDetailPage() {
 
 	useEffect(() => {
 		if (!jobId) return;
-		const es = new EventSource(`${window.location.origin}/api/check/${jobId}/progress`);
+		const es = new EventSource(
+			`${window.location.origin}/api/check/${jobId}/progress`,
+		);
 		esRef.current = es;
 		es.onmessage = (e) => {
 			const data: SSEProgress = JSON.parse(e.data);
@@ -364,24 +367,39 @@ function ExportLogsSection({ subscriptionId }: { subscriptionId: string }) {
 				onClick={() => setOpen(!open)}
 				className="flex w-full items-center justify-between px-4 py-3"
 			>
-				<div className="flex items-center gap-2 text-sm" style={{ color: "#8b949e" }}>
+				<div
+					className="flex items-center gap-2 text-sm"
+					style={{ color: "#8b949e" }}
+				>
 					<Download size={13} strokeWidth={1.5} />
 					Export requests
 				</div>
 				{open ? (
-					<ChevronDown size={13} strokeWidth={1.5} style={{ color: "#6e7681" }} />
+					<ChevronDown
+						size={13}
+						strokeWidth={1.5}
+						style={{ color: "#6e7681" }}
+					/>
 				) : (
-					<ChevronRight size={13} strokeWidth={1.5} style={{ color: "#6e7681" }} />
+					<ChevronRight
+						size={13}
+						strokeWidth={1.5}
+						style={{ color: "#6e7681" }}
+					/>
 				)}
 			</button>
 
 			{open && (
 				<div className="border-t px-4 py-3" style={{ borderColor: "#30363d" }}>
 					{logsQuery.isLoading && (
-						<p className="text-xs" style={{ color: "#6e7681" }}>Loading…</p>
+						<p className="text-xs" style={{ color: "#6e7681" }}>
+							Loading…
+						</p>
 					)}
 					{!logsQuery.isLoading && logs.length === 0 && (
-						<p className="text-xs" style={{ color: "#6e7681" }}>No export requests yet.</p>
+						<p className="text-xs" style={{ color: "#6e7681" }}>
+							No export requests yet.
+						</p>
 					)}
 					<div className="space-y-1">
 						{logs.map((log) => (
@@ -389,7 +407,10 @@ function ExportLogsSection({ subscriptionId }: { subscriptionId: string }) {
 								key={log.id}
 								className="flex items-center justify-between py-1"
 							>
-								<span className="font-mono text-[11px]" style={{ color: "#c9d1d9" }}>
+								<span
+									className="font-mono text-[11px]"
+									style={{ color: "#c9d1d9" }}
+								>
 									{new Date(log.requested_at).toLocaleString(undefined, {
 										month: "short",
 										day: "numeric",
@@ -398,7 +419,10 @@ function ExportLogsSection({ subscriptionId }: { subscriptionId: string }) {
 										second: "2-digit",
 									})}
 								</span>
-								<span className="font-mono text-[11px]" style={{ color: "#8b949e" }}>
+								<span
+									className="font-mono text-[11px]"
+									style={{ color: "#8b949e" }}
+								>
 									{log.ip || "—"}
 								</span>
 							</div>

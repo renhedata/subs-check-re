@@ -8,12 +8,22 @@ import {
 } from "@frontend/ui/components/select";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ChevronDown, ChevronRight, Clock, History, Loader2, Pencil, Plus, Trash2, Zap } from "lucide-react";
+import {
+	ChevronRight,
+	Clock,
+	History,
+	Loader2,
+	Pencil,
+	Plus,
+	Trash2,
+	Zap,
+} from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
 import { client, isApiError } from "@/lib/client";
 import type { checker, scheduler, subscription } from "@/lib/client.gen";
+
 type CheckJob = checker.JobSummary;
 type ScheduledJob = scheduler.ScheduledJob;
 type Subscription = subscription.Subscription;
@@ -72,11 +82,19 @@ function SchedulerPage() {
 	});
 
 	const createMut = useMutation({
-		mutationFn: (params: { subscription_id: string; cron_expr: string; speed_test: boolean; media_apps: string[] }) =>
+		mutationFn: (params: {
+			subscription_id: string;
+			cron_expr: string;
+			speed_test: boolean;
+			media_apps: string[];
+		}) =>
 			client.scheduler.Create({
 				subscription_id: params.subscription_id,
 				cron_expr: params.cron_expr,
-				options: { speed_test: params.speed_test, media_apps: params.media_apps },
+				options: {
+					speed_test: params.speed_test,
+					media_apps: params.media_apps,
+				},
 			}),
 		onSuccess: () => {
 			qc.invalidateQueries({ queryKey: ["scheduler"] });
@@ -277,7 +295,10 @@ function ScheduleForm({
 						onChange={(e) => setSpeedTest(e.target.checked)}
 						className="accent-[#58a6ff]"
 					/>
-					<span className="flex items-center gap-1 text-xs" style={{ color: "#8b949e" }}>
+					<span
+						className="flex items-center gap-1 text-xs"
+						style={{ color: "#8b949e" }}
+					>
 						<Zap size={11} strokeWidth={1.5} />
 						Speed test
 					</span>
@@ -313,11 +334,7 @@ function ScheduleForm({
 					style={{ background: "#238636", color: "#fff" }}
 					className="border-0"
 				>
-					{isPending ? (
-						<Loader2 size={13} className="animate-spin" />
-					) : (
-						"Save"
-					)}
+					{isPending ? <Loader2 size={13} className="animate-spin" /> : "Save"}
 				</Button>
 				<Button size="sm" variant="outline" onClick={onCancel}>
 					Cancel
@@ -352,7 +369,9 @@ function JobRow({
 	// Edit state initialized from current job values
 	const [editCron, setEditCron] = useState(job.cron_expr);
 	const [editSpeedTest, setEditSpeedTest] = useState(job.speed_test);
-	const [editMediaApps, setEditMediaApps] = useState<string[]>(job.media_apps ?? [...MEDIA_APPS]);
+	const [editMediaApps, setEditMediaApps] = useState<string[]>(
+		job.media_apps ?? [...MEDIA_APPS],
+	);
 
 	function toggleApp(app: string) {
 		setEditMediaApps((prev) =>
@@ -430,7 +449,7 @@ function JobRow({
 			</div>
 
 			{/* Tags */}
-			<div className="flex flex-wrap gap-1.5 px-4 pb-3 pt-0">
+			<div className="flex flex-wrap gap-1.5 px-4 pt-0 pb-3">
 				{job.speed_test && (
 					<span
 						className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px]"
@@ -477,11 +496,8 @@ function JobRow({
 
 			{/* History panel */}
 			{showHistory && (
-				<div
-					className="border-t px-4 py-3"
-					style={{ borderColor: "#30363d" }}
-				>
-					<p className="mb-2 text-xs font-medium" style={{ color: "#8b949e" }}>
+				<div className="border-t px-4 py-3" style={{ borderColor: "#30363d" }}>
+					<p className="mb-2 font-medium text-xs" style={{ color: "#8b949e" }}>
 						Recent runs
 					</p>
 					{historyQuery.isLoading && (
@@ -506,7 +522,7 @@ function JobRow({
 							>
 								<div className="flex items-center gap-2">
 									<span
-										className="h-1.5 w-1.5 rounded-full flex-shrink-0"
+										className="h-1.5 w-1.5 flex-shrink-0 rounded-full"
 										style={{ background: statusColor(j.status) }}
 									/>
 									<span
@@ -525,7 +541,11 @@ function JobRow({
 									<span className="text-[11px]" style={{ color: "#8b949e" }}>
 										{j.available}/{j.total} alive
 									</span>
-									<ChevronRight size={11} strokeWidth={1.5} style={{ color: "#6e7681" }} />
+									<ChevronRight
+										size={11}
+										strokeWidth={1.5}
+										style={{ color: "#6e7681" }}
+									/>
 								</div>
 							</Link>
 						))}

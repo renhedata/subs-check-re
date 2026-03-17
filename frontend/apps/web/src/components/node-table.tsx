@@ -1,4 +1,5 @@
 import type { checker } from "@/lib/client.gen";
+
 type NodeResult = checker.NodeResult;
 
 interface Props {
@@ -139,8 +140,12 @@ export function NodeTable({ results }: Props) {
 								<div className="flex flex-wrap gap-1">
 									{/* all unlock fields are boolean */}
 									{r.netflix && <UnlockBadge label="NF" style="media" />}
-									{r.youtube && !r.youtube_premium && <UnlockBadge label="YT" style="media" />}
-									{r.youtube_premium && <UnlockBadge label="YT+" style="media" />}
+									{r.youtube && !r.youtube_premium && (
+										<UnlockBadge label="YT" style="media" />
+									)}
+									{r.youtube_premium && (
+										<UnlockBadge label="YT+" style="media" />
+									)}
 									{r.openai && <UnlockBadge label="GPT" style="ai" />}
 									{r.claude && <UnlockBadge label="CL" style="ai" />}
 									{r.gemini && <UnlockBadge label="GM" style="ai" />}

@@ -8,6 +8,7 @@ import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { client } from "@/lib/client";
 import type { settings } from "@/lib/client.gen";
+
 type UserSettings = settings.UserSettings;
 
 export const Route = createFileRoute("/settings/general")({
@@ -34,8 +35,7 @@ function GeneralSettingsPage() {
 	}, [settingsQuery.data, reset]);
 
 	const saveMutation = useMutation({
-		mutationFn: (data: UserSettings) =>
-			client.settings.UpdateSettings(data),
+		mutationFn: (data: UserSettings) => client.settings.UpdateSettings(data),
 		onSuccess: () => {
 			qc.invalidateQueries({ queryKey: ["settings"] });
 			toast.success("Settings saved");

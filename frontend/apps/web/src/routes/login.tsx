@@ -4,9 +4,8 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Loader2, Lock } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-
-import { client, isApiError } from "@/lib/client";
 import { setToken } from "@/lib/auth";
+import { client, isApiError } from "@/lib/client";
 
 export const Route = createFileRoute("/login")({
 	component: LoginPage,
@@ -33,9 +32,7 @@ function LoginPage() {
 				navigate({ to: "/" });
 			}
 		} catch (err) {
-			toast.error(
-				isApiError(err) ? err.message : "Something went wrong",
-			);
+			toast.error(isApiError(err) ? err.message : "Something went wrong");
 		} finally {
 			setLoading(false);
 		}

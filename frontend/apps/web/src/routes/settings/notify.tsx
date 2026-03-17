@@ -9,12 +9,21 @@ import {
 } from "@frontend/ui/components/select";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { CheckCircle2, FlaskConical, Loader2, Pencil, Plus, Trash2, XCircle } from "lucide-react";
+import {
+	CheckCircle2,
+	FlaskConical,
+	Loader2,
+	Pencil,
+	Plus,
+	Trash2,
+	XCircle,
+} from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
 import { client, isApiError } from "@/lib/client";
 import type { JSONValue, notify } from "@/lib/client.gen";
+
 type NotifyChannel = notify.Channel;
 
 export const Route = createFileRoute("/settings/notify")({
@@ -79,8 +88,7 @@ function NotifyPage() {
 			setEditingId(null);
 			toast.success("Updated");
 		},
-		onError: (e) =>
-			toast.error(isApiError(e) ? e.message : "Update failed"),
+		onError: (e) => toast.error(isApiError(e) ? e.message : "Update failed"),
 	});
 
 	const testMut = useMutation({
@@ -92,8 +100,7 @@ function NotifyPage() {
 				toast.error(`Test failed: ${resp.error ?? "unknown error"}`);
 			}
 		},
-		onError: (e) =>
-			toast.error(isApiError(e) ? e.message : "Test failed"),
+		onError: (e) => toast.error(isApiError(e) ? e.message : "Test failed"),
 	});
 
 	const channels = channelsQuery.data?.channels ?? [];
@@ -227,7 +234,11 @@ function NotifyPage() {
 						onSaveEdit={() =>
 							updateMut.mutate({
 								id: ch.id,
-								data: { name: editName, enabled: editEnabled, config: ch.config },
+								data: {
+									name: editName,
+									enabled: editEnabled,
+									config: ch.config,
+								},
 							})
 						}
 						onDelete={() => deleteMut.mutate(ch.id)}
@@ -288,7 +299,11 @@ function ChannelRow({
 			<div className="flex items-center justify-between px-4 py-3">
 				<div className="flex items-center gap-3">
 					{ch.enabled ? (
-						<CheckCircle2 size={14} strokeWidth={1.5} style={{ color: "#3fb950" }} />
+						<CheckCircle2
+							size={14}
+							strokeWidth={1.5}
+							style={{ color: "#3fb950" }}
+						/>
 					) : (
 						<XCircle size={14} strokeWidth={1.5} style={{ color: "#6e7681" }} />
 					)}

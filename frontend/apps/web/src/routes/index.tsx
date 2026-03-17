@@ -7,9 +7,10 @@ import { CheckCircle, Clock, FileText, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 import { client } from "@/lib/client";
-import type { checker, subscription } from "@/lib/client.gen";
+import type { checker } from "@/lib/client.gen";
+
 type LocalUnlockResult = checker.LocalUnlockResult;
-type Subscription = subscription.Subscription;
+
 import { isAuthenticated } from "@/lib/auth";
 
 export const Route = createFileRoute("/")({
@@ -85,8 +86,7 @@ function DashboardPage() {
 	const origin = typeof window !== "undefined" ? window.location.origin : "";
 
 	const regenerateMut = useMutation({
-		mutationFn: () =>
-			client.settings.RegenerateAPIKey(),
+		mutationFn: () => client.settings.RegenerateAPIKey(),
 		onSuccess: () => {
 			qc.invalidateQueries({ queryKey: ["api-key"] });
 			toast.success("API key regenerated");
@@ -132,7 +132,7 @@ function DashboardPage() {
 
 			<NetworkUnlockPanel />
 
-		{/* Export API */}
+			{/* Export API */}
 			<div className="space-y-4">
 				<div>
 					<h2 className="font-semibold text-[#f0f6fc] text-sm">Export API</h2>
@@ -281,7 +281,9 @@ function NetworkUnlockPanel() {
 		<div>
 			<div className="mb-3 flex items-center justify-between">
 				<div>
-					<h2 className="font-semibold text-[#f0f6fc] text-sm">Server Network Unlock</h2>
+					<h2 className="font-semibold text-[#f0f6fc] text-sm">
+						Server Network Unlock
+					</h2>
 					<p className="mt-0.5 text-xs" style={{ color: "#8b949e" }}>
 						Platforms accessible from this server's IP
 					</p>
