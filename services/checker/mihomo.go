@@ -157,20 +157,22 @@ func measureSpeedWithTimeout(ctx context.Context, transport http.RoundTripper, s
 
 // nodeCheckResult holds the outcome of checking a single node.
 type nodeCheckResult struct {
-	NodeID    string
-	NodeName  string
-	Alive     bool
-	LatencyMs int
-	SpeedKbps int
-	IP        string
-	Country   string
-	Netflix   bool
-	YouTube   string
-	OpenAI    bool
-	Claude    bool
-	Gemini    bool
-	Disney    bool
-	TikTok    string
+	NodeID         string
+	NodeName       string
+	Alive          bool
+	LatencyMs      int
+	SpeedKbps      int
+	IP             string
+	Country        string
+	Netflix        bool
+	YouTube        bool
+	YouTubePremium bool
+	OpenAI         bool
+	Claude         bool
+	Gemini         bool
+	Grok           bool
+	Disney         bool
+	TikTok         bool
 }
 
 // checkNode runs all checks for a single proxy mapping and returns the result.
@@ -204,6 +206,7 @@ func checkNode(ctx context.Context, nodeID string, mapping map[string]any, speed
 		}
 		if hasApp(opts, "youtube") {
 			result.YouTube, _ = checkYouTube(ctx, mediaClient)
+			result.YouTubePremium, _ = checkYouTubePremium(ctx, mediaClient)
 		}
 		if hasApp(opts, "openai") {
 			result.OpenAI, _ = checkOpenAI(ctx, mediaClient)
@@ -213,6 +216,9 @@ func checkNode(ctx context.Context, nodeID string, mapping map[string]any, speed
 		}
 		if hasApp(opts, "gemini") {
 			result.Gemini, _ = checkGemini(ctx, mediaClient)
+		}
+		if hasApp(opts, "grok") {
+			result.Grok, _ = checkGrok(ctx, mediaClient)
 		}
 		if hasApp(opts, "disney") {
 			result.Disney, _ = checkDisney(ctx, mediaClient)

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { RefreshCw, Square } from "lucide-react";
+import { ChevronDown, ChevronRight, Download, RefreshCw, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -9,6 +9,7 @@ import {
 	ApiError,
 	api,
 	type CheckJob,
+	type ExportLog,
 	type NodeResult,
 	type Subscription,
 } from "@/lib/api";
@@ -343,6 +344,77 @@ function SubscriptionDetailPage() {
 			)}
 
 			<NodeTable results={results} />
+
+			<ExportLogsSection subscriptionId={id} />
+		</div>
+	);
+}
+
+function ExportLogsSection({ subscriptionId }: { subscriptionId: string }) {
+	const [open, setOpen] = useState(false);
+
+	const logsQuery = useQuery({
+		queryKey: ["export-logs", subscriptionId],
+		queryFn: () =>
+			api.get<{ logs: ExportLog[] }>(`/export-logs/${subscriptionId}`),
+		enabled: open,
+		staleTime: 30_000,
+	});
+
+	const logs = logsQuery.data?.logs ?? [];
+
+	return (
+		<div
+			className="rounded-lg border"
+			style={{ background: "#161b22", borderColor: "#30363d" }}
+		>
+			<button
+				type="button"
+				onClick={() => setOpen(!open)}
+				className="flex w-full items-center justify-between px-4 py-3"
+			>
+				<div className="flex items-center gap-2 text-sm" style={{ color: "#8b949e" }}>
+					<Download size={13} strokeWidth={1.5} />
+					Export requests
+				</div>
+				{open ? (
+					<ChevronDown size={13} strokeWidth={1.5} style={{ color: "#6e7681" }} />
+				) : (
+					<ChevronRight size={13} strokeWidth={1.5} style={{ color: "#6e7681" }} />
+				)}
+			</button>
+
+			{open && (
+				<div className="border-t px-4 py-3" style={{ borderColor: "#30363d" }}>
+					{logsQuery.isLoading && (
+						<p className="text-xs" style={{ color: "#6e7681" }}>Loading…</p>
+					)}
+					{!logsQuery.isLoading && logs.length === 0 && (
+						<p className="text-xs" style={{ color: "#6e7681" }}>No export requests yet.</p>
+					)}
+					<div className="space-y-1">
+						{logs.map((log) => (
+							<div
+								key={log.id}
+								className="flex items-center justify-between py-1"
+							>
+								<span className="font-mono text-[11px]" style={{ color: "#c9d1d9" }}>
+									{new Date(log.requested_at).toLocaleString(undefined, {
+										month: "short",
+										day: "numeric",
+										hour: "2-digit",
+										minute: "2-digit",
+										second: "2-digit",
+									})}
+								</span>
+								<span className="font-mono text-[11px]" style={{ color: "#8b949e" }}>
+									{log.ip || "—"}
+								</span>
+							</div>
+						))}
+					</div>
+				</div>
+			)}
 		</div>
 	);
 }

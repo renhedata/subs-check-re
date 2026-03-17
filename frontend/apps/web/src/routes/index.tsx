@@ -3,10 +3,10 @@
 import { Skeleton } from "@frontend/ui/components/skeleton";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import { CheckCircle, Clock, FileText } from "lucide-react";
+import { CheckCircle, Clock, FileText, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
-import { api, type Subscription } from "@/lib/api";
+import { api, type LocalUnlockResult, type Subscription } from "@/lib/api";
 import { isAuthenticated } from "@/lib/auth";
 
 export const Route = createFileRoute("/")({
@@ -127,7 +127,9 @@ function DashboardPage() {
 				/>
 			</div>
 
-			{/* Export API */}
+			<NetworkUnlockPanel />
+
+		{/* Export API */}
 			<div className="space-y-4">
 				<div>
 					<h2 className="font-semibold text-[#f0f6fc] text-sm">Export API</h2>
@@ -237,6 +239,111 @@ function DashboardPage() {
 						</tbody>
 					</table>
 				</div>
+			</div>
+		</div>
+	);
+}
+
+const PLATFORM_DEFS: {
+	key: keyof LocalUnlockResult;
+	label: string;
+	style: "media" | "ai" | "other";
+}[] = [
+	{ key: "openai", label: "GPT", style: "ai" },
+	{ key: "claude", label: "CL", style: "ai" },
+	{ key: "gemini", label: "GM", style: "ai" },
+	{ key: "grok", label: "GK", style: "ai" },
+	{ key: "netflix", label: "NF", style: "media" },
+	{ key: "youtube", label: "YT", style: "media" },
+	{ key: "youtube_premium", label: "YT+", style: "media" },
+	{ key: "disney", label: "D+", style: "other" },
+	{ key: "tiktok", label: "TK", style: "other" },
+];
+
+const BADGE_STYLES = {
+	media: { background: "#3d1a1a", color: "#f85149" },
+	ai: { background: "#1a3a1a", color: "#3fb950" },
+	other: { background: "#1a2a3a", color: "#58a6ff" },
+};
+
+function NetworkUnlockPanel() {
+	const { data, isLoading, isFetching, refetch } = useQuery({
+		queryKey: ["local-unlock"],
+		queryFn: () => api.get<LocalUnlockResult>("/network-unlock"),
+		staleTime: 5 * 60 * 1000,
+		retry: false,
+	});
+
+	return (
+		<div>
+			<div className="mb-3 flex items-center justify-between">
+				<div>
+					<h2 className="font-semibold text-[#f0f6fc] text-sm">Server Network Unlock</h2>
+					<p className="mt-0.5 text-xs" style={{ color: "#8b949e" }}>
+						Platforms accessible from this server's IP
+					</p>
+				</div>
+				<button
+					type="button"
+					onClick={() => refetch()}
+					disabled={isFetching}
+					className="flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs transition-colors hover:bg-white/5 disabled:opacity-50"
+					style={{ borderColor: "#30363d", color: "#8b949e" }}
+				>
+					<RefreshCw
+						size={11}
+						strokeWidth={1.5}
+						className={isFetching ? "animate-spin" : ""}
+					/>
+					Refresh
+				</button>
+			</div>
+			<div
+				className="rounded-lg border p-4"
+				style={{ background: "#161b22", borderColor: "#30363d" }}
+			>
+				{isLoading ? (
+					<div className="flex flex-wrap gap-2">
+						{PLATFORM_DEFS.map((p) => (
+							<div
+								key={p.key}
+								className="h-6 w-10 animate-pulse rounded"
+								style={{ background: "#21262d" }}
+							/>
+						))}
+					</div>
+				) : data ? (
+					<div className="space-y-3">
+						<div className="flex flex-wrap gap-2">
+							{PLATFORM_DEFS.map((p) => {
+								const val = data[p.key];
+								const available = typeof val === "boolean" ? val : val !== "";
+								const s = available
+									? BADGE_STYLES[p.style]
+									: { background: "#21262d", color: "#484f58" };
+								return (
+									<span
+										key={p.key}
+										className="rounded px-2 py-1 font-semibold text-[11px]"
+										style={s}
+									>
+										{p.label}
+									</span>
+								);
+							})}
+						</div>
+						{(data.ip || data.country) && (
+							<p className="font-mono text-[11px]" style={{ color: "#6e7681" }}>
+								{data.country && <span className="mr-1">{data.country}</span>}
+								{data.ip}
+							</p>
+						)}
+					</div>
+				) : (
+					<p className="text-xs" style={{ color: "#6e7681" }}>
+						Click Refresh to check.
+					</p>
+				)}
 			</div>
 		</div>
 	);

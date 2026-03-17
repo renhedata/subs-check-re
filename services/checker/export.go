@@ -5,9 +5,12 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"strings"
+	"time"
 
+	"github.com/google/uuid"
 	settingssvc "subs-check-re/services/settings"
 	"gopkg.in/yaml.v3"
 )
@@ -55,16 +58,43 @@ func Export(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// Log this export request (best effort).
+	ip := clientIP(req)
+	db.Exec(ctx, `
+		INSERT INTO export_logs (id, subscription_id, user_id, ip, requested_at)
+		VALUES ($1, $2, $3, $4, $5)
+	`, uuid.New().String(), subscriptionID, userID, ip, time.Now()) //nolint:errcheck
+
 	// Query alive nodes with their config.
+	// node_config is denormalized into check_results so it survives node table replacement.
+	// speed_kbps falls back to the most recent historical speed if this job skipped speed testing.
 	rows, err := db.Query(ctx, `
-		SELECT n.config, COALESCE(n.name, cr.node_name),
-		       cr.netflix, cr.youtube, cr.openai, cr.claude, cr.gemini, cr.disney, cr.tiktok,
-		       cr.speed_kbps, cr.latency_ms
-		FROM check_results cr
-		LEFT JOIN nodes n ON n.id = cr.node_id
-		WHERE cr.job_id=$1 AND cr.alive=true
-		ORDER BY cr.speed_kbps DESC NULLS LAST, cr.latency_ms ASC NULLS LAST
-	`, jobID)
+		WITH r AS (
+			SELECT COALESCE(n.config, cr.node_config) AS config,
+			       COALESCE(n.name, cr.node_name) AS node_name,
+			       cr.netflix, cr.youtube, cr.youtube_premium, cr.openai, cr.claude, cr.gemini, cr.grok, cr.disney, cr.tiktok,
+			       CASE WHEN cr.speed_kbps > 0 THEN cr.speed_kbps
+			            ELSE COALESCE((
+			                SELECT cr2.speed_kbps
+			                FROM check_results cr2
+			                JOIN check_jobs cj2 ON cj2.id = cr2.job_id
+			                WHERE cr2.node_name = cr.node_name
+			                  AND cj2.subscription_id = $2
+			                  AND cr2.speed_kbps > 0
+			                ORDER BY cr2.checked_at DESC
+			                LIMIT 1
+			            ), 0)
+			       END AS speed_kbps,
+			       cr.latency_ms
+			FROM check_results cr
+			LEFT JOIN nodes n ON n.id = cr.node_id
+			WHERE cr.job_id = $1 AND cr.alive = true
+		)
+		SELECT config, node_name, netflix, youtube, youtube_premium, openai, claude, gemini, grok, disney, tiktok,
+		       speed_kbps, latency_ms
+		FROM r
+		ORDER BY speed_kbps DESC NULLS LAST, latency_ms ASC NULLS LAST
+	`, jobID, subscriptionID)
 	if err != nil {
 		http.Error(w, "db error", http.StatusInternalServerError)
 		return
@@ -72,15 +102,18 @@ func Export(w http.ResponseWriter, req *http.Request) {
 	defer rows.Close()
 
 	type nodeRow struct {
-		config  map[string]any
-		name    string
-		netflix bool
-		youtube string
-		openai  bool
-		claude  bool
-		gemini  bool
-		disney  bool
-		tiktok  string
+		config         map[string]any
+		name           string
+		netflix        bool
+		youtube        bool
+		youtubePremium bool
+		openai         bool
+		claude         bool
+		gemini         bool
+		grok           bool
+		disney         bool
+		tiktok         string
+		speedKbps      int
 	}
 
 	var nodes []nodeRow
@@ -88,12 +121,12 @@ func Export(w http.ResponseWriter, req *http.Request) {
 		var nr nodeRow
 		var configJSON []byte
 		if err := rows.Scan(&configJSON, &nr.name,
-			&nr.netflix, &nr.youtube, &nr.openai, &nr.claude, &nr.gemini, &nr.disney, &nr.tiktok,
-			new(int), new(int)); err != nil {
+			&nr.netflix, &nr.youtube, &nr.youtubePremium, &nr.openai, &nr.claude, &nr.gemini, &nr.grok, &nr.disney, &nr.tiktok,
+			&nr.speedKbps, new(int)); err != nil {
 			continue
 		}
 		if len(configJSON) == 0 {
-			continue // skip nodes from old checks with no config
+			continue // skip nodes with no config (pre-migration rows)
 		}
 		if err := json.Unmarshal(configJSON, &nr.config); err != nil {
 			continue
@@ -108,7 +141,7 @@ func Export(w http.ResponseWriter, req *http.Request) {
 		for k, v := range nr.config {
 			cfg[k] = v
 		}
-		cfg["name"] = taggedName(nr.name, nr.netflix, nr.youtube, nr.openai, nr.claude, nr.gemini, nr.disney, nr.tiktok)
+		cfg["name"] = taggedName(nr.name, nr.netflix, nr.youtube, nr.youtubePremium, nr.openai, nr.claude, nr.gemini, nr.grok, nr.disney, nr.tiktok, nr.speedKbps)
 		proxies = append(proxies, cfg)
 	}
 
@@ -120,7 +153,21 @@ func Export(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func taggedName(name string, netflix bool, youtube string, openai bool, claude bool, gemini bool, disney bool, tiktok string) string {
+// clientIP extracts the real client IP from the request.
+func clientIP(r *http.Request) string {
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		if ip, _, err := net.SplitHostPort(strings.SplitN(xff, ",", 2)[0]); err == nil {
+			return ip
+		}
+		return strings.TrimSpace(strings.SplitN(xff, ",", 2)[0])
+	}
+	if ip, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		return ip
+	}
+	return r.RemoteAddr
+}
+
+func taggedName(name string, netflix bool, youtube bool, youtubePremium bool, openai bool, claude bool, gemini bool, grok bool, disney bool, tiktok string, speedKbps int) string {
 	var tags []string
 	if netflix {
 		tags = append(tags, "NF")
@@ -134,14 +181,30 @@ func taggedName(name string, netflix bool, youtube string, openai bool, claude b
 	if claude {
 		tags = append(tags, "CL")
 	}
-	if youtube != "" {
-		tags = append(tags, "YT-"+youtube)
+	if grok {
+		tags = append(tags, "GK")
+	}
+	if youtubePremium {
+		tags = append(tags, "YT+")
+	} else if youtube {
+		tags = append(tags, "YT")
 	}
 	if disney {
 		tags = append(tags, "D+")
 	}
 	if tiktok != "" {
-		tags = append(tags, "TK-"+tiktok)
+		if tiktok == "YES" {
+			tags = append(tags, "TK")
+		} else {
+			tags = append(tags, "TK-"+tiktok)
+		}
+	}
+	if speedKbps > 0 {
+		if speedKbps >= 1024 {
+			tags = append(tags, fmt.Sprintf("%.1fMB", float64(speedKbps)/1024))
+		} else {
+			tags = append(tags, fmt.Sprintf("%dKB", speedKbps))
+		}
 	}
 	if len(tags) == 0 {
 		return name

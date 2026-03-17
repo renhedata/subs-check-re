@@ -70,11 +70,13 @@ type NodeResult struct {
 	SpeedKbps int    `json:"speed_kbps"`
 	Country   string `json:"country"`
 	IP        string `json:"ip"`
-	Netflix   bool   `json:"netflix"`
-	YouTube   string `json:"youtube"`
-	OpenAI    bool   `json:"openai"`
+	Netflix        bool   `json:"netflix"`
+	YouTube        bool   `json:"youtube"`
+	YouTubePremium bool   `json:"youtube_premium"`
+	OpenAI         bool   `json:"openai"`
 	Claude    bool   `json:"claude"`
 	Gemini    bool   `json:"gemini"`
+	Grok      bool   `json:"grok"`
 	Disney    bool   `json:"disney"`
 	TikTok    string `json:"tiktok"`
 }
@@ -104,6 +106,18 @@ type ListJobsResponse struct {
 	Total int          `json:"total"`
 }
 
+// ExportLog is one export request record.
+type ExportLog struct {
+	ID          string    `json:"id"`
+	IP          string    `json:"ip"`
+	RequestedAt time.Time `json:"requested_at"`
+}
+
+// ExportLogsResponse is returned by GET /export-logs/:subscriptionID.
+type ExportLogsResponse struct {
+	Logs []ExportLog `json:"logs"`
+}
+
 // ListJobsParams are the query parameters for GET /check/:subscriptionID/jobs.
 type ListJobsParams struct {
 	Limit  int `query:"limit"`
@@ -124,7 +138,7 @@ type CheckOptions struct {
 func defaultCheckOptions() CheckOptions {
 	return CheckOptions{
 		SpeedTest: true,
-		MediaApps: []string{"openai", "claude", "gemini", "netflix", "youtube", "disney", "tiktok"},
+		MediaApps: []string{"openai", "claude", "gemini", "grok", "netflix", "youtube", "disney", "tiktok"},
 	}
 }
 
@@ -511,15 +525,34 @@ func GetResults(ctx context.Context, subscriptionID string, p *GetResultsParams)
 		}
 	}
 
+	// speed_kbps falls back to the most recent historical speed if this job skipped speed testing.
 	rows, err := db.Query(ctx, `
-		SELECT cr.node_id, COALESCE(n.name, cr.node_name), COALESCE(n.type, cr.node_type),
-		       cr.alive, cr.latency_ms, cr.speed_kbps, cr.country, cr.ip,
-		       cr.netflix, cr.youtube, cr.openai, cr.claude, cr.gemini, cr.disney, cr.tiktok
-		FROM check_results cr
-		LEFT JOIN nodes n ON n.id = cr.node_id
-		WHERE cr.job_id = $1
-		ORDER BY cr.alive DESC, cr.speed_kbps DESC NULLS LAST, cr.latency_ms ASC NULLS LAST
-	`, job.ID)
+		WITH r AS (
+			SELECT cr.node_id,
+			       COALESCE(n.name, cr.node_name) AS node_name,
+			       COALESCE(n.type, cr.node_type) AS node_type,
+			       cr.alive, cr.latency_ms,
+			       CASE WHEN cr.speed_kbps > 0 THEN cr.speed_kbps
+			            ELSE COALESCE((
+			                SELECT cr2.speed_kbps
+			                FROM check_results cr2
+			                JOIN check_jobs cj2 ON cj2.id = cr2.job_id
+			                WHERE cr2.node_name = cr.node_name
+			                  AND cj2.subscription_id = $2
+			                  AND cr2.speed_kbps > 0
+			                ORDER BY cr2.checked_at DESC
+			                LIMIT 1
+			            ), 0)
+			       END AS speed_kbps,
+			       cr.country, cr.ip,
+			       cr.netflix, cr.youtube, cr.youtube_premium, cr.openai, cr.claude, cr.gemini, cr.grok, cr.disney, cr.tiktok
+			FROM check_results cr
+			LEFT JOIN nodes n ON n.id = cr.node_id
+			WHERE cr.job_id = $1
+		)
+		SELECT * FROM r
+		ORDER BY alive DESC, speed_kbps DESC NULLS LAST, latency_ms ASC NULLS LAST
+	`, job.ID, subscriptionID)
 	if err != nil {
 		return nil, errs.B().Code(errs.Internal).Msg("db error").Err()
 	}
@@ -531,7 +564,7 @@ func GetResults(ctx context.Context, subscriptionID string, p *GetResultsParams)
 		if err := rows.Scan(
 			&r.NodeID, &r.NodeName, &r.NodeType,
 			&r.Alive, &r.LatencyMs, &r.SpeedKbps, &r.Country, &r.IP,
-			&r.Netflix, &r.YouTube, &r.OpenAI, &r.Claude, &r.Gemini, &r.Disney, &r.TikTok,
+			&r.Netflix, &r.YouTube, &r.YouTubePremium, &r.OpenAI, &r.Claude, &r.Gemini, &r.Grok, &r.Disney, &r.TikTok,
 		); err != nil {
 			return nil, errs.B().Code(errs.Internal).Msg("scan failed").Err()
 		}
@@ -541,6 +574,44 @@ func GetResults(ctx context.Context, subscriptionID string, p *GetResultsParams)
 		results = []NodeResult{}
 	}
 	return &ResultsResponse{Job: job, Results: results}, nil
+}
+
+// GetExportLogs returns the export request log for a subscription.
+//
+//encore:api auth method=GET path=/export-logs/:subscriptionID
+func GetExportLogs(ctx context.Context, subscriptionID string) (*ExportLogsResponse, error) {
+	claims := encauth.Data().(*authsvc.UserClaims)
+
+	// Verify subscription ownership
+	var count int
+	if err := db.QueryRow(ctx,
+		`SELECT COUNT(*) FROM check_jobs WHERE subscription_id=$1 AND user_id=$2`,
+		subscriptionID, claims.UserID).Scan(&count); err != nil {
+		return nil, errs.B().Code(errs.Internal).Msg("db error").Err()
+	}
+
+	rows, err := db.Query(ctx, `
+		SELECT id, ip, requested_at FROM export_logs
+		WHERE subscription_id=$1 AND user_id=$2
+		ORDER BY requested_at DESC LIMIT 50
+	`, subscriptionID, claims.UserID)
+	if err != nil {
+		return nil, errs.B().Code(errs.Internal).Msg("db error").Err()
+	}
+	defer rows.Close()
+
+	var logs []ExportLog
+	for rows.Next() {
+		var l ExportLog
+		if err := rows.Scan(&l.ID, &l.IP, &l.RequestedAt); err != nil {
+			continue
+		}
+		logs = append(logs, l)
+	}
+	if logs == nil {
+		logs = []ExportLog{}
+	}
+	return &ExportLogsResponse{Logs: logs}, nil
 }
 
 // --- Async job runner ---
@@ -635,15 +706,16 @@ func runJob(parentCtx context.Context, jobID, subscriptionID, userID string) {
 				nodeName := res.NodeName
 				nodeType, _ := t.proxy["type"].(string)
 				resultID := uuid.New().String()
+				nodeConfigJSON, _ := json.Marshal(t.proxy)
 				db.Exec(context.Background(), `
 					INSERT INTO check_results
-					  (id, job_id, node_id, node_name, node_type, checked_at, alive, latency_ms, speed_kbps, country, ip,
-					   netflix, youtube, openai, claude, gemini, disney, tiktok)
-					VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
-				`, resultID, jobID, t.nodeID, nodeName, nodeType, time.Now(),
+					  (id, job_id, node_id, node_name, node_type, node_config, checked_at, alive, latency_ms, speed_kbps, country, ip,
+					   netflix, youtube, youtube_premium, openai, claude, gemini, grok, disney, tiktok)
+					VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
+				`, resultID, jobID, t.nodeID, nodeName, nodeType, nodeConfigJSON, time.Now(),
 					res.Alive, res.LatencyMs, res.SpeedKbps, res.Country, res.IP,
-					res.Netflix, res.YouTube, res.OpenAI,
-					res.Claude, res.Gemini, res.Disney, res.TikTok,
+					res.Netflix, res.YouTube, res.YouTubePremium, res.OpenAI,
+					res.Claude, res.Gemini, res.Grok, res.Disney, res.TikTok,
 				)
 
 				n := processedCount.Add(1)

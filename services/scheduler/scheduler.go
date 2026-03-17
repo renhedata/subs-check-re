@@ -88,7 +88,7 @@ func (s *Service) removeCron(subscriptionID string) {
 func defaultCheckOptions() checkersvc.CheckOptions {
 	return checkersvc.CheckOptions{
 		SpeedTest: true,
-		MediaApps: []string{"openai", "claude", "gemini", "netflix", "youtube", "disney", "tiktok"},
+		MediaApps: []string{"openai", "claude", "gemini", "grok", "netflix", "youtube", "disney", "tiktok"},
 	}
 }
 

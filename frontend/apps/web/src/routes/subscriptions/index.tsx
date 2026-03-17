@@ -14,6 +14,7 @@ const MEDIA_APPS = [
 	"openai",
 	"claude",
 	"gemini",
+	"grok",
 	"netflix",
 	"youtube",
 	"disney",
@@ -52,13 +53,7 @@ function SubscriptionsPage() {
 			data,
 		}: {
 			id: string;
-			data: {
-				name?: string;
-				url?: string;
-				enabled?: boolean;
-				cron_expr?: string;
-				clear_cron_expr?: boolean;
-			};
+			data: { name?: string; url?: string };
 		}) => api.put<Subscription>(`/subscriptions/${id}`, data),
 		onSuccess: () => {
 			qc.invalidateQueries({ queryKey: ["subscriptions"] });
@@ -209,13 +204,7 @@ function SubRow({
 	updateMut: {
 		mutate: (args: {
 			id: string;
-			data: {
-				name?: string;
-				url?: string;
-				enabled?: boolean;
-				cron_expr?: string;
-				clear_cron_expr?: boolean;
-			};
+			data: { name?: string; url?: string };
 		}) => void;
 		isPending: boolean;
 	};
@@ -231,8 +220,6 @@ function SubRow({
 	const [showEdit, setShowEdit] = useState(false);
 	const [editName, setEditName] = useState(sub.name);
 	const [editUrl, setEditUrl] = useState(sub.url);
-	const [editCron, setEditCron] = useState(sub.cron_expr ?? "");
-	const [editEnabled, setEditEnabled] = useState(sub.enabled);
 
 	function handleSaveEdit() {
 		updateMut.mutate({
@@ -240,13 +227,11 @@ function SubRow({
 			data: {
 				name: editName || undefined,
 				url: editUrl || undefined,
-				enabled: editEnabled,
-				cron_expr: editCron || undefined,
-				clear_cron_expr: editCron === "" && !!sub.cron_expr,
 			},
 		});
 		setShowEdit(false);
 	}
+
 	const [speedTest, setSpeedTest] = useState(true);
 	const [mediaApps, setMediaApps] = useState<string[]>([...MEDIA_APPS]);
 
@@ -323,8 +308,6 @@ function SubRow({
 						onClick={() => {
 							setEditName(sub.name);
 							setEditUrl(sub.url);
-							setEditCron(sub.cron_expr ?? "");
-							setEditEnabled(sub.enabled);
 							setShowEdit(!showEdit);
 							setShowOpts(false);
 						}}
@@ -432,29 +415,7 @@ function SubRow({
 								className="h-8 font-mono text-sm"
 							/>
 						</div>
-						<div className="space-y-1.5">
-							<Label className="text-[#8b949e] text-xs">
-								Cron schedule (optional)
-							</Label>
-							<Input
-								value={editCron}
-								onChange={(e) => setEditCron(e.target.value)}
-								placeholder="0 */6 * * *"
-								className="h-8 font-mono text-sm"
-							/>
-						</div>
 					</div>
-					<label className="flex cursor-pointer select-none items-center gap-2">
-						<input
-							type="checkbox"
-							checked={editEnabled}
-							onChange={(e) => setEditEnabled(e.target.checked)}
-							className="accent-[#58a6ff]"
-						/>
-						<span className="text-xs" style={{ color: "#8b949e" }}>
-							Enabled
-						</span>
-					</label>
 					<div className="flex gap-2">
 						<button
 							type="button"

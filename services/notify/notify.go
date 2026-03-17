@@ -56,9 +56,9 @@ func handleJobCompleted(ctx context.Context, event *checkersvc.JobCompletedEvent
 		}
 		switch chType {
 		case "webhook":
-			sendWebhook(configJSON, event)
+			sendWebhook(configJSON, event) //nolint:errcheck
 		case "telegram":
-			sendTelegram(configJSON, msg)
+			sendTelegram(configJSON, msg) //nolint:errcheck
 		}
 	}
 	return nil
@@ -72,10 +72,10 @@ type webhookConfig struct {
 	Headers map[string]string `json:"headers"`
 }
 
-func sendWebhook(configJSON []byte, event *checkersvc.JobCompletedEvent) {
+func sendWebhook(configJSON []byte, event *checkersvc.JobCompletedEvent) error {
 	var cfg webhookConfig
 	if err := json.Unmarshal(configJSON, &cfg); err != nil || cfg.URL == "" {
-		return
+		return fmt.Errorf("invalid webhook config: url is required")
 	}
 	method := cfg.Method
 	if method == "" {
@@ -84,7 +84,7 @@ func sendWebhook(configJSON []byte, event *checkersvc.JobCompletedEvent) {
 	payload, _ := json.Marshal(event)
 	req, err := http.NewRequest(method, cfg.URL, bytes.NewReader(payload))
 	if err != nil {
-		return
+		return fmt.Errorf("build request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	for k, v := range cfg.Headers {
@@ -93,9 +93,13 @@ func sendWebhook(configJSON []byte, event *checkersvc.JobCompletedEvent) {
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return
+		return fmt.Errorf("send webhook: %w", err)
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("webhook returned HTTP %d", resp.StatusCode)
+	}
+	return nil
 }
 
 type telegramConfig struct {
@@ -103,24 +107,31 @@ type telegramConfig struct {
 	ChatID   string `json:"chat_id"`
 }
 
-func sendTelegram(configJSON []byte, message string) {
+func sendTelegram(configJSON []byte, message string) error {
 	var cfg telegramConfig
 	if err := json.Unmarshal(configJSON, &cfg); err != nil || cfg.BotToken == "" || cfg.ChatID == "" {
-		return
+		return fmt.Errorf("invalid telegram config: bot_token and chat_id are required")
 	}
 	payload, _ := json.Marshal(map[string]string{
 		"chat_id": cfg.ChatID,
 		"text":    message,
 	})
 	url := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", cfg.BotToken)
-	req, _ := http.NewRequest("POST", url, bytes.NewReader(payload))
+	req, err := http.NewRequest("POST", url, bytes.NewReader(payload))
+	if err != nil {
+		return fmt.Errorf("build request: %w", err)
+	}
 	req.Header.Set("Content-Type", "application/json")
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return
+		return fmt.Errorf("send telegram: %w", err)
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("telegram API returned HTTP %d", resp.StatusCode)
+	}
+	return nil
 }
 
 // --- Types ---
@@ -151,6 +162,12 @@ type CreateChannelParams struct {
 // DeleteChannelResponse is the response for DELETE /notify/channels/:id.
 type DeleteChannelResponse struct {
 	OK bool `json:"ok"`
+}
+
+// TestChannelResponse is the response for POST /notify/channels/:id/test.
+type TestChannelResponse struct {
+	OK    bool   `json:"ok"`
+	Error string `json:"error,omitempty"`
 }
 
 // --- API endpoints ---
@@ -254,13 +271,43 @@ func UpdateChannel(ctx context.Context, id string, p *UpdateChannelParams) (*Cha
 	return &c, nil
 }
 
-// nullableJSON returns nil if the raw message is empty, otherwise the raw bytes.
-// Used so that an absent JSON field does not overwrite an existing DB value.
-func nullableJSON(r json.RawMessage) []byte {
-	if len(r) == 0 {
-		return nil
+// TestChannel sends a test notification to verify the channel configuration.
+//
+//encore:api auth method=POST path=/notify/channels/:id/test
+func TestChannel(ctx context.Context, id string) (*TestChannelResponse, error) {
+	claims := encauth.Data().(*authsvc.UserClaims)
+
+	var chType string
+	var configJSON []byte
+	if err := db.QueryRow(ctx,
+		`SELECT type, config FROM notify_channels WHERE id=$1 AND user_id=$2`,
+		id, claims.UserID).Scan(&chType, &configJSON); err != nil {
+		return nil, errs.B().Code(errs.NotFound).Msg("channel not found").Err()
 	}
-	return []byte(r)
+
+	testEvent := &checkersvc.JobCompletedEvent{
+		JobID:          "test",
+		SubscriptionID: "test-subscription",
+		UserID:         claims.UserID,
+		Available:      42,
+		Total:          100,
+	}
+	testMsg := "🔔 Test notification — your channel is working!\nAvailable: 42/100 nodes"
+
+	var sendErr error
+	switch chType {
+	case "webhook":
+		sendErr = sendWebhook(configJSON, testEvent)
+	case "telegram":
+		sendErr = sendTelegram(configJSON, testMsg)
+	default:
+		return nil, errs.B().Code(errs.InvalidArgument).Msg("unknown channel type").Err()
+	}
+
+	if sendErr != nil {
+		return &TestChannelResponse{OK: false, Error: sendErr.Error()}, nil
+	}
+	return &TestChannelResponse{OK: true}, nil
 }
 
 // DeleteChannel removes a notification channel.
@@ -278,4 +325,13 @@ func DeleteChannel(ctx context.Context, id string) (*DeleteChannelResponse, erro
 		return nil, errs.B().Code(errs.NotFound).Msg("channel not found").Err()
 	}
 	return &DeleteChannelResponse{OK: true}, nil
+}
+
+// nullableJSON returns nil if the raw message is empty, otherwise the raw bytes.
+// Used so that an absent JSON field does not overwrite an existing DB value.
+func nullableJSON(r json.RawMessage) []byte {
+	if len(r) == 0 {
+		return nil
+	}
+	return []byte(r)
 }

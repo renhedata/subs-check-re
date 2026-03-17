@@ -1,0 +1,1 @@
+ALTER TABLE check_results DROP COLUMN IF EXISTS grok;

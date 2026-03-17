@@ -9,7 +9,7 @@ import {
 } from "@frontend/ui/components/select";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import { CheckCircle2, FlaskConical, Loader2, Pencil, Plus, Trash2, XCircle } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -81,14 +81,33 @@ function NotifyPage() {
 			toast.error(e instanceof ApiError ? e.message : "Update failed"),
 	});
 
+	const testMut = useMutation({
+		mutationFn: (id: string) =>
+			api.post<{ ok: boolean; error?: string }>(`/notify/channels/${id}/test`),
+		onSuccess: (resp) => {
+			if (resp.ok) {
+				toast.success("Test notification sent successfully");
+			} else {
+				toast.error(`Test failed: ${resp.error ?? "unknown error"}`);
+			}
+		},
+		onError: (e) =>
+			toast.error(e instanceof ApiError ? e.message : "Test failed"),
+	});
+
 	const channels = channelsQuery.data?.channels ?? [];
 
 	return (
 		<div className="space-y-5">
 			<div className="flex items-center justify-between">
-				<h1 className="font-semibold text-[#f0f6fc] text-lg">
-					Notification Channels
-				</h1>
+				<div>
+					<h1 className="font-semibold text-[#f0f6fc] text-lg">
+						Notification Channels
+					</h1>
+					<p className="mt-0.5 text-xs" style={{ color: "#8b949e" }}>
+						Triggered automatically when a check job completes.
+					</p>
+				</div>
 				<button
 					type="button"
 					onClick={() => setAdding(!adding)}
@@ -190,102 +209,32 @@ function NotifyPage() {
 
 			<div className="space-y-2">
 				{channels.map((ch) => (
-					<div
+					<ChannelRow
 						key={ch.id}
-						className="rounded-lg border"
-						style={{ background: "#161b22", borderColor: "#30363d" }}
-					>
-						<div className="flex items-center justify-between px-4 py-3">
-							<div>
-								<p className="font-medium text-[#f0f6fc] text-sm">
-									{ch.name || ch.id}
-								</p>
-								<p
-									className="mt-0.5 text-[11px] uppercase tracking-[0.4px]"
-									style={{ color: "#8b949e" }}
-								>
-									{ch.type} · {ch.enabled ? "enabled" : "disabled"}
-								</p>
-							</div>
-							<div className="flex items-center gap-1.5">
-								<button
-									type="button"
-									onClick={() => {
-										setEditingId(editingId === ch.id ? null : ch.id);
-										setEditName(ch.name);
-										setEditEnabled(ch.enabled);
-									}}
-									className="rounded-md p-1.5 transition-colors hover:bg-white/5"
-									style={{ color: "#6e7681" }}
-								>
-									<Pencil size={13} strokeWidth={1.5} />
-								</button>
-								<button
-									type="button"
-									onClick={() => deleteMut.mutate(ch.id)}
-									disabled={deleteMut.isPending}
-									className="rounded-md p-1.5 transition-colors hover:bg-[#f85149]/10 hover:text-[#f85149] disabled:opacity-50"
-									style={{ color: "#6e7681" }}
-								>
-									<Trash2 size={13} strokeWidth={1.5} />
-								</button>
-							</div>
-						</div>
-						{editingId === ch.id && (
-							<div
-								className="space-y-3 border-t px-4 py-3"
-								style={{ borderColor: "#30363d" }}
-							>
-								<div className="space-y-1.5">
-									<Label className="text-[#8b949e] text-xs">Name</Label>
-									<Input
-										value={editName}
-										onChange={(e) => setEditName(e.target.value)}
-										className="h-8 text-sm"
-									/>
-								</div>
-								<label className="flex cursor-pointer select-none items-center gap-2">
-									<input
-										type="checkbox"
-										checked={editEnabled}
-										onChange={(e) => setEditEnabled(e.target.checked)}
-										className="accent-[#58a6ff]"
-									/>
-									<span className="text-xs" style={{ color: "#8b949e" }}>
-										Enabled
-									</span>
-								</label>
-								<div className="flex gap-2">
-									<button
-										type="button"
-										onClick={() =>
-											updateMut.mutate({
-												id: ch.id,
-												data: { name: editName, enabled: editEnabled },
-											})
-										}
-										disabled={updateMut.isPending}
-										className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-white disabled:opacity-50"
-										style={{ background: "#238636" }}
-									>
-										{updateMut.isPending ? (
-											<Loader2 size={13} className="animate-spin" />
-										) : (
-											"Save"
-										)}
-									</button>
-									<button
-										type="button"
-										onClick={() => setEditingId(null)}
-										className="rounded-md border px-3 py-1.5 text-sm"
-										style={{ borderColor: "#30363d", color: "#8b949e" }}
-									>
-										Cancel
-									</button>
-								</div>
-							</div>
-						)}
-					</div>
+						ch={ch}
+						editingId={editingId}
+						editName={editName}
+						editEnabled={editEnabled}
+						setEditName={setEditName}
+						setEditEnabled={setEditEnabled}
+						onEditOpen={() => {
+							setEditingId(editingId === ch.id ? null : ch.id);
+							setEditName(ch.name);
+							setEditEnabled(ch.enabled);
+						}}
+						onEditClose={() => setEditingId(null)}
+						onSaveEdit={() =>
+							updateMut.mutate({
+								id: ch.id,
+								data: { name: editName, enabled: editEnabled },
+							})
+						}
+						onDelete={() => deleteMut.mutate(ch.id)}
+						onTest={() => testMut.mutate(ch.id)}
+						editPending={updateMut.isPending}
+						deletePending={deleteMut.isPending}
+						testPending={testMut.isPending && testMut.variables === ch.id}
+					/>
 				))}
 				{!channelsQuery.isLoading && channels.length === 0 && (
 					<p className="py-10 text-center text-sm" style={{ color: "#8b949e" }}>
@@ -293,6 +242,151 @@ function NotifyPage() {
 					</p>
 				)}
 			</div>
+		</div>
+	);
+}
+
+function ChannelRow({
+	ch,
+	editingId,
+	editName,
+	editEnabled,
+	setEditName,
+	setEditEnabled,
+	onEditOpen,
+	onEditClose,
+	onSaveEdit,
+	onDelete,
+	onTest,
+	editPending,
+	deletePending,
+	testPending,
+}: {
+	ch: NotifyChannel;
+	editingId: string | null;
+	editName: string;
+	editEnabled: boolean;
+	setEditName: (v: string) => void;
+	setEditEnabled: (v: boolean) => void;
+	onEditOpen: () => void;
+	onEditClose: () => void;
+	onSaveEdit: () => void;
+	onDelete: () => void;
+	onTest: () => void;
+	editPending: boolean;
+	deletePending: boolean;
+	testPending: boolean;
+}) {
+	const isEditing = editingId === ch.id;
+
+	return (
+		<div
+			className="rounded-lg border"
+			style={{ background: "#161b22", borderColor: "#30363d" }}
+		>
+			<div className="flex items-center justify-between px-4 py-3">
+				<div className="flex items-center gap-3">
+					{ch.enabled ? (
+						<CheckCircle2 size={14} strokeWidth={1.5} style={{ color: "#3fb950" }} />
+					) : (
+						<XCircle size={14} strokeWidth={1.5} style={{ color: "#6e7681" }} />
+					)}
+					<div>
+						<p className="font-medium text-[#f0f6fc] text-sm">
+							{ch.name || ch.id}
+						</p>
+						<p
+							className="mt-0.5 text-[11px] uppercase tracking-[0.4px]"
+							style={{ color: "#8b949e" }}
+						>
+							{ch.type} · {ch.enabled ? "enabled" : "disabled"}
+						</p>
+					</div>
+				</div>
+				<div className="flex items-center gap-1">
+					<button
+						type="button"
+						onClick={onTest}
+						disabled={testPending}
+						title="Send test notification"
+						className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition-colors hover:bg-white/5 disabled:opacity-50"
+						style={{ borderColor: "#30363d", color: "#8b949e" }}
+					>
+						{testPending ? (
+							<Loader2 size={11} className="animate-spin" />
+						) : (
+							<FlaskConical size={11} strokeWidth={1.5} />
+						)}
+						Test
+					</button>
+					<button
+						type="button"
+						onClick={onEditOpen}
+						className="rounded-md p-1.5 transition-colors hover:bg-white/5"
+						style={{ color: isEditing ? "#58a6ff" : "#6e7681" }}
+					>
+						<Pencil size={13} strokeWidth={1.5} />
+					</button>
+					<button
+						type="button"
+						onClick={onDelete}
+						disabled={deletePending}
+						className="rounded-md p-1.5 transition-colors hover:bg-[#f85149]/10 hover:text-[#f85149] disabled:opacity-50"
+						style={{ color: "#6e7681" }}
+					>
+						<Trash2 size={13} strokeWidth={1.5} />
+					</button>
+				</div>
+			</div>
+			{isEditing && (
+				<div
+					className="space-y-3 border-t px-4 py-3"
+					style={{ borderColor: "#30363d" }}
+				>
+					<div className="space-y-1.5">
+						<Label className="text-[#8b949e] text-xs">Name</Label>
+						<Input
+							value={editName}
+							onChange={(e) => setEditName(e.target.value)}
+							className="h-8 text-sm"
+						/>
+					</div>
+					<label className="flex cursor-pointer select-none items-center gap-2">
+						<input
+							type="checkbox"
+							checked={editEnabled}
+							onChange={(e) => setEditEnabled(e.target.checked)}
+							className="accent-[#58a6ff]"
+						/>
+						<span className="text-xs" style={{ color: "#8b949e" }}>
+							Enabled
+						</span>
+					</label>
+					<div className="flex gap-2">
+						<button
+							type="button"
+							onClick={onSaveEdit}
+							disabled={editPending}
+							className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-white disabled:opacity-50"
+							style={{ background: "#238636" }}
+						>
+							{editPending ? (
+								<Loader2 size={13} className="animate-spin" />
+							) : (
+								"Save"
+							)}
+						</button>
+						<button
+							type="button"
+							onClick={onEditClose}
+							className="rounded-md border px-3 py-1.5 text-sm"
+							style={{ borderColor: "#30363d", color: "#8b949e" }}
+						>
+							Cancel
+						</button>
+					</div>
+				</div>
+			)}
 		</div>
 	);
 }
