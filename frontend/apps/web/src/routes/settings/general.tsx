@@ -6,7 +6,9 @@ import { Loader2 } from "lucide-react";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
-import { api, type UserSettings } from "@/lib/api";
+import { client } from "@/lib/client";
+import type { settings } from "@/lib/client.gen";
+type UserSettings = settings.UserSettings;
 
 export const Route = createFileRoute("/settings/general")({
 	component: GeneralSettingsPage,
@@ -20,7 +22,7 @@ function GeneralSettingsPage() {
 
 	const settingsQuery = useQuery({
 		queryKey: ["settings"],
-		queryFn: () => api.get<UserSettings>("/settings"),
+		queryFn: () => client.settings.GetSettings(),
 	});
 
 	const { register, handleSubmit, reset } = useForm<UserSettings>({
@@ -33,7 +35,7 @@ function GeneralSettingsPage() {
 
 	const saveMutation = useMutation({
 		mutationFn: (data: UserSettings) =>
-			api.put<UserSettings>("/settings", data),
+			client.settings.UpdateSettings(data),
 		onSuccess: () => {
 			qc.invalidateQueries({ queryKey: ["settings"] });
 			toast.success("Settings saved");
