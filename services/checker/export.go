@@ -152,7 +152,7 @@ func exportAllSubscriptions(w http.ResponseWriter, req *http.Request, ctx contex
 	for _, js := range jobs {
 		subName := subNames[js.subscriptionID]
 		if subName == "" {
-			subName = js.subscriptionID[:8]
+			continue // subscription was deleted; skip its stale jobs
 		}
 
 		func() {
