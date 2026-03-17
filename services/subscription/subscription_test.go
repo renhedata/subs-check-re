@@ -61,6 +61,9 @@ func TestGetSubscriptionNamesEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	if resp.Names == nil {
+		t.Error("expected non-nil Names map")
+	}
 	if len(resp.Names) != 0 {
 		t.Errorf("expected empty names map, got %v", resp.Names)
 	}

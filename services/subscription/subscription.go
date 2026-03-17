@@ -219,9 +219,12 @@ func GetSubscriptionNames(ctx context.Context, p *GetSubscriptionNamesParams) (*
 	for rows.Next() {
 		var id, name string
 		if err := rows.Scan(&id, &name); err != nil {
-			continue
+			return nil, errs.B().Code(errs.Internal).Msg("scan failed").Err()
 		}
 		names[id] = name
+	}
+	if err := rows.Err(); err != nil {
+		return nil, errs.B().Code(errs.Internal).Msg("rows iteration failed").Err()
 	}
 	return &GetSubscriptionNamesResponse{Names: names}, nil
 }
