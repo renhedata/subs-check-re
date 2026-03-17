@@ -1,4 +1,5 @@
-import type { NodeResult } from "@/lib/api";
+import type { checker } from "@/lib/client.gen";
+type NodeResult = checker.NodeResult;
 
 interface Props {
 	results: NodeResult[];
