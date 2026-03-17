@@ -5,7 +5,7 @@ import { Loader2, Lock } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
-import { ApiError, api } from "@/lib/api";
+import { client, isApiError } from "@/lib/client";
 import { setToken } from "@/lib/auth";
 
 export const Route = createFileRoute("/login")({
@@ -24,20 +24,17 @@ function LoginPage() {
 		setLoading(true);
 		try {
 			if (mode === "register") {
-				await api.post("/auth/register", { username, password });
+				await client.auth.Register({ username, password });
 				toast.success("Account created — please log in");
 				setMode("login");
 			} else {
-				const resp = await api.post<{ token: string }>("/auth/login", {
-					username,
-					password,
-				});
+				const resp = await client.auth.Login({ username, password });
 				setToken(resp.token);
 				navigate({ to: "/" });
 			}
 		} catch (err) {
 			toast.error(
-				err instanceof ApiError ? err.message : "Something went wrong",
+				isApiError(err) ? err.message : "Something went wrong",
 			);
 		} finally {
 			setLoading(false);
