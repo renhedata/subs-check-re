@@ -176,6 +176,41 @@ function DashboardPage() {
 					</div>
 				</div>
 
+				{/* All Subscriptions combined export */}
+				{subs.length > 0 && apiKey && (
+					<div
+						className="space-y-2 rounded-lg border p-4"
+						style={{ background: "#161b22", borderColor: "#30363d" }}
+					>
+						<p className="font-medium text-[#f0f6fc] text-sm">
+							All Subscriptions
+						</p>
+						<div className="flex flex-col gap-1.5">
+							{(["clash", "base64"] as const).map((t) => {
+								const url = `${origin}/api/export/all?token=${apiKey}&target=${t}`;
+								return (
+									<div key={t} className="flex items-center gap-2">
+										<code className="flex-1 truncate rounded bg-[#0d1117] px-2 py-1 font-mono text-[#8b949e] text-[11px]">
+											{url}
+										</code>
+										<button
+											type="button"
+											onClick={() => {
+												navigator.clipboard.writeText(url);
+												toast.success("Copied");
+											}}
+											className="flex-shrink-0 rounded border px-2 py-1 text-[11px] hover:bg-white/5"
+											style={{ borderColor: "#30363d", color: "#6e7681" }}
+										>
+											{t}
+										</button>
+									</div>
+								);
+							})}
+						</div>
+					</div>
+				)}
+
 				{/* Per-subscription URLs */}
 				{subs.length > 0 && apiKey && (
 					<div className="space-y-2">
