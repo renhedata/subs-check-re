@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { z } from "zod";
 import { NodeTable } from "@/components/node-table";
 import { client, isApiError } from "@/lib/client";
+import { formatBytes } from "@/lib/format";
 
 const searchSchema = z.object({
 	job: z.string().optional(),
@@ -199,6 +200,9 @@ function SubscriptionDetailPage() {
 								})}
 								{" · "}
 								{j.available}/{j.total}
+								{j.total_traffic_bytes > 0
+									? ` · ${formatBytes(j.total_traffic_bytes)}`
+									: ""}
 							</button>
 						);
 					})}
@@ -314,6 +318,11 @@ function SubscriptionDetailPage() {
 					<span style={{ color: "#8b949e" }}>
 						{results.filter((r) => r.alive).length} / {job.total} alive
 					</span>
+					{job.total_traffic_bytes > 0 && (
+						<span style={{ color: "#6e7681" }}>
+							· {formatBytes(job.total_traffic_bytes)}
+						</span>
+					)}
 					{jobId && progress && !progress.done && (
 						<span className="text-[11px]" style={{ color: "#6e7681" }}>
 							· previous results

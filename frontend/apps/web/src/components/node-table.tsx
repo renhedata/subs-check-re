@@ -1,4 +1,5 @@
 import type { checker } from "@/lib/client.gen";
+import { formatBytes } from "@/lib/format";
 
 type NodeResult = checker.NodeResult;
 
@@ -81,17 +82,23 @@ export function NodeTable({ results }: Props) {
 			<table className="w-full border-collapse">
 				<thead>
 					<tr style={{ borderBottom: "1px solid #30363d" }}>
-						{["Node", "Status", "Latency", "Speed", "Country", "Unlocks"].map(
-							(h) => (
-								<th
-									key={h}
-									className="px-3 py-2 text-left font-medium text-[11px] uppercase tracking-[0.4px]"
-									style={{ color: "#8b949e" }}
-								>
-									{h}
-								</th>
-							),
-						)}
+						{[
+							"Node",
+							"Status",
+							"Latency",
+							"Speed",
+							"流量",
+							"Country",
+							"Unlocks",
+						].map((h) => (
+							<th
+								key={h}
+								className="px-3 py-2 text-left font-medium text-[11px] uppercase tracking-[0.4px]"
+								style={{ color: "#8b949e" }}
+							>
+								{h}
+							</th>
+						))}
 					</tr>
 				</thead>
 				<tbody>
@@ -129,6 +136,9 @@ export function NodeTable({ results }: Props) {
 								) : (
 									<span style={{ color: "#6e7681" }}>—</span>
 								)}
+							</td>
+							<td className="px-3 py-2 text-xs" style={{ color: "#8b949e" }}>
+								{formatBytes(r.traffic_bytes)}
 							</td>
 							<td
 								className="px-3 py-2 text-xs"

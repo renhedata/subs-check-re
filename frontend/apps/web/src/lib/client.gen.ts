@@ -211,6 +211,7 @@ export namespace checker {
         progress: number
         "created_at": string
         "finished_at": string
+        "total_traffic_bytes": number
     }
 
     /**
@@ -226,6 +227,7 @@ export namespace checker {
         "media_apps": string[]
         "created_at": string
         "finished_at": string
+        "total_traffic_bytes": number
     }
 
     /**
@@ -282,6 +284,7 @@ export namespace checker {
         grok: boolean
         disney: boolean
         tiktok: boolean
+        "traffic_bytes": number
     }
 
     /**
