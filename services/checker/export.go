@@ -115,6 +115,10 @@ func exportAllSubscriptions(w http.ResponseWriter, req *http.Request, ctx contex
 		jobs = append(jobs, js)
 		subIDs = append(subIDs, js.subscriptionID)
 	}
+	if err := rows.Err(); err != nil {
+		http.Error(w, "db error", http.StatusInternalServerError)
+		return
+	}
 
 	if len(jobs) == 0 {
 		switch target {
