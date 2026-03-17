@@ -56,7 +56,16 @@ function SubscriptionsPage() {
 		}: {
 			id: string;
 			data: { name?: string; url?: string };
-		}) => client.subscription.Update(id, data as subscription.UpdateParams),
+		}) => {
+			const current = subs.find((s) => s.id === id);
+			return client.subscription.Update(id, {
+				name: data.name ?? current?.name ?? "",
+				url: data.url ?? current?.url ?? "",
+				enabled: current?.enabled ?? true,
+				cron_expr: current?.cron_expr ?? "",
+				clear_cron_expr: false,
+			});
+		},
 		onSuccess: () => {
 			qc.invalidateQueries({ queryKey: ["subscriptions"] });
 			toast.success("Updated");
