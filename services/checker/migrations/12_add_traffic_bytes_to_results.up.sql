@@ -1,0 +1,1 @@
+ALTER TABLE check_results ADD COLUMN traffic_bytes BIGINT NOT NULL DEFAULT 0;
