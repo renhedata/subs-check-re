@@ -3,8 +3,10 @@ package checker
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -94,6 +96,28 @@ func TestDefaultCheckOptionsHasAllPlatforms(t *testing.T) {
 		if !found {
 			t.Errorf("expected platform %q in default MediaApps", p)
 		}
+	}
+}
+
+func TestCountingTransport(t *testing.T) {
+	body := "hello world" // 11 bytes
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(body))
+	}))
+	defer srv.Close()
+
+	ct := &countingTransport{base: http.DefaultTransport}
+	client := &http.Client{Transport: ct}
+	resp, err := client.Get(srv.URL)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	io.ReadAll(resp.Body)
+	resp.Body.Close()
+
+	got := atomic.LoadInt64(&ct.bytes)
+	if got != int64(len(body)) {
+		t.Errorf("want %d bytes, got %d", len(body), got)
 	}
 }
 

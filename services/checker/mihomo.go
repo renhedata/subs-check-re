@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/metacubex/mihomo/adapter"
@@ -20,10 +21,37 @@ const (
 	ipLookupURL  = "http://ip-api.com/json/?fields=query,countryCode"
 )
 
+// countingTransport wraps an http.RoundTripper and counts response body bytes read.
+type countingTransport struct {
+	base  http.RoundTripper
+	bytes int64
+}
+
+func (t *countingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	resp, err := t.base.RoundTrip(req)
+	if err != nil || resp == nil {
+		return resp, err
+	}
+	resp.Body = &countingReader{ReadCloser: resp.Body, n: &t.bytes}
+	return resp, nil
+}
+
+type countingReader struct {
+	io.ReadCloser
+	n *int64
+}
+
+func (r *countingReader) Read(p []byte) (int, error) {
+	n, err := r.ReadCloser.Read(p)
+	atomic.AddInt64(r.n, int64(n))
+	return n, err
+}
+
 // proxyClient wraps an HTTP client and its underlying mihomo proxy.
 type proxyClient struct {
 	*http.Client
-	proxy constant.Proxy
+	proxy   constant.Proxy
+	counter *countingTransport
 }
 
 // close releases proxy resources.
@@ -62,12 +90,14 @@ func newProxyClient(mapping map[string]any) *proxyClient {
 		DisableKeepAlives: true,
 	}
 
+	ct := &countingTransport{base: transport}
 	return &proxyClient{
 		Client: &http.Client{
 			Timeout:   proxyTimeout,
-			Transport: transport,
+			Transport: ct,
 		},
-		proxy: proxy,
+		proxy:   proxy,
+		counter: ct,
 	}
 }
 
@@ -173,6 +203,7 @@ type nodeCheckResult struct {
 	Grok           bool
 	Disney         bool
 	TikTok         bool
+	TrafficBytes   int64
 }
 
 // checkNode runs all checks for a single proxy mapping and returns the result.
@@ -226,6 +257,10 @@ func checkNode(ctx context.Context, nodeID string, mapping map[string]any, speed
 		if hasApp(opts, "tiktok") {
 			result.TikTok, _ = checkTikTok(ctx, mediaClient)
 		}
+	}
+
+	if pc.counter != nil {
+		result.TrafficBytes = atomic.LoadInt64(&pc.counter.bytes)
 	}
 
 	return result
