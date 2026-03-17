@@ -5,14 +5,12 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { NodeTable } from "@/components/node-table";
-import {
-	ApiError,
-	api,
-	type CheckJob,
-	type ExportLog,
-	type NodeResult,
-	type Subscription,
-} from "@/lib/api";
+import { client, isApiError } from "@/lib/client";
+import type { checker, subscription } from "@/lib/client.gen";
+type CheckJob = checker.JobSummary;
+type NodeResult = checker.NodeResult;
+type ExportLog = checker.ExportLog;
+type Subscription = subscription.Subscription;
 
 const searchSchema = z.object({
 	job: z.string().optional(),
@@ -40,14 +38,16 @@ function latencyColor(ms: number): string {
 	return "#f85149";
 }
 
-function JobStatusBadge({ status }: { status: CheckJob["status"] }) {
-	const map: Record<CheckJob["status"], { bg: string; color: string }> = {
+type JobStatus = "queued" | "running" | "completed" | "failed";
+
+function JobStatusBadge({ status }: { status: string }) {
+	const map: Record<JobStatus, { bg: string; color: string }> = {
 		queued: { bg: "#1a2a3a", color: "#58a6ff" },
 		running: { bg: "#1a2a3a", color: "#58a6ff" },
 		completed: { bg: "#1a4731", color: "#3fb950" },
 		failed: { bg: "#3d1a1a", color: "#f85149" },
 	};
-	const s = map[status];
+	const s = map[status as JobStatus] ?? { bg: "#1a2a3a", color: "#8b949e" };
 	return (
 		<span
 			className="rounded-full px-2 py-0.5 font-medium text-[10px]"
@@ -71,21 +71,14 @@ function SubscriptionDetailPage() {
 
 	const jobsQuery = useQuery({
 		queryKey: ["jobs", id],
-		queryFn: () =>
-			api.get<{ jobs: CheckJob[]; total: number }>(
-				`/check/${id}/jobs?limit=10`,
-			),
+		queryFn: () => client.checker.ListJobs(id, { Limit: 10, Offset: 0 }),
 		staleTime: 5_000,
 	});
 
 	const resultsQuery = useQuery({
 		queryKey: ["results", id, selectedJobId],
-		queryFn: () => {
-			const qs = selectedJobId ? `?job_id=${selectedJobId}` : "";
-			return api.get<{ job: CheckJob; results: NodeResult[] }>(
-				`/check/${id}/results${qs}`,
-			);
-		},
+		queryFn: () =>
+			client.checker.GetResults(id, { JobID: selectedJobId ?? "" }),
 		retry: false,
 		staleTime: 0,
 	});
@@ -93,7 +86,7 @@ function SubscriptionDetailPage() {
 	// Resolve subscription name from cache
 	const subsQuery = useQuery({
 		queryKey: ["subscriptions"],
-		queryFn: () => api.get<{ subscriptions: Subscription[] }>("/subscriptions"),
+		queryFn: () => client.subscription.List(),
 		staleTime: 30_000,
 	});
 	const sub = subsQuery.data?.subscriptions.find(
@@ -113,7 +106,7 @@ function SubscriptionDetailPage() {
 	}, [resultsQuery.data?.job?.id, resultsQuery.data?.job?.status, jobId]);
 
 	const cancelMut = useMutation({
-		mutationFn: (jid: string) => api.delete(`/check/${jid}`),
+		mutationFn: (jid: string) => client.checker.CancelCheck(jid),
 		onSuccess: () => {
 			setJobId(null);
 			setProgress(null);
@@ -122,7 +115,7 @@ function SubscriptionDetailPage() {
 			toast.success("Check cancelled");
 		},
 		onError: (e) =>
-			toast.error(e instanceof ApiError ? e.message : "Cancel failed"),
+			toast.error(isApiError(e) ? e.message : "Cancel failed"),
 	});
 
 	// Clear log when a new job starts
@@ -134,7 +127,7 @@ function SubscriptionDetailPage() {
 
 	useEffect(() => {
 		if (!jobId) return;
-		const es = new EventSource(`/api/check/${jobId}/progress`);
+		const es = new EventSource(`${window.location.origin}/api/check/${jobId}/progress`);
 		esRef.current = es;
 		es.onmessage = (e) => {
 			const data: SSEProgress = JSON.parse(e.data);
@@ -355,8 +348,7 @@ function ExportLogsSection({ subscriptionId }: { subscriptionId: string }) {
 
 	const logsQuery = useQuery({
 		queryKey: ["export-logs", subscriptionId],
-		queryFn: () =>
-			api.get<{ logs: ExportLog[] }>(`/export-logs/${subscriptionId}`),
+		queryFn: () => client.checker.GetExportLogs(subscriptionId),
 		enabled: open,
 		staleTime: 30_000,
 	});
