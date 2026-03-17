@@ -8,7 +8,8 @@
 		"build": "vite build",
 		"serve": "vite preview",
 		"start": "vite",
-		"check-types": "tsc --noEmit"
+		"check-types": "tsc --noEmit",
+		"gen:client": "encore gen client subs-check-uqti --lang=typescript --output=./src/lib/client.gen.ts"
 	},
 	"dependencies": {
 		"@frontend/env": "workspace:*",
