@@ -87,7 +87,7 @@ export function NodeTable({ results }: Props) {
 							"Status",
 							"Latency",
 							"Speed",
-							"流量",
+							"Traffic",
 							"Country",
 							"Unlocks",
 						].map((h) => (
