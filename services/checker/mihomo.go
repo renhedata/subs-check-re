@@ -88,7 +88,7 @@ func isAlive(ctx context.Context, client *http.Client) bool {
 	}
 	defer resp.Body.Close()
 	io.Copy(io.Discard, resp.Body)
-	return resp.StatusCode >= 200 && resp.StatusCode < 302
+	return resp.StatusCode >= 200 && resp.StatusCode < 400
 }
 
 // getProxyInfo retrieves the external IP and country code via the proxy.
@@ -123,7 +123,7 @@ func measureLatency(ctx context.Context, client *http.Client) int {
 	}
 	defer resp.Body.Close()
 	io.Copy(io.Discard, resp.Body)
-	if resp.StatusCode < 200 || resp.StatusCode >= 302 {
+	if resp.StatusCode < 200 || resp.StatusCode >= 400 {
 		return 0
 	}
 	return int(time.Since(start).Milliseconds())

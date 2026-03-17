@@ -17,7 +17,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 encore run          # Start backend dev server (port 4000), auto-manages PostgreSQL via Docker
 encore db migrate   # Run database migrations
 encore db shell     # Open psql shell to local dev DB
-encore gen openapi  # Generate OpenAPI spec
+encore gen client subs-check-uqti --lang=typescript --output=./frontend/apps/web/src/lib/client.gen.ts  # Regenerate frontend API client
 ```
 
 ### Frontend (run from `frontend/`)
@@ -71,9 +71,18 @@ frontend/
 └── packages/config/   # Shared tsconfig
 ```
 
-**Data flow:** `TanStack Query → fetch /api/* → Vite proxy → Encore :4000`
+**Data flow:** `TanStack Query → Encore generated client → /api/* → Vite proxy → Encore :4000`
 
-The Vite dev server proxies `/api` to `http://localhost:4000`. In production, configure a reverse proxy.
+The Vite dev server proxies `/api` to `http://localhost:4000`. Production: nginx routes `/api/` to backend container (same domain, no CORS needed).
+
+**API client:** Uses Encore-generated type-safe client.
+- Generated file: `src/lib/client.gen.ts` — **do not edit manually**, committed to git
+- Singleton initializer: `src/lib/client.ts` — hand-written, handles auth token and baseURL
+- BaseURL: `window.location.origin + '/api'` (works with both Vite proxy and nginx)
+- Regenerate after backend API changes: `encore gen client subs-check-uqti --lang=typescript --output=./frontend/apps/web/src/lib/client.gen.ts`
+- Type naming: response/entity fields are snake_case (JSON tags), query parameter structs use PascalCase Go field names (e.g., `{ JobID: jobId }`)
+
+**SSE constraint:** `/check/:jobId/progress` is `public raw` — must stay public because `EventSource` cannot send auth headers. Do not add auth to this endpoint.
 
 **Routing:** TanStack Router with file-based routing. `routeTree.gen.ts` is auto-generated — do not edit manually.
 
@@ -93,13 +102,13 @@ Core tables: `users`, `subscriptions`, `nodes`, `check_jobs`, `check_results`, `
 
 `POST /check/:subscriptionId` → returns `{ job_id }` → client connects `GET /check/:jobId/progress` (SSE stream) → receives `{"progress":N,"total":M,"node_name":"..."}` → final `{"done":true,"available":N}`.
 
-## Design Spec
+## Design Specs
 
-Full architecture decisions and rationale: `docs/superpowers/specs/2026-03-14-subs-check-re-design.md`
+Full architecture decisions and rationale: `docs/superpowers/specs/`
 
 ## Reference Implementation
 
-`/Users/ashark/tmp/subs-check` — the original project. Key files to reference:
+`~/tmp/subs-check` (local path, adjust as needed) — the original project. Key files to reference:
 - `check/check.go` — mihomo-based concurrent node checker
 - `check/platform/` — per-platform unlock detection logic (Netflix, YouTube, OpenAI, etc.)
 - `proxy/get.go` — subscription URL fetching and parsing
