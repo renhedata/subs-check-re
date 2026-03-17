@@ -93,12 +93,14 @@ export interface NodeResult {
 	country: string;
 	ip: string;
 	netflix: boolean;
-	youtube: string;
+	youtube: boolean;
+	youtube_premium: boolean;
 	openai: boolean;
 	claude: boolean;
 	gemini: boolean;
+	grok: boolean;
 	disney: boolean;
-	tiktok: string;
+	tiktok: boolean;
 }
 
 export interface ScheduledJob {
@@ -106,6 +108,8 @@ export interface ScheduledJob {
 	subscription_id: string;
 	cron_expr: string;
 	enabled: boolean;
+	speed_test: boolean;
+	media_apps: string[];
 	created_at: string;
 }
 
@@ -121,4 +125,24 @@ export interface NotifyChannel {
 export interface UserSettings {
 	speed_test_url: string;
 	api_key?: string;
+}
+
+export interface ExportLog {
+	id: string;
+	ip: string;
+	requested_at: string;
+}
+
+export interface LocalUnlockResult {
+	netflix: boolean;
+	youtube: boolean;
+	youtube_premium: boolean;
+	openai: boolean;
+	claude: boolean;
+	gemini: boolean;
+	grok: boolean;
+	disney: boolean;
+	tiktok: boolean;
+	ip: string;
+	country: string;
 }

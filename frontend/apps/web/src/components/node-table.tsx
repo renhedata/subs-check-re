@@ -136,12 +136,14 @@ export function NodeTable({ results }: Props) {
 							</td>
 							<td className="px-3 py-2">
 								<div className="flex flex-wrap gap-1">
-									{/* netflix/openai/claude/gemini/disney are boolean; youtube/tiktok are string (unlock region or empty) */}
+									{/* all unlock fields are boolean */}
 									{r.netflix && <UnlockBadge label="NF" style="media" />}
-									{r.youtube && <UnlockBadge label="YT" style="media" />}
+									{r.youtube && !r.youtube_premium && <UnlockBadge label="YT" style="media" />}
+									{r.youtube_premium && <UnlockBadge label="YT+" style="media" />}
 									{r.openai && <UnlockBadge label="GPT" style="ai" />}
 									{r.claude && <UnlockBadge label="CL" style="ai" />}
 									{r.gemini && <UnlockBadge label="GM" style="ai" />}
+									{r.grok && <UnlockBadge label="GK" style="ai" />}
 									{r.disney && <UnlockBadge label="D+" style="other" />}
 									{r.tiktok && <UnlockBadge label="TK" style="other" />}
 								</div>
