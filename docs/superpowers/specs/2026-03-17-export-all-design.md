@@ -25,13 +25,52 @@ This does **not** conflict with `/export/:subscriptionID` because Encore routes 
 
 1. Parse `token` → `user_id` via `settingssvc.GetUserIDByAPIKey` (same as `Export`)
 2. Parse `target` (default `"clash"`)
-3. Query all subscriptions owned by `user_id` from `subscriptions` table
-4. For each subscription, find its latest completed check job (`status='completed' ORDER BY created_at DESC LIMIT 1`)
-5. For each job, query alive nodes (`cr.alive = true`) with their config and unlock flags — no historical speed fallback (use `cr.speed_kbps` directly, 0 if untested)
-6. Prefix each node name with the subscription name before tagging: `{subName}|{taggedName}`
-7. Merge all nodes from all subscriptions, sort by `speed_kbps DESC, latency_ms ASC`
+3. Query the checker DB for the latest completed job per subscription owned by `user_id` using `DISTINCT ON`:
+   ```sql
+   SELECT DISTINCT ON (subscription_id) id AS job_id, subscription_id
+   FROM check_jobs
+   WHERE user_id = $1 AND status = 'completed'
+   ORDER BY subscription_id, created_at DESC
+   ```
+4. Collect the distinct `subscription_id` values and call the new private endpoint `subsvc.GetSubscriptionNames` to resolve their names (see below). Build a `map[string]string` of `subscriptionID → name`.
+5. For each `(job_id, subscription_id)`, query alive nodes from `check_results` — same columns as `Export`, no historical speed fallback.
+6. For each node, prefix the name: `{subName}|{taggedName(originalName, ...unlocks, speedKbps)}`
+7. Collect all nodes from all subscriptions and sort by `speed_kbps DESC, latency_ms ASC`
 8. Render with existing `renderClash` or `renderBase64`
 9. Log to `export_logs` with `subscription_id = "all"`
+
+### Cross-Service: New Private Endpoint in Subscription Service
+
+The `subscriptions` table lives in the subscription service's own database. The checker cannot query it directly. A new `private` endpoint is added to `services/subscription/subscription.go` following the same pattern as `settingssvc.GetUserIDByAPIKey`:
+
+```go
+// GetSubscriptionNamesParams is the request for the internal name-lookup endpoint.
+type GetSubscriptionNamesParams struct {
+    UserID string   `json:"user_id"`
+    IDs    []string `json:"ids"`
+}
+
+// GetSubscriptionNamesResponse maps subscription ID → name.
+type GetSubscriptionNamesResponse struct {
+    Names map[string]string `json:"names"`
+}
+
+// GetSubscriptionNames is a private endpoint for internal service calls.
+//
+//encore:api private method=POST path=/internal/subscriptions/names
+func GetSubscriptionNames(ctx context.Context, p *GetSubscriptionNamesParams) (*GetSubscriptionNamesResponse, error) {
+    // Query subscriptions WHERE id = ANY($1) AND user_id = $2
+    // Return id→name map
+}
+```
+
+Called from `ExportAll` as:
+```go
+namesResp, err := subsvc.GetSubscriptionNames(ctx, &subsvc.GetSubscriptionNamesParams{
+    UserID: userID,
+    IDs:    subscriptionIDs,
+})
+```
 
 ### Node Naming
 
@@ -41,31 +80,14 @@ This does **not** conflict with `/export/:subscriptionID` because Encore routes 
 
 Example: `ProxyA|HK-01|NF|GPT|1.5MB`
 
-The subscription name is fetched alongside the node query (JOIN `subscriptions`).
+`taggedName` is called with the original node name. The subscription prefix is prepended to the result.
 
-### Query Pattern
+### Implementation locations
 
-```sql
--- For each subscription owned by user, find latest completed job
-SELECT cj.id AS job_id, s.name AS sub_name
-FROM check_jobs cj
-JOIN subscriptions s ON s.id = cj.subscription_id
-WHERE cj.user_id = $1
-  AND cj.status = 'completed'
-  AND cj.id = (
-      SELECT id FROM check_jobs
-      WHERE subscription_id = cj.subscription_id AND user_id = $1 AND status = 'completed'
-      ORDER BY created_at DESC LIMIT 1
-  )
-```
+- `services/subscription/subscription.go` — add `GetSubscriptionNames` private endpoint
+- `services/checker/export.go` — add `ExportAll` function
 
-Then for each `(job_id, sub_name)`, query alive nodes from `check_results` (same columns as `Export`).
-
-**Simpler alternative** (use in implementation): use `DISTINCT ON` or a single query with a lateral join to get the latest job per subscription, then join check_results.
-
-### Implementation location
-
-Add `ExportAll` function to `services/checker/export.go`. No new migrations needed.
+No new migrations needed.
 
 ## Frontend — Dashboard
 
