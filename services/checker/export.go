@@ -112,7 +112,7 @@ func Export(w http.ResponseWriter, req *http.Request) {
 		gemini         bool
 		grok           bool
 		disney         bool
-		tiktok         string
+		tiktok         bool
 		speedKbps      int
 	}
 
@@ -167,7 +167,7 @@ func clientIP(r *http.Request) string {
 	return r.RemoteAddr
 }
 
-func taggedName(name string, netflix bool, youtube bool, youtubePremium bool, openai bool, claude bool, gemini bool, grok bool, disney bool, tiktok string, speedKbps int) string {
+func taggedName(name string, netflix bool, youtube bool, youtubePremium bool, openai bool, claude bool, gemini bool, grok bool, disney bool, tiktok bool, speedKbps int) string {
 	var tags []string
 	if netflix {
 		tags = append(tags, "NF")
@@ -192,12 +192,8 @@ func taggedName(name string, netflix bool, youtube bool, youtubePremium bool, op
 	if disney {
 		tags = append(tags, "D+")
 	}
-	if tiktok != "" {
-		if tiktok == "YES" {
-			tags = append(tags, "TK")
-		} else {
-			tags = append(tags, "TK-"+tiktok)
-		}
+	if tiktok {
+		tags = append(tags, "TK")
 	}
 	if speedKbps > 0 {
 		if speedKbps >= 1024 {

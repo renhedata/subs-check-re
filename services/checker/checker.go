@@ -78,7 +78,7 @@ type NodeResult struct {
 	Gemini    bool   `json:"gemini"`
 	Grok      bool   `json:"grok"`
 	Disney    bool   `json:"disney"`
-	TikTok    string `json:"tiktok"`
+	TikTok    bool   `json:"tiktok"`
 }
 
 // ResultsResponse is returned by GET /check/:subscriptionID/results.

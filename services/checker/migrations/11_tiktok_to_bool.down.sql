@@ -1,0 +1,2 @@
+ALTER TABLE check_results
+  ALTER COLUMN tiktok TYPE TEXT USING (CASE WHEN tiktok THEN 'YES' ELSE '' END);
