@@ -57,7 +57,8 @@ type Job struct {
 	Total          int        `json:"total"`
 	Progress       int        `json:"progress"`
 	CreatedAt      time.Time  `json:"created_at"`
-	FinishedAt     *time.Time `json:"finished_at,omitempty"`
+	FinishedAt        *time.Time `json:"finished_at,omitempty"`
+	TotalTrafficBytes int64      `json:"total_traffic_bytes"`
 }
 
 // NodeResult represents a single node's check result for the API response.
@@ -78,7 +79,8 @@ type NodeResult struct {
 	Gemini    bool   `json:"gemini"`
 	Grok      bool   `json:"grok"`
 	Disney    bool   `json:"disney"`
-	TikTok    bool   `json:"tiktok"`
+	TikTok       bool  `json:"tiktok"`
+	TrafficBytes int64 `json:"traffic_bytes"`
 }
 
 // ResultsResponse is returned by GET /check/:subscriptionID/results.
@@ -97,7 +99,8 @@ type JobSummary struct {
 	SpeedTest      bool       `json:"speed_test"`
 	MediaApps      []string   `json:"media_apps"`
 	CreatedAt      time.Time  `json:"created_at"`
-	FinishedAt     *time.Time `json:"finished_at,omitempty"`
+	FinishedAt        *time.Time `json:"finished_at,omitempty"`
+	TotalTrafficBytes int64      `json:"total_traffic_bytes"`
 }
 
 // ListJobsResponse is returned by GET /check/:subscriptionID/jobs.
@@ -457,7 +460,7 @@ func ListJobs(ctx context.Context, subscriptionID string, p *ListJobsParams) (*L
 
 	rows, err := db.Query(ctx, `
 		SELECT id, subscription_id, status, total, available,
-		       COALESCE(options_json, '{}'), created_at, finished_at
+		       COALESCE(options_json, '{}'), total_traffic_bytes, created_at, finished_at
 		FROM check_jobs
 		WHERE subscription_id=$1 AND user_id=$2
 		ORDER BY created_at DESC
@@ -473,7 +476,7 @@ func ListJobs(ctx context.Context, subscriptionID string, p *ListJobsParams) (*L
 		var j JobSummary
 		var optsJSON []byte
 		if err := rows.Scan(&j.ID, &j.SubscriptionID, &j.Status, &j.Total, &j.Available,
-			&optsJSON, &j.CreatedAt, &j.FinishedAt); err != nil {
+			&optsJSON, &j.TotalTrafficBytes, &j.CreatedAt, &j.FinishedAt); err != nil {
 			return nil, errs.B().Code(errs.Internal).Msg("scan error").Err()
 		}
 		var opts CheckOptions
@@ -499,12 +502,12 @@ func GetResults(ctx context.Context, subscriptionID string, p *GetResultsParams)
 	if p != nil && p.JobID != "" {
 		// Specific job requested — verify ownership.
 		err := db.QueryRow(ctx, `
-			SELECT id, subscription_id, status, total, progress, created_at, finished_at
+			SELECT id, subscription_id, status, total, progress, total_traffic_bytes, created_at, finished_at
 			FROM check_jobs
 			WHERE id=$1 AND subscription_id=$2 AND user_id=$3
 		`, p.JobID, subscriptionID, claims.UserID).Scan(
 			&job.ID, &job.SubscriptionID, &job.Status,
-			&job.Total, &job.Progress, &job.CreatedAt, &job.FinishedAt,
+			&job.Total, &job.Progress, &job.TotalTrafficBytes, &job.CreatedAt, &job.FinishedAt,
 		)
 		if err != nil {
 			return nil, errs.B().Code(errs.NotFound).Msg("job not found").Err()
@@ -512,13 +515,13 @@ func GetResults(ctx context.Context, subscriptionID string, p *GetResultsParams)
 	} else {
 		// Latest completed job.
 		err := db.QueryRow(ctx, `
-			SELECT id, subscription_id, status, total, progress, created_at, finished_at
+			SELECT id, subscription_id, status, total, progress, total_traffic_bytes, created_at, finished_at
 			FROM check_jobs
 			WHERE subscription_id=$1 AND user_id=$2 AND status='completed'
 			ORDER BY created_at DESC LIMIT 1
 		`, subscriptionID, claims.UserID).Scan(
 			&job.ID, &job.SubscriptionID, &job.Status,
-			&job.Total, &job.Progress, &job.CreatedAt, &job.FinishedAt,
+			&job.Total, &job.Progress, &job.TotalTrafficBytes, &job.CreatedAt, &job.FinishedAt,
 		)
 		if err != nil {
 			return nil, errs.B().Code(errs.NotFound).Msg("no check jobs found").Err()
@@ -545,7 +548,8 @@ func GetResults(ctx context.Context, subscriptionID string, p *GetResultsParams)
 			            ), 0)
 			       END AS speed_kbps,
 			       cr.country, cr.ip,
-			       cr.netflix, cr.youtube, cr.youtube_premium, cr.openai, cr.claude, cr.gemini, cr.grok, cr.disney, cr.tiktok
+			       cr.netflix, cr.youtube, cr.youtube_premium, cr.openai, cr.claude, cr.gemini, cr.grok, cr.disney, cr.tiktok,
+			       cr.traffic_bytes
 			FROM check_results cr
 			LEFT JOIN nodes n ON n.id = cr.node_id
 			WHERE cr.job_id = $1
@@ -565,6 +569,7 @@ func GetResults(ctx context.Context, subscriptionID string, p *GetResultsParams)
 			&r.NodeID, &r.NodeName, &r.NodeType,
 			&r.Alive, &r.LatencyMs, &r.SpeedKbps, &r.Country, &r.IP,
 			&r.Netflix, &r.YouTube, &r.YouTubePremium, &r.OpenAI, &r.Claude, &r.Gemini, &r.Grok, &r.Disney, &r.TikTok,
+			&r.TrafficBytes,
 		); err != nil {
 			return nil, errs.B().Code(errs.Internal).Msg("scan failed").Err()
 		}
@@ -692,6 +697,7 @@ func runJob(parentCtx context.Context, jobID, subscriptionID, userID string) {
 	taskCh := make(chan task, checkConcurrency)
 
 	var processedCount atomic.Int64
+	var totalTrafficBytes atomic.Int64
 	var wg sync.WaitGroup
 	for i := 0; i < checkConcurrency; i++ {
 		wg.Add(1)
@@ -710,14 +716,16 @@ func runJob(parentCtx context.Context, jobID, subscriptionID, userID string) {
 				db.Exec(context.Background(), `
 					INSERT INTO check_results
 					  (id, job_id, node_id, node_name, node_type, node_config, checked_at, alive, latency_ms, speed_kbps, country, ip,
-					   netflix, youtube, youtube_premium, openai, claude, gemini, grok, disney, tiktok)
-					VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
+					   netflix, youtube, youtube_premium, openai, claude, gemini, grok, disney, tiktok, traffic_bytes)
+					VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
 				`, resultID, jobID, t.nodeID, nodeName, nodeType, nodeConfigJSON, time.Now(),
 					res.Alive, res.LatencyMs, res.SpeedKbps, res.Country, res.IP,
 					res.Netflix, res.YouTube, res.YouTubePremium, res.OpenAI,
 					res.Claude, res.Gemini, res.Grok, res.Disney, res.TikTok,
+					res.TrafficBytes,
 				)
 
+				totalTrafficBytes.Add(res.TrafficBytes)
 				n := processedCount.Add(1)
 				db.Exec(context.Background(), `UPDATE check_jobs SET progress=$2 WHERE id=$1`, jobID, n)
 				broadcastProgress(jobID, progressUpdate{
@@ -749,8 +757,8 @@ func runJob(parentCtx context.Context, jobID, subscriptionID, userID string) {
 	var available int
 	db.QueryRow(context.Background(), `SELECT COUNT(*) FROM check_results WHERE job_id=$1 AND alive=true`, jobID).Scan(&available)
 
-	db.Exec(context.Background(), `UPDATE check_jobs SET status='completed', finished_at=$2, available=$3 WHERE id=$1`,
-		jobID, time.Now(), available)
+	db.Exec(context.Background(), `UPDATE check_jobs SET status='completed', finished_at=$2, available=$3, total_traffic_bytes=$4 WHERE id=$1`,
+		jobID, time.Now(), available, totalTrafficBytes.Load())
 
 	// Publish completion event for notify service
 	JobCompletedTopic.Publish(context.Background(), &JobCompletedEvent{
