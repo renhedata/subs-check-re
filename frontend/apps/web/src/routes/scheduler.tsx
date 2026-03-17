@@ -12,7 +12,11 @@ import { ChevronDown, ChevronRight, Clock, History, Loader2, Pencil, Plus, Trash
 import { useState } from "react";
 import { toast } from "sonner";
 
-import { ApiError, api, type CheckJob, type ScheduledJob, type Subscription } from "@/lib/api";
+import { client, isApiError } from "@/lib/client";
+import type { checker, scheduler, subscription } from "@/lib/client.gen";
+type CheckJob = checker.JobSummary;
+type ScheduledJob = scheduler.ScheduledJob;
+type Subscription = subscription.Subscription;
 
 const MEDIA_APPS = [
 	"openai",
@@ -59,17 +63,17 @@ function SchedulerPage() {
 
 	const jobsQuery = useQuery({
 		queryKey: ["scheduler"],
-		queryFn: () => api.get<{ jobs: ScheduledJob[] }>("/scheduler"),
+		queryFn: () => client.scheduler.List(),
 	});
 
 	const subsQuery = useQuery({
 		queryKey: ["subscriptions"],
-		queryFn: () => api.get<{ subscriptions: Subscription[] }>("/subscriptions"),
+		queryFn: () => client.subscription.List(),
 	});
 
 	const createMut = useMutation({
 		mutationFn: (params: { subscription_id: string; cron_expr: string; speed_test: boolean; media_apps: string[] }) =>
-			api.post("/scheduler", {
+			client.scheduler.Create({
 				subscription_id: params.subscription_id,
 				cron_expr: params.cron_expr,
 				options: { speed_test: params.speed_test, media_apps: params.media_apps },
@@ -83,16 +87,16 @@ function SchedulerPage() {
 			setMediaApps([...MEDIA_APPS]);
 			toast.success("Schedule created");
 		},
-		onError: (e) => toast.error(e instanceof ApiError ? e.message : "Failed"),
+		onError: (e) => toast.error(isApiError(e) ? e.message : "Failed"),
 	});
 
 	const deleteMut = useMutation({
-		mutationFn: (id: string) => api.delete(`/scheduler/${id}`),
+		mutationFn: (id: string) => client.scheduler.Delete(id),
 		onSuccess: () => {
 			qc.invalidateQueries({ queryKey: ["scheduler"] });
 			toast.success("Removed");
 		},
-		onError: (e) => toast.error(e instanceof ApiError ? e.message : "Failed"),
+		onError: (e) => toast.error(isApiError(e) ? e.message : "Failed"),
 	});
 
 	const jobs = jobsQuery.data?.jobs ?? [];
@@ -359,9 +363,7 @@ function JobRow({
 	const historyQuery = useQuery({
 		queryKey: ["scheduler-history", job.subscription_id],
 		queryFn: () =>
-			api.get<{ jobs: CheckJob[]; total: number }>(
-				`/check/${job.subscription_id}/jobs?limit=8`,
-			),
+			client.checker.ListJobs(job.subscription_id, { Limit: 8, Offset: 0 }),
 		enabled: showHistory,
 		staleTime: 15_000,
 	});
