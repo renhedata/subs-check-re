@@ -6,7 +6,10 @@ import { createFileRoute, redirect } from "@tanstack/react-router";
 import { CheckCircle, Clock, FileText, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
-import { api, type LocalUnlockResult, type Subscription } from "@/lib/api";
+import { client } from "@/lib/client";
+import type { checker, subscription } from "@/lib/client.gen";
+type LocalUnlockResult = checker.LocalUnlockResult;
+type Subscription = subscription.Subscription;
 import { isAuthenticated } from "@/lib/auth";
 
 export const Route = createFileRoute("/")({
@@ -69,12 +72,12 @@ function DashboardPage() {
 
 	const { data, isLoading } = useQuery({
 		queryKey: ["subscriptions"],
-		queryFn: () => api.get<{ subscriptions: Subscription[] }>("/subscriptions"),
+		queryFn: () => client.subscription.List(),
 	});
 
 	const apiKeyQuery = useQuery({
 		queryKey: ["api-key"],
-		queryFn: () => api.get<{ api_key: string }>("/settings/api-key"),
+		queryFn: () => client.settings.GetAPIKey(),
 		staleTime: Number.POSITIVE_INFINITY,
 	});
 
@@ -83,7 +86,7 @@ function DashboardPage() {
 
 	const regenerateMut = useMutation({
 		mutationFn: () =>
-			api.post<{ api_key: string }>("/settings/api-key/regenerate"),
+			client.settings.RegenerateAPIKey(),
 		onSuccess: () => {
 			qc.invalidateQueries({ queryKey: ["api-key"] });
 			toast.success("API key regenerated");
@@ -269,7 +272,7 @@ const BADGE_STYLES = {
 function NetworkUnlockPanel() {
 	const { data, isLoading, isFetching, refetch } = useQuery({
 		queryKey: ["local-unlock"],
-		queryFn: () => api.get<LocalUnlockResult>("/network-unlock"),
+		queryFn: () => client.checker.GetLocalUnlock(),
 		staleTime: 5 * 60 * 1000,
 		retry: false,
 	});
