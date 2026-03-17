@@ -57,14 +57,31 @@ func (r *countingReader) Read(p []byte) (int, error) {
 }
 ```
 
-In `newProxyContext()` (or wherever the `http.Transport` is constructed), wrap it:
+**Wiring into `proxyClient`:** Embed `*countingTransport` in the `proxyClient` struct so `checkNode()` can read the counter after all requests complete:
+
+```go
+type proxyClient struct {
+    *http.Client
+    counter *countingTransport  // NEW: exposes accumulated bytes
+    // ... existing fields
+}
+```
+
+In `newProxyContext()`, wrap the existing transport before assigning it to `http.Client`:
 
 ```go
 ct := &countingTransport{base: transport}
-// use ct as the RoundTripper for all requests on this node
+pc := &proxyClient{
+    Client:  &http.Client{Transport: ct, ...},
+    counter: ct,
+}
 ```
 
-In `checkNode()`, after all requests complete, read `ct.bytes` and include it in the returned `nodeCheckResult`.
+In `checkNode()`, after all requests complete, read `pc.counter.bytes`:
+
+```go
+result.TrafficBytes = atomic.LoadInt64(&pc.counter.bytes)
+```
 
 Add field to `nodeCheckResult`:
 ```go
@@ -83,34 +100,51 @@ TrafficBytes int64 `json:"traffic_bytes"`
 TotalTrafficBytes int64 `json:"total_traffic_bytes"`
 ```
 
-When inserting each `check_result`, write `traffic_bytes`. After each node result, atomically add to a job-level counter. Write `total_traffic_bytes` to `check_jobs` on job completion (alongside the existing `available` count update).
+**Job-level accumulation:** Mirror the existing `atomic.Int64` pattern used for `processedCount` — add a `totalTrafficBytes atomic.Int64` in `runJob()`. After each node result is written, add `result.TrafficBytes` to it.
+
+**Final job update:** Extend the completion `UPDATE check_jobs` statement to include `total_traffic_bytes`:
+
+```go
+db.Exec(ctx,
+    `UPDATE check_jobs SET status='completed', finished_at=$2, available=$3, total_traffic_bytes=$4 WHERE id=$1`,
+    jobID, finishedAt, available, totalTrafficBytes.Load(),
+)
+```
+
+**`GetResults()` query update:** The CTE SELECT and corresponding `rows.Scan()` must include `cr.traffic_bytes` for the new `NodeResult.TrafficBytes` field. Add `cr.traffic_bytes` to the column list and `&r.TrafficBytes` to the Scan call.
+
+**`ListJobs()` query update:** The SELECT and Scan for `check_jobs` must include `total_traffic_bytes`. Add the column to the SELECT list and `&j.TotalTrafficBytes` to the Scan call.
 
 ## Database Schema
 
-### Migration 10: `check_results` per-node traffic
+### Migration 12: `check_results` per-node traffic
 
 ```sql
--- 10_add_traffic_bytes.up.sql
+-- 12_add_traffic_bytes_to_results.up.sql
 ALTER TABLE check_results ADD COLUMN traffic_bytes BIGINT NOT NULL DEFAULT 0;
+
+-- 12_add_traffic_bytes_to_results.down.sql
+ALTER TABLE check_results DROP COLUMN traffic_bytes;
 ```
 
-### Migration 11: `check_jobs` job-level total
+### Migration 13: `check_jobs` job-level total
 
 ```sql
--- 11_add_total_traffic_bytes_to_jobs.up.sql
+-- 13_add_total_traffic_bytes_to_jobs.up.sql
 ALTER TABLE check_jobs ADD COLUMN total_traffic_bytes BIGINT NOT NULL DEFAULT 0;
-```
 
-Down migrations drop the respective columns.
+-- 13_add_total_traffic_bytes_to_jobs.down.sql
+ALTER TABLE check_jobs DROP COLUMN total_traffic_bytes;
+```
 
 ## Frontend Changes
 
-### `node-table.tsx`
+### `src/lib/format.ts` (new shared helper)
 
-Add a "流量" column after the speed column. Format bytes as human-readable:
+Create a shared `formatBytes` utility importable by both components:
 
 ```typescript
-function formatBytes(b: number): string {
+export function formatBytes(b: number): string {
     if (b === 0) return "—";
     if (b < 1024) return `${b} B`;
     if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`;
@@ -118,9 +152,13 @@ function formatBytes(b: number): string {
 }
 ```
 
+### `node-table.tsx`
+
+Add a "流量" column after the speed column. Import `formatBytes` from `@/lib/format` and render `formatBytes(result.traffic_bytes)`.
+
 ### `subscriptions/$id.tsx`
 
-In the job history list and/or job detail header, display the job's `total_traffic_bytes` using the same `formatBytes` helper.
+In the job history list and/or job detail header, display the job's `total_traffic_bytes` using `formatBytes` from `@/lib/format`.
 
 ## Type Naming
 
@@ -128,7 +166,7 @@ The generated client (`client.gen.ts`) will pick up the new fields automatically
 
 ## Regeneration
 
-After backend changes are deployed, regenerate the client:
+After backend changes are complete, regenerate the frontend client:
 ```bash
 encore gen client subs-check-uqti --lang=typescript --output=./frontend/apps/web/src/lib/client.gen.ts
 ```
