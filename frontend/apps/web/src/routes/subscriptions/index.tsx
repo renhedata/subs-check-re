@@ -8,7 +8,9 @@ import { Clock, Loader2, Pencil, Play, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
-import { ApiError, api, type Subscription } from "@/lib/api";
+import { client, isApiError } from "@/lib/client";
+import type { subscription } from "@/lib/client.gen";
+type Subscription = subscription.Subscription;
 
 const MEDIA_APPS = [
 	"openai",
@@ -34,17 +36,17 @@ function SubscriptionsPage() {
 
 	const { data, isLoading } = useQuery({
 		queryKey: ["subscriptions"],
-		queryFn: () => api.get<{ subscriptions: Subscription[] }>("/subscriptions"),
+		queryFn: () => client.subscription.List(),
 	});
 
 	const deleteMut = useMutation({
-		mutationFn: (id: string) => api.delete(`/subscriptions/${id}`),
+		mutationFn: (id: string) => client.subscription.Delete(id),
 		onSuccess: () => {
 			qc.invalidateQueries({ queryKey: ["subscriptions"] });
 			toast.success("Deleted");
 		},
 		onError: (e) =>
-			toast.error(e instanceof ApiError ? e.message : "Delete failed"),
+			toast.error(isApiError(e) ? e.message : "Delete failed"),
 	});
 
 	const updateMut = useMutation({
@@ -54,13 +56,13 @@ function SubscriptionsPage() {
 		}: {
 			id: string;
 			data: { name?: string; url?: string };
-		}) => api.put<Subscription>(`/subscriptions/${id}`, data),
+		}) => client.subscription.Update(id, data as subscription.UpdateParams),
 		onSuccess: () => {
 			qc.invalidateQueries({ queryKey: ["subscriptions"] });
 			toast.success("Updated");
 		},
 		onError: (e) =>
-			toast.error(e instanceof ApiError ? e.message : "Update failed"),
+			toast.error(isApiError(e) ? e.message : "Update failed"),
 	});
 
 	const triggerMut = useMutation({
@@ -70,7 +72,7 @@ function SubscriptionsPage() {
 		}: {
 			id: string;
 			opts: { speed_test: boolean; media_apps: string[] };
-		}) => api.post<{ job_id: string }>(`/check/${id}`, opts),
+		}) => client.checker.TriggerCheck(id, opts),
 		onSuccess: (resp, { id }) => {
 			toast.success("Check started");
 			navigate({
@@ -80,11 +82,11 @@ function SubscriptionsPage() {
 			});
 		},
 		onError: (e) =>
-			toast.error(e instanceof ApiError ? e.message : "Failed to start check"),
+			toast.error(isApiError(e) ? e.message : "Failed to start check"),
 	});
 
 	const createMut = useMutation({
-		mutationFn: () => api.post<Subscription>("/subscriptions", { name, url }),
+		mutationFn: () => client.subscription.Create({ name, url, cron_expr: "" }),
 		onSuccess: () => {
 			qc.invalidateQueries({ queryKey: ["subscriptions"] });
 			setName("");
@@ -93,7 +95,7 @@ function SubscriptionsPage() {
 			toast.success("Subscription added");
 		},
 		onError: (e) =>
-			toast.error(e instanceof ApiError ? e.message : "Failed to add"),
+			toast.error(isApiError(e) ? e.message : "Failed to add"),
 	});
 
 	const subs = data?.subscriptions ?? [];
