@@ -13,7 +13,9 @@ import { CheckCircle2, FlaskConical, Loader2, Pencil, Plus, Trash2, XCircle } fr
 import { useState } from "react";
 import { toast } from "sonner";
 
-import { ApiError, api, type NotifyChannel } from "@/lib/api";
+import { client, isApiError } from "@/lib/client";
+import type { JSONValue, notify } from "@/lib/client.gen";
+type NotifyChannel = notify.Channel;
 
 export const Route = createFileRoute("/settings/notify")({
 	component: NotifyPage,
@@ -33,16 +35,16 @@ function NotifyPage() {
 
 	const channelsQuery = useQuery({
 		queryKey: ["notify-channels"],
-		queryFn: () => api.get<{ channels: NotifyChannel[] }>("/notify/channels"),
+		queryFn: () => client.notify.ListChannels(),
 	});
 
 	const createMut = useMutation({
 		mutationFn: () => {
-			const config =
+			const config: JSONValue =
 				type === "webhook"
 					? { url: webhookUrl, method: "POST" }
 					: { bot_token: botToken, chat_id: chatId };
-			return api.post("/notify/channels", { name, type, config });
+			return client.notify.CreateChannel({ name, type, config });
 		},
 		onSuccess: () => {
 			qc.invalidateQueries({ queryKey: ["notify-channels"] });
@@ -53,11 +55,11 @@ function NotifyPage() {
 			setChatId("");
 			toast.success("Channel added");
 		},
-		onError: (e) => toast.error(e instanceof ApiError ? e.message : "Failed"),
+		onError: (e) => toast.error(isApiError(e) ? e.message : "Failed"),
 	});
 
 	const deleteMut = useMutation({
-		mutationFn: (id: string) => api.delete(`/notify/channels/${id}`),
+		mutationFn: (id: string) => client.notify.DeleteChannel(id),
 		onSuccess: () => {
 			qc.invalidateQueries({ queryKey: ["notify-channels"] });
 			toast.success("Removed");
@@ -70,20 +72,19 @@ function NotifyPage() {
 			data,
 		}: {
 			id: string;
-			data: { name?: string; enabled?: boolean };
-		}) => api.put(`/notify/channels/${id}`, data),
+			data: notify.UpdateChannelParams;
+		}) => client.notify.UpdateChannel(id, data),
 		onSuccess: () => {
 			qc.invalidateQueries({ queryKey: ["notify-channels"] });
 			setEditingId(null);
 			toast.success("Updated");
 		},
 		onError: (e) =>
-			toast.error(e instanceof ApiError ? e.message : "Update failed"),
+			toast.error(isApiError(e) ? e.message : "Update failed"),
 	});
 
 	const testMut = useMutation({
-		mutationFn: (id: string) =>
-			api.post<{ ok: boolean; error?: string }>(`/notify/channels/${id}/test`),
+		mutationFn: (id: string) => client.notify.TestChannel(id),
 		onSuccess: (resp) => {
 			if (resp.ok) {
 				toast.success("Test notification sent successfully");
@@ -92,7 +93,7 @@ function NotifyPage() {
 			}
 		},
 		onError: (e) =>
-			toast.error(e instanceof ApiError ? e.message : "Test failed"),
+			toast.error(isApiError(e) ? e.message : "Test failed"),
 	});
 
 	const channels = channelsQuery.data?.channels ?? [];
@@ -226,7 +227,7 @@ function NotifyPage() {
 						onSaveEdit={() =>
 							updateMut.mutate({
 								id: ch.id,
-								data: { name: editName, enabled: editEnabled },
+								data: { name: editName, enabled: editEnabled, config: ch.config },
 							})
 						}
 						onDelete={() => deleteMut.mutate(ch.id)}
