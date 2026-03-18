@@ -9,7 +9,7 @@ COPY packages/ui/package.json ./packages/ui/
 COPY packages/env/package.json ./packages/env/
 COPY packages/config/package.json ./packages/config/
 
-RUN bun install --frozen-lockfile
+RUN bun install
 
 # Copy source
 COPY . .
@@ -17,11 +17,8 @@ COPY . .
 # Build
 RUN bun run build
 
-# Production image
-FROM oven/bun:1.3.10-alpine
-
-WORKDIR /app
-COPY --from=builder /app/apps/web/dist ./dist
-
+# Production image - nginx serves static files directly
+FROM nginx:alpine
+COPY --from=builder /app/apps/web/dist /usr/share/nginx/html
+RUN printf 'server {\n    listen 3000;\n    root /usr/share/nginx/html;\n    index index.html;\n    location / {\n        try_files $uri $uri/ /index.html;\n    }\n}\n' > /etc/nginx/conf.d/default.conf
 EXPOSE 3000
-CMD ["bunx", "serve", "dist", "-p", "3000"]
