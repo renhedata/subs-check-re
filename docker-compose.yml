@@ -1,6 +1,8 @@
 services:
   migrator:
-    image: alpine:3.19
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.migrate
     command: ["sh", "/deploy/migrate.sh"]
     environment:
       DB_HOST: 10.0.10.114:5432
