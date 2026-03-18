@@ -1,0 +1,6 @@
+CREATE DATABASE auth;
+CREATE DATABASE subscription;
+CREATE DATABASE checker;
+CREATE DATABASE scheduler;
+CREATE DATABASE notify;
+CREATE DATABASE settings;

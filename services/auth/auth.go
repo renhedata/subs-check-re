@@ -3,10 +3,12 @@ package auth
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	encauth "encore.dev/beta/auth"
 	"encore.dev/beta/errs"
+	"encore.dev/rlog"
 	"encore.dev/storage/sqldb"
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
@@ -40,7 +42,11 @@ func Register(ctx context.Context, p *RegisterParams) (*RegisterResponse, error)
 		VALUES ($1, $2, $3, $4)
 	`, id, p.Username, string(hash), time.Now())
 	if err != nil {
-		return nil, errs.B().Code(errs.AlreadyExists).Msg("username already taken").Err()
+		rlog.Error("register db error", "err", err)
+		if strings.Contains(err.Error(), "unique") || strings.Contains(err.Error(), "duplicate") {
+			return nil, errs.B().Code(errs.AlreadyExists).Msg("username already taken").Err()
+		}
+		return nil, errs.B().Code(errs.Internal).Msg("failed to create user").Err()
 	}
 	return &RegisterResponse{UserID: id}, nil
 }

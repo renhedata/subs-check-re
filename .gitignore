@@ -51,6 +51,9 @@ coverage
 .env.*
 !.env.example
 
+# Local infra config (contains plaintext credentials)
+infra.local.json
+
 # ===== macOS =====
 .DS_Store
 .DS_Store?

@@ -18,6 +18,10 @@ encore run          # Start backend dev server (port 4000), auto-manages Postgre
 encore db migrate   # Run database migrations
 encore db shell     # Open psql shell to local dev DB
 encore gen client subs-check-uqti --lang=typescript --output=./frontend/apps/web/src/lib/client.gen.ts  # Regenerate frontend API client
+
+# Build Docker images with external DB config (infra config embedded at build time, $env refs resolved at runtime)
+encore build docker --config deploy/infra.config.json subs-check:latest   # Production image (uses $env DB_HOST etc.)
+encore build docker --config infra.local.json subs-check:test             # Test image (connects to 10.0.10.114)
 ```
 
 ### Frontend (run from `frontend/`)

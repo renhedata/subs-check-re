@@ -1,0 +1,61 @@
+{
+  "$schema": "https://encore.dev/schemas/infra.schema.json",
+  "metadata": {
+    "app_id": "subs-check-uqti",
+    "env_name": "production",
+    "env_type": "production",
+    "cloud": "local",
+    "base_url": "https://sub.rhzy.ai/api"
+  },
+  "sql_servers": [
+    {
+      "host": "10.0.10.114:5432",
+      "tls_config": { "disabled": true },
+      "databases": {
+        "auth": {
+          "username": { "$env": "DB_USER" },
+          "password": { "$env": "DB_PASSWORD" }
+        },
+        "subscription": {
+          "username": { "$env": "DB_USER" },
+          "password": { "$env": "DB_PASSWORD" }
+        },
+        "checker": {
+          "username": { "$env": "DB_USER" },
+          "password": { "$env": "DB_PASSWORD" }
+        },
+        "scheduler": {
+          "username": { "$env": "DB_USER" },
+          "password": { "$env": "DB_PASSWORD" }
+        },
+        "notify": {
+          "username": { "$env": "DB_USER" },
+          "password": { "$env": "DB_PASSWORD" }
+        },
+        "settings": {
+          "username": { "$env": "DB_USER" },
+          "password": { "$env": "DB_PASSWORD" }
+        }
+      }
+    }
+  ],
+  "secrets": {
+    "JWTSecret": { "$env": "JWT_SECRET" }
+  },
+  "pubsub": [
+    {
+      "type": "nsq",
+      "hosts": "nsq:4150",
+      "topics": {
+        "job-completed": {
+          "name": "job-completed",
+          "subscriptions": {
+            "notify-on-job-completed": {
+              "name": "notify-on-job-completed"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

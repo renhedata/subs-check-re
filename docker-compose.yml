@@ -1,0 +1,42 @@
+services:
+  migrator:
+    image: alpine:3.19
+    command: ["sh", "/deploy/migrate.sh"]
+    environment:
+      DB_HOST: 10.0.10.114:5432
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - ./deploy:/deploy
+      - ./services:/services
+
+  nsq:
+    image: nsqio/nsq:latest
+    command: /nsqd
+    restart: unless-stopped
+
+  backend:
+    image: ${BACKEND_IMAGE:-asharca/subs-check:latest}
+    ports:
+      - 4000:8080
+    environment:
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      BASE_URL: ${BASE_URL}
+    volumes:
+      - ./deploy/infra.config.json:/etc/encore/infra-config.json
+    depends_on:
+      migrator:
+        condition: service_completed_successfully
+      nsq:
+        condition: service_started
+    restart: unless-stopped
+
+  frontend:
+    ports:
+      - 3000:3000
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
