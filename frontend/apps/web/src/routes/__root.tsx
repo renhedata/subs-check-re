@@ -4,6 +4,8 @@ import {
 	createRootRouteWithContext,
 	HeadContent,
 	Outlet,
+	redirect,
+	useRouterState,
 } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 
@@ -22,6 +24,16 @@ const queryClient = new QueryClient({
 });
 
 export const Route = createRootRouteWithContext<RouterAppContext>()({
+	beforeLoad: ({ location }) => {
+		const authed = isAuthenticated();
+		const isLoginPage = location.pathname === "/login";
+		if (!authed && !isLoginPage) {
+			throw redirect({ to: "/login" });
+		}
+		if (authed && isLoginPage) {
+			throw redirect({ to: "/" });
+		}
+	},
 	component: RootComponent,
 	head: () => ({
 		meta: [
@@ -33,7 +45,10 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
 });
 
 function RootComponent() {
-	const authed = isAuthenticated();
+	// useRouterState subscribes this component to navigation changes,
+	// ensuring isAuthenticated() is re-evaluated after login/logout
+	const { location } = useRouterState();
+	const authed = isAuthenticated() && location.pathname !== "/login";
 
 	return (
 		<QueryClientProvider client={queryClient}>

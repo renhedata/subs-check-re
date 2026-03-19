@@ -35,21 +35,36 @@ interface SSEProgress {
 }
 
 function latencyColor(ms: number): string {
-	if (ms < 50) return "#3fb950";
-	if (ms <= 200) return "#d29922";
-	return "#f85149";
+	if (ms < 50) return "var(--color-success)";
+	if (ms <= 200) return "var(--color-warning)";
+	return "var(--destructive)";
 }
 
 type JobStatus = "queued" | "running" | "completed" | "failed";
 
 function JobStatusBadge({ status }: { status: string }) {
 	const map: Record<JobStatus, { bg: string; color: string }> = {
-		queued: { bg: "#1a2a3a", color: "#58a6ff" },
-		running: { bg: "#1a2a3a", color: "#58a6ff" },
-		completed: { bg: "#1a4731", color: "#3fb950" },
-		failed: { bg: "#3d1a1a", color: "#f85149" },
+		queued: {
+			bg: "var(--color-badge-info-bg)",
+			color: "var(--color-badge-info)",
+		},
+		running: {
+			bg: "var(--color-badge-info-bg)",
+			color: "var(--color-badge-info)",
+		},
+		completed: {
+			bg: "var(--color-badge-success-bg)",
+			color: "var(--color-badge-success)",
+		},
+		failed: {
+			bg: "var(--color-badge-danger-bg)",
+			color: "var(--color-badge-danger)",
+		},
 	};
-	const s = map[status as JobStatus] ?? { bg: "#1a2a3a", color: "#8b949e" };
+	const s = map[status as JobStatus] ?? {
+		bg: "var(--color-badge-info-bg)",
+		color: "var(--muted-foreground)",
+	};
 	return (
 		<span
 			className="rounded-full px-2 py-0.5 font-medium text-[10px]"
@@ -165,10 +180,13 @@ function SubscriptionDetailPage() {
 		<div className="space-y-5">
 			{/* Header */}
 			<div>
-				<h1 className="font-semibold text-[#f0f6fc] text-lg">
+				<h1 className="font-semibold text-foreground text-lg">
 					{sub?.name || sub?.url || "Subscription Detail"}
 				</h1>
-				<p className="mt-0.5 font-mono text-xs" style={{ color: "#6e7681" }}>
+				<p
+					className="mt-0.5 font-mono text-xs"
+					style={{ color: "var(--color-dimmed)" }}
+				>
 					{id.slice(0, 8)}…
 				</p>
 			</div>
@@ -187,9 +205,11 @@ function SubscriptionDetailPage() {
 								onClick={() => setSelectedJobId(j.id)}
 								className="rounded-full border px-2.5 py-0.5 font-mono text-[11px] transition-colors"
 								style={{
-									borderColor: active ? "#58a6ff" : "#30363d",
-									color: active ? "#58a6ff" : "#6e7681",
-									background: active ? "#1a2a3a" : "transparent",
+									borderColor: active ? "var(--primary)" : "var(--border)",
+									color: active ? "var(--primary)" : "var(--color-dimmed)",
+									background: active
+										? "var(--color-badge-info-bg)"
+										: "transparent",
 								}}
 							>
 								{new Date(j.created_at).toLocaleString(undefined, {
@@ -211,26 +231,22 @@ function SubscriptionDetailPage() {
 
 			{/* Progress + live log */}
 			{progress && !progress.done && (
-				<div
-					className="space-y-2 rounded-lg border p-3"
-					style={{ background: "#0d1117", borderColor: "#30363d" }}
-				>
+				<div className="space-y-2 rounded-lg border border-border bg-background p-3">
 					{/* Header row */}
 					<div className="flex items-center justify-between">
-						<div
-							className="flex items-center gap-1.5 text-sm"
-							style={{ color: "#f0f6fc" }}
-						>
+						<div className="flex items-center gap-1.5 text-sm text-foreground">
 							<RefreshCw
 								size={13}
 								strokeWidth={1.5}
 								className="animate-spin"
-								style={{ color: "#58a6ff" }}
+								style={{ color: "var(--primary)" }}
 							/>
 							Checking nodes…
 						</div>
 						<div className="flex items-center gap-2">
-							<span className="font-mono text-xs" style={{ color: "#8b949e" }}>
+							<span
+								className="font-mono text-xs text-muted-foreground"
+							>
 								{progress.progress ?? 0} / {progress.total ?? "?"}
 							</span>
 							{jobId && (
@@ -238,8 +254,8 @@ function SubscriptionDetailPage() {
 									type="button"
 									onClick={() => cancelMut.mutate(jobId)}
 									disabled={cancelMut.isPending}
-									className="flex items-center gap-1 rounded border px-2 py-0.5 text-[11px] transition-colors hover:border-[#f85149]/60 hover:bg-[#f85149]/10 hover:text-[#f85149] disabled:opacity-50"
-									style={{ borderColor: "#30363d", color: "#6e7681" }}
+									className="flex items-center gap-1 rounded border border-border px-2 py-0.5 text-[11px] transition-colors hover:border-[#f85149]/60 hover:bg-[#f85149]/10 hover:text-[#f85149] disabled:opacity-50"
+									style={{ color: "var(--color-dimmed)" }}
 								>
 									<Square size={9} strokeWidth={2} />
 									Stop
@@ -250,14 +266,13 @@ function SubscriptionDetailPage() {
 
 					{/* Progress bar */}
 					<div
-						className="h-[3px] w-full overflow-hidden rounded-full"
-						style={{ background: "#21262d" }}
+						className="h-[3px] w-full overflow-hidden rounded-full bg-secondary"
 					>
 						<div
 							className="h-full rounded-full transition-[width] duration-300 ease-out"
 							style={{
 								width: `${progressPct}%`,
-								background: "linear-gradient(90deg, #1f6feb, #58a6ff)",
+								background: "var(--color-progress)",
 							}}
 						/>
 					</div>
@@ -275,13 +290,17 @@ function SubscriptionDetailPage() {
 								>
 									<span
 										className="flex-shrink-0"
-										style={{ color: entry.alive ? "#3fb950" : "#f85149" }}
+										style={{
+											color: entry.alive
+												? "var(--color-success)"
+												: "var(--destructive)",
+										}}
 									>
 										{entry.alive ? "✓" : "✗"}
 									</span>
 									<span
 										className="min-w-0 flex-1 truncate"
-										style={{ color: "#c9d1d9" }}
+										style={{ color: "var(--color-code)" }}
 									>
 										{entry.node_name}
 									</span>
@@ -296,7 +315,7 @@ function SubscriptionDetailPage() {
 									{entry.alive && entry.speed_kbps ? (
 										<span
 											className="flex-shrink-0"
-											style={{ color: "#58a6ff" }}
+											style={{ color: "var(--primary)" }}
 										>
 											{entry.speed_kbps >= 1024
 												? `${(entry.speed_kbps / 1024).toFixed(1)}MB/s`
@@ -315,16 +334,19 @@ function SubscriptionDetailPage() {
 			{job && (
 				<div className="flex items-center gap-3 text-sm">
 					<JobStatusBadge status={job.status} />
-					<span style={{ color: "#8b949e" }}>
+					<span className="text-muted-foreground">
 						{results.filter((r) => r.alive).length} / {job.total} alive
 					</span>
 					{job.total_traffic_bytes > 0 && (
-						<span style={{ color: "#6e7681" }}>
+						<span style={{ color: "var(--color-dimmed)" }}>
 							· {formatBytes(job.total_traffic_bytes)}
 						</span>
 					)}
 					{jobId && progress && !progress.done && (
-						<span className="text-[11px]" style={{ color: "#6e7681" }}>
+						<span
+							className="text-[11px]"
+							style={{ color: "var(--color-dimmed)" }}
+						>
 							· previous results
 						</span>
 					)}
@@ -332,16 +354,12 @@ function SubscriptionDetailPage() {
 			)}
 
 			{resultsQuery.isLoading && (
-				<p className="text-sm" style={{ color: "#8b949e" }}>
-					Loading results…
-				</p>
+				<p className="text-sm text-muted-foreground">Loading results…</p>
 			)}
 			{resultsQuery.isError && !resultsQuery.isLoading && (
 				<div className="py-12 text-center">
-					<p className="text-sm" style={{ color: "#8b949e" }}>
-						No checks run yet.
-					</p>
-					<p className="mt-1 text-xs" style={{ color: "#6e7681" }}>
+					<p className="text-sm text-muted-foreground">No checks run yet.</p>
+					<p className="mt-1 text-xs" style={{ color: "var(--color-dimmed)" }}>
 						Click Check on the subscriptions page to start a check.
 					</p>
 				</div>
@@ -367,19 +385,13 @@ function ExportLogsSection({ subscriptionId }: { subscriptionId: string }) {
 	const logs = logsQuery.data?.logs ?? [];
 
 	return (
-		<div
-			className="rounded-lg border"
-			style={{ background: "#161b22", borderColor: "#30363d" }}
-		>
+		<div className="rounded-lg border border-border bg-card">
 			<button
 				type="button"
 				onClick={() => setOpen(!open)}
 				className="flex w-full items-center justify-between px-4 py-3"
 			>
-				<div
-					className="flex items-center gap-2 text-sm"
-					style={{ color: "#8b949e" }}
-				>
+				<div className="flex items-center gap-2 text-sm text-muted-foreground">
 					<Download size={13} strokeWidth={1.5} />
 					Export requests
 				</div>
@@ -387,26 +399,26 @@ function ExportLogsSection({ subscriptionId }: { subscriptionId: string }) {
 					<ChevronDown
 						size={13}
 						strokeWidth={1.5}
-						style={{ color: "#6e7681" }}
+						style={{ color: "var(--color-dimmed)" }}
 					/>
 				) : (
 					<ChevronRight
 						size={13}
 						strokeWidth={1.5}
-						style={{ color: "#6e7681" }}
+						style={{ color: "var(--color-dimmed)" }}
 					/>
 				)}
 			</button>
 
 			{open && (
-				<div className="border-t px-4 py-3" style={{ borderColor: "#30363d" }}>
+				<div className="border-t border-border px-4 py-3">
 					{logsQuery.isLoading && (
-						<p className="text-xs" style={{ color: "#6e7681" }}>
+						<p className="text-xs" style={{ color: "var(--color-dimmed)" }}>
 							Loading…
 						</p>
 					)}
 					{!logsQuery.isLoading && logs.length === 0 && (
-						<p className="text-xs" style={{ color: "#6e7681" }}>
+						<p className="text-xs" style={{ color: "var(--color-dimmed)" }}>
 							No export requests yet.
 						</p>
 					)}
@@ -418,7 +430,7 @@ function ExportLogsSection({ subscriptionId }: { subscriptionId: string }) {
 							>
 								<span
 									className="font-mono text-[11px]"
-									style={{ color: "#c9d1d9" }}
+									style={{ color: "var(--color-code)" }}
 								>
 									{new Date(log.requested_at).toLocaleString(undefined, {
 										month: "short",
@@ -428,10 +440,7 @@ function ExportLogsSection({ subscriptionId }: { subscriptionId: string }) {
 										second: "2-digit",
 									})}
 								</span>
-								<span
-									className="font-mono text-[11px]"
-									style={{ color: "#8b949e" }}
-								>
+								<span className="font-mono text-[11px] text-muted-foreground">
 									{log.ip || "—"}
 								</span>
 							</div>

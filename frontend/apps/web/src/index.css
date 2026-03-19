@@ -1,6 +1,47 @@
 @import "@frontend/ui/globals.css";
 
-/* GitHub dark palette — overrides the shared dark vars */
+/* ── Light theme (GitHub-inspired) ─────────────────────────────────── */
+:root {
+	--background: #ffffff;
+	--foreground: #1f2328;
+	--card: #f6f8fa;
+	--card-foreground: #1f2328;
+	--popover: #ffffff;
+	--popover-foreground: #1f2328;
+	--primary: #0969da;
+	--primary-foreground: #ffffff;
+	--secondary: #eaeef2;
+	--secondary-foreground: #1f2328;
+	--muted: #eaeef2;
+	--muted-foreground: #656d76;
+	--accent: #eaeef2;
+	--accent-foreground: #1f2328;
+	--destructive: #d1242f;
+	--border: #d0d7de;
+	--input: #d0d7de;
+	--ring: #0969da;
+	--radius: 0.5rem;
+
+	/* Extended semantic tokens */
+	--color-dimmed: #6e7781;
+	--color-code: #1f2328;
+	--color-btn-success: #1f883d;
+	--color-success: #1a7f37;
+	--color-warning: #9a6700;
+	--color-badge-info-bg: #ddf4ff;
+	--color-badge-info: #0969da;
+	--color-badge-success-bg: #dafbe1;
+	--color-badge-success: #1a7f37;
+	--color-badge-danger-bg: #ffd7d9;
+	--color-badge-danger: #d1242f;
+	--color-badge-ai-bg: #dafbe1;
+	--color-badge-ai: #1a7f37;
+	--color-active-bg: rgba(9, 105, 218, 0.1);
+	--color-active-border: rgba(9, 105, 218, 0.4);
+	--color-progress: linear-gradient(90deg, #0550ae, #0969da);
+}
+
+/* ── Dark theme (GitHub-inspired) ──────────────────────────────────── */
 .dark {
 	--background: #0d1117;
 	--foreground: #f0f6fc;
@@ -21,13 +62,59 @@
 	--input: #30363d;
 	--ring: #58a6ff;
 	--radius: 0.5rem;
+
+	/* Extended semantic tokens */
+	--color-dimmed: #6e7681;
+	--color-code: #c9d1d9;
+	--color-btn-success: #238636;
+	--color-success: #3fb950;
+	--color-warning: #d29922;
+	--color-badge-info-bg: #1a2a3a;
+	--color-badge-info: #58a6ff;
+	--color-badge-success-bg: #1a4731;
+	--color-badge-success: #3fb950;
+	--color-badge-danger-bg: #3d1a1a;
+	--color-badge-danger: #f85149;
+	--color-badge-ai-bg: #1a3a1a;
+	--color-badge-ai: #3fb950;
+	--color-active-bg: rgba(31, 111, 235, 0.13);
+	--color-active-border: rgba(31, 111, 235, 0.27);
+	--color-progress: linear-gradient(90deg, #1f6feb, #58a6ff);
 }
 
 @layer base {
 	html {
+		color-scheme: light;
+	}
+	html.dark {
 		color-scheme: dark;
 	}
 	body {
-		background-color: #0d1117;
+		background-color: var(--background);
+		color: var(--foreground);
+	}
+
+	/* Ensure input text always uses theme foreground */
+	input,
+	textarea,
+	select {
+		color: var(--foreground);
+	}
+
+	/* Theme-aware checkbox/radio accent */
+	input[type="checkbox"],
+	input[type="radio"] {
+		accent-color: var(--primary);
+	}
+
+	/* Browser autofill override */
+	input:-webkit-autofill,
+	input:-webkit-autofill:hover,
+	input:-webkit-autofill:focus {
+		-webkit-text-fill-color: var(--foreground);
+		-webkit-box-shadow: 0 0 0px 1000px var(--card) inset;
+		transition:
+			background-color 600000s 0s,
+			color 600000s 0s;
 	}
 }

@@ -54,9 +54,9 @@ function cronToLabel(cron: string): string {
 }
 
 function statusColor(status: CheckJob["status"]): string {
-	if (status === "completed") return "#3fb950";
-	if (status === "failed") return "#f85149";
-	return "#58a6ff";
+	if (status === "completed") return "var(--color-success)";
+	if (status === "failed") return "var(--destructive)";
+	return "var(--primary)";
 }
 
 export const Route = createFileRoute("/scheduler")({
@@ -134,12 +134,12 @@ function SchedulerPage() {
 	return (
 		<div className="space-y-5">
 			<div className="flex items-center justify-between">
-				<h1 className="font-semibold text-[#f0f6fc] text-lg">Scheduler</h1>
+				<h1 className="font-semibold text-foreground text-lg">Scheduler</h1>
 				<button
 					type="button"
 					onClick={() => setAdding(!adding)}
 					className="flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium text-sm text-white transition-opacity hover:opacity-90"
-					style={{ background: "#238636" }}
+					style={{ background: "var(--color-btn-success)" }}
 				>
 					<Plus size={13} strokeWidth={1.5} />
 					Add Schedule
@@ -191,7 +191,7 @@ function SchedulerPage() {
 					/>
 				))}
 				{!jobsQuery.isLoading && jobs.length === 0 && (
-					<p className="py-10 text-center text-sm" style={{ color: "#8b949e" }}>
+					<p className="py-10 text-center text-sm text-muted-foreground">
 						No scheduled jobs.
 					</p>
 				)}
@@ -232,13 +232,10 @@ function ScheduleForm({
 	hideSubSelector?: boolean;
 }) {
 	return (
-		<div
-			className="space-y-4 rounded-lg border p-4"
-			style={{ background: "#161b22", borderColor: "#30363d" }}
-		>
+		<div className="space-y-4 rounded-lg border border-border bg-card p-4">
 			{!hideSubSelector && (
 				<div className="space-y-1.5">
-					<p className="text-[#8b949e] text-xs">Subscription</p>
+					<p className="text-muted-foreground text-xs">Subscription</p>
 					<Select value={subId} onValueChange={(v) => setSubId(v ?? "")}>
 						<SelectTrigger className="h-8 text-sm">
 							<SelectValue placeholder="Select subscription…" />
@@ -256,7 +253,7 @@ function ScheduleForm({
 
 			{/* Schedule presets */}
 			<div className="space-y-1.5">
-				<p className="text-[#8b949e] text-xs">Schedule</p>
+				<p className="text-muted-foreground text-xs">Schedule</p>
 				<div className="flex flex-wrap gap-2">
 					{SCHEDULE_PRESETS.map((preset) => {
 						const active = selectedCron === preset.cron;
@@ -268,9 +265,11 @@ function ScheduleForm({
 								title={preset.desc}
 								className="rounded-md border px-3 py-1 text-sm transition-colors"
 								style={{
-									borderColor: active ? "#58a6ff" : "#30363d",
-									color: active ? "#58a6ff" : "#8b949e",
-									background: active ? "#1a2a3a" : "transparent",
+									borderColor: active ? "var(--primary)" : "var(--border)",
+									color: active ? "var(--primary)" : "var(--muted-foreground)",
+									background: active
+										? "var(--color-badge-info-bg)"
+										: "transparent",
 								}}
 							>
 								{preset.label}
@@ -279,7 +278,7 @@ function ScheduleForm({
 					})}
 				</div>
 				{selectedCron && (
-					<p className="text-[11px]" style={{ color: "#6e7681" }}>
+					<p className="text-[11px]" style={{ color: "var(--color-dimmed)" }}>
 						{SCHEDULE_PRESETS.find((p) => p.cron === selectedCron)?.desc}
 					</p>
 				)}
@@ -287,18 +286,14 @@ function ScheduleForm({
 
 			{/* Check options */}
 			<div className="space-y-2">
-				<p className="text-[#8b949e] text-xs">Check options</p>
+				<p className="text-muted-foreground text-xs">Check options</p>
 				<label className="flex cursor-pointer select-none items-center gap-2">
 					<input
 						type="checkbox"
 						checked={speedTest}
 						onChange={(e) => setSpeedTest(e.target.checked)}
-						className="accent-[#58a6ff]"
 					/>
-					<span
-						className="flex items-center gap-1 text-xs"
-						style={{ color: "#8b949e" }}
-					>
+					<span className="flex items-center gap-1 text-xs text-muted-foreground">
 						<Zap size={11} strokeWidth={1.5} />
 						Speed test
 					</span>
@@ -313,12 +308,8 @@ function ScheduleForm({
 								type="checkbox"
 								checked={mediaApps.includes(app)}
 								onChange={() => toggleApp(app)}
-								className="accent-[#58a6ff]"
 							/>
-							<span
-								className="text-[11px] uppercase"
-								style={{ color: "#8b949e" }}
-							>
+							<span className="text-[11px] uppercase text-muted-foreground">
 								{app}
 							</span>
 						</label>
@@ -331,7 +322,7 @@ function ScheduleForm({
 					size="sm"
 					onClick={onSave}
 					disabled={(!hideSubSelector && !subId) || !selectedCron || isPending}
-					style={{ background: "#238636", color: "#fff" }}
+					style={{ background: "var(--color-btn-success)", color: "#fff" }}
 					className="border-0"
 				>
 					{isPending ? <Loader2 size={13} className="animate-spin" /> : "Save"}
@@ -388,23 +379,24 @@ function JobRow({
 	});
 
 	return (
-		<div
-			className="rounded-lg border"
-			style={{ background: "#161b22", borderColor: "#30363d" }}
-		>
+		<div className="rounded-lg border border-border bg-card">
 			{/* Main row */}
 			<div className="flex items-center gap-3 px-4 py-3">
-				<Clock size={13} strokeWidth={1.5} style={{ color: "#8b949e" }} />
+				<Clock
+					size={13}
+					strokeWidth={1.5}
+					className="text-muted-foreground"
+				/>
 				<div className="min-w-0 flex-1">
 					<Link
 						to="/subscriptions/$id"
 						params={{ id: job.subscription_id }}
 						className="font-medium text-sm hover:underline"
-						style={{ color: "#58a6ff" }}
+						style={{ color: "var(--primary)" }}
 					>
 						{subName}
 					</Link>
-					<p className="mt-0.5 text-xs" style={{ color: "#8b949e" }}>
+					<p className="mt-0.5 text-xs text-muted-foreground">
 						{cronToLabel(job.cron_expr)}
 					</p>
 				</div>
@@ -416,7 +408,9 @@ function JobRow({
 							setShowEdit(false);
 						}}
 						className="flex items-center gap-1 rounded-md p-1.5 text-xs transition-colors hover:bg-white/5"
-						style={{ color: showHistory ? "#58a6ff" : "#6e7681" }}
+						style={{
+							color: showHistory ? "var(--primary)" : "var(--color-dimmed)",
+						}}
 						title="Execution history"
 					>
 						<History size={13} strokeWidth={1.5} />
@@ -431,7 +425,9 @@ function JobRow({
 							setShowHistory(false);
 						}}
 						className="rounded-md p-1.5 transition-colors hover:bg-white/5"
-						style={{ color: showEdit ? "#58a6ff" : "#6e7681" }}
+						style={{
+							color: showEdit ? "var(--primary)" : "var(--color-dimmed)",
+						}}
 						title="Edit schedule"
 					>
 						<Pencil size={13} strokeWidth={1.5} />
@@ -441,7 +437,7 @@ function JobRow({
 						onClick={onDelete}
 						disabled={deleting}
 						className="rounded-md p-1.5 transition-colors hover:bg-[#f85149]/10 hover:text-[#f85149] disabled:opacity-50"
-						style={{ color: "#6e7681" }}
+						style={{ color: "var(--color-dimmed)" }}
 					>
 						<Trash2 size={13} strokeWidth={1.5} />
 					</button>
@@ -453,7 +449,10 @@ function JobRow({
 				{job.speed_test && (
 					<span
 						className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px]"
-						style={{ background: "#1a2a3a", color: "#58a6ff" }}
+						style={{
+							background: "var(--color-badge-info-bg)",
+							color: "var(--color-badge-info)",
+						}}
 					>
 						<Zap size={9} strokeWidth={2} />
 						Speed
@@ -463,7 +462,10 @@ function JobRow({
 					<span
 						key={app}
 						className="rounded px-1.5 py-0.5 text-[10px] uppercase"
-						style={{ background: "#21262d", color: "#8b949e" }}
+						style={{
+							background: "var(--secondary)",
+							color: "var(--muted-foreground)",
+						}}
 					>
 						{app}
 					</span>
@@ -472,7 +474,7 @@ function JobRow({
 
 			{/* Inline edit panel */}
 			{showEdit && (
-				<div className="border-t" style={{ borderColor: "#30363d" }}>
+				<div className="border-t border-border">
 					<ScheduleForm
 						subs={subs}
 						subId={job.subscription_id}
@@ -496,18 +498,23 @@ function JobRow({
 
 			{/* History panel */}
 			{showHistory && (
-				<div className="border-t px-4 py-3" style={{ borderColor: "#30363d" }}>
-					<p className="mb-2 font-medium text-xs" style={{ color: "#8b949e" }}>
+				<div className="border-t border-border px-4 py-3">
+					<p
+						className="mb-2 font-medium text-xs text-muted-foreground"
+					>
 						Recent runs
 					</p>
 					{historyQuery.isLoading && (
-						<p className="text-xs" style={{ color: "#6e7681" }}>
+						<p className="text-xs" style={{ color: "var(--color-dimmed)" }}>
 							Loading…
 						</p>
 					)}
 					{!historyQuery.isLoading &&
 						(historyQuery.data?.jobs.length ?? 0) === 0 && (
-							<p className="text-xs" style={{ color: "#6e7681" }}>
+							<p
+								className="text-xs"
+								style={{ color: "var(--color-dimmed)" }}
+							>
 								No runs yet.
 							</p>
 						)}
@@ -527,7 +534,7 @@ function JobRow({
 									/>
 									<span
 										className="font-mono text-[11px]"
-										style={{ color: "#c9d1d9" }}
+										style={{ color: "var(--color-code)" }}
 									>
 										{new Date(j.created_at).toLocaleString(undefined, {
 											month: "short",
@@ -538,13 +545,15 @@ function JobRow({
 									</span>
 								</div>
 								<div className="flex items-center gap-3">
-									<span className="text-[11px]" style={{ color: "#8b949e" }}>
+									<span
+										className="text-[11px] text-muted-foreground"
+									>
 										{j.available}/{j.total} alive
 									</span>
 									<ChevronRight
 										size={11}
 										strokeWidth={1.5}
-										style={{ color: "#6e7681" }}
+										style={{ color: "var(--color-dimmed)" }}
 									/>
 								</div>
 							</Link>

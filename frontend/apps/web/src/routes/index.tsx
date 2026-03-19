@@ -2,7 +2,7 @@
 
 import { Skeleton } from "@frontend/ui/components/skeleton";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { CheckCircle, Clock, FileText, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
@@ -11,12 +11,7 @@ import type { checker } from "@/lib/client.gen";
 
 type LocalUnlockResult = checker.LocalUnlockResult;
 
-import { isAuthenticated } from "@/lib/auth";
-
 export const Route = createFileRoute("/")({
-	beforeLoad: () => {
-		if (!isAuthenticated()) throw redirect({ to: "/login" });
-	},
 	component: DashboardPage,
 });
 
@@ -36,16 +31,10 @@ function StatCard({
 	loading: boolean;
 }) {
 	return (
-		<div
-			className="rounded-lg border p-4"
-			style={{ background: "#161b22", borderColor: "#30363d" }}
-		>
+		<div className="rounded-lg border border-border bg-card p-4">
 			<div className="mb-2 flex items-center gap-1.5">
-				<Icon size={13} strokeWidth={1.5} className="text-[#8b949e]" />
-				<span
-					className="font-medium text-[11px] uppercase tracking-[0.4px]"
-					style={{ color: "#8b949e" }}
-				>
+				<Icon size={13} strokeWidth={1.5} className="text-muted-foreground" />
+				<span className="font-medium text-[11px] uppercase tracking-[0.4px] text-muted-foreground">
 					{label}
 				</span>
 			</div>
@@ -54,15 +43,13 @@ function StatCard({
 			) : (
 				<p
 					className="font-bold text-[28px] leading-none"
-					style={{ color: valueColor ?? "#f0f6fc" }}
+					style={{ color: valueColor ?? "var(--foreground)" }}
 				>
 					{value}
 				</p>
 			)}
 			{sub && !loading && (
-				<p className="mt-1 text-[11px]" style={{ color: "#8b949e" }}>
-					{sub}
-				</p>
+				<p className="mt-1 text-[11px] text-muted-foreground">{sub}</p>
 			)}
 		</div>
 	);
@@ -100,8 +87,8 @@ function DashboardPage() {
 	return (
 		<div className="space-y-6">
 			<div>
-				<h1 className="font-semibold text-[#f0f6fc] text-lg">Dashboard</h1>
-				<p className="mt-0.5 text-sm" style={{ color: "#8b949e" }}>
+				<h1 className="font-semibold text-foreground text-lg">Dashboard</h1>
+				<p className="mt-0.5 text-sm text-muted-foreground">
 					Overview of your proxy subscriptions
 				</p>
 			</div>
@@ -117,7 +104,7 @@ function DashboardPage() {
 					label="Active"
 					icon={CheckCircle}
 					value={enabled}
-					valueColor="#3fb950"
+					valueColor="var(--color-success)"
 					sub={`of ${subs.length} total`}
 					loading={isLoading}
 				/>
@@ -135,22 +122,17 @@ function DashboardPage() {
 			{/* Export API */}
 			<div className="space-y-4">
 				<div>
-					<h2 className="font-semibold text-[#f0f6fc] text-sm">Export API</h2>
-					<p className="mt-0.5 text-xs" style={{ color: "#8b949e" }}>
+					<h2 className="font-semibold text-foreground text-sm">Export API</h2>
+					<p className="mt-0.5 text-xs text-muted-foreground">
 						Use these URLs as subscription links directly in your proxy client.
 					</p>
 				</div>
 
 				{/* API Key */}
-				<div
-					className="space-y-2 rounded-lg border p-4"
-					style={{ background: "#161b22", borderColor: "#30363d" }}
-				>
-					<p className="font-medium text-xs" style={{ color: "#8b949e" }}>
-						API Key
-					</p>
+				<div className="space-y-2 rounded-lg border border-border bg-card p-4">
+					<p className="font-medium text-xs text-muted-foreground">API Key</p>
 					<div className="flex items-center gap-2">
-						<code className="flex-1 truncate rounded bg-[#0d1117] px-3 py-1.5 font-mono text-[#f0f6fc] text-xs">
+						<code className="flex-1 truncate rounded bg-background px-3 py-1.5 font-mono text-foreground text-xs">
 							{apiKey || "—"}
 						</code>
 						<button
@@ -159,8 +141,7 @@ function DashboardPage() {
 								navigator.clipboard.writeText(apiKey);
 								toast.success("Copied");
 							}}
-							className="rounded-md border px-2.5 py-1.5 text-xs transition-colors hover:bg-white/5"
-							style={{ borderColor: "#30363d", color: "#8b949e" }}
+							className="rounded-md border border-border px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-white/5"
 						>
 							Copy
 						</button>
@@ -168,8 +149,7 @@ function DashboardPage() {
 							type="button"
 							onClick={() => regenerateMut.mutate()}
 							disabled={regenerateMut.isPending}
-							className="rounded-md border px-2.5 py-1.5 text-xs transition-colors hover:bg-white/5 disabled:opacity-50"
-							style={{ borderColor: "#30363d", color: "#8b949e" }}
+							className="rounded-md border border-border px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-white/5 disabled:opacity-50"
 						>
 							Regenerate
 						</button>
@@ -178,11 +158,8 @@ function DashboardPage() {
 
 				{/* All Subscriptions combined export */}
 				{subs.length > 0 && apiKey && (
-					<div
-						className="space-y-2 rounded-lg border p-4"
-						style={{ background: "#161b22", borderColor: "#30363d" }}
-					>
-						<p className="font-medium text-[#f0f6fc] text-sm">
+					<div className="space-y-2 rounded-lg border border-border bg-card p-4">
+						<p className="font-medium text-foreground text-sm">
 							All Subscriptions
 						</p>
 						<div className="flex flex-col gap-1.5">
@@ -190,7 +167,7 @@ function DashboardPage() {
 								const url = `${origin}/api/export/all?token=${apiKey}&target=${t}`;
 								return (
 									<div key={t} className="flex items-center gap-2">
-										<code className="flex-1 truncate rounded bg-[#0d1117] px-2 py-1 font-mono text-[#8b949e] text-[11px]">
+										<code className="flex-1 truncate rounded bg-background px-2 py-1 font-mono text-muted-foreground text-[11px]">
 											{url}
 										</code>
 										<button
@@ -199,8 +176,7 @@ function DashboardPage() {
 												navigator.clipboard.writeText(url);
 												toast.success("Copied");
 											}}
-											className="flex-shrink-0 rounded border px-2 py-1 text-[11px] hover:bg-white/5"
-											style={{ borderColor: "#30363d", color: "#6e7681" }}
+											className="flex-shrink-0 rounded border border-border px-2 py-1 text-[11px] text-muted-foreground hover:bg-white/5"
 										>
 											{t}
 										</button>
@@ -219,16 +195,15 @@ function DashboardPage() {
 							return (
 								<div
 									key={sub.id}
-									className="space-y-2 rounded-lg border p-4"
-									style={{ background: "#161b22", borderColor: "#30363d" }}
+									className="space-y-2 rounded-lg border border-border bg-card p-4"
 								>
-									<p className="font-medium text-[#f0f6fc] text-sm">
+									<p className="font-medium text-foreground text-sm">
 										{sub.name || sub.url}
 									</p>
 									<div className="flex flex-col gap-1.5">
 										{(["clash", "base64"] as const).map((t) => (
 											<div key={t} className="flex items-center gap-2">
-												<code className="flex-1 truncate rounded bg-[#0d1117] px-2 py-1 font-mono text-[#8b949e] text-[11px]">
+												<code className="flex-1 truncate rounded bg-background px-2 py-1 font-mono text-muted-foreground text-[11px]">
 													{base}&target={t}
 												</code>
 												<button
@@ -239,8 +214,7 @@ function DashboardPage() {
 														);
 														toast.success("Copied");
 													}}
-													className="flex-shrink-0 rounded border px-2 py-1 text-[11px] hover:bg-white/5"
-													style={{ borderColor: "#30363d", color: "#6e7681" }}
+													className="flex-shrink-0 rounded border border-border px-2 py-1 text-[11px] text-muted-foreground hover:bg-white/5"
 												>
 													{t}
 												</button>
@@ -254,21 +228,18 @@ function DashboardPage() {
 				)}
 
 				{/* Parameter reference */}
-				<div
-					className="rounded-lg border p-4"
-					style={{ background: "#161b22", borderColor: "#30363d" }}
-				>
-					<p className="mb-2 font-medium text-xs" style={{ color: "#8b949e" }}>
+				<div className="rounded-lg border border-border bg-card p-4">
+					<p className="mb-2 font-medium text-xs text-muted-foreground">
 						Parameters
 					</p>
-					<table className="w-full text-xs" style={{ color: "#8b949e" }}>
+					<table className="w-full text-xs text-muted-foreground">
 						<tbody>
 							<tr>
-								<td className="py-0.5 pr-4 font-mono text-[#58a6ff]">token</td>
+								<td className="py-0.5 pr-4 font-mono text-primary">token</td>
 								<td>Your API key (required)</td>
 							</tr>
 							<tr>
-								<td className="py-0.5 pr-4 font-mono text-[#58a6ff]">target</td>
+								<td className="py-0.5 pr-4 font-mono text-primary">target</td>
 								<td>
 									<code>clash</code> (default) — Clash YAML ·{" "}
 									<code>base64</code> — base64-encoded URI list
@@ -299,9 +270,27 @@ const PLATFORM_DEFS: {
 ];
 
 const BADGE_STYLES = {
-	media: { background: "#3d1a1a", color: "#f85149" },
-	ai: { background: "#1a3a1a", color: "#3fb950" },
-	other: { background: "#1a2a3a", color: "#58a6ff" },
+	media: {
+		on: {
+			background: "var(--color-badge-danger-bg)",
+			color: "var(--color-badge-danger)",
+		},
+		off: { background: "var(--secondary)", color: "var(--muted-foreground)" },
+	},
+	ai: {
+		on: {
+			background: "var(--color-badge-ai-bg)",
+			color: "var(--color-badge-ai)",
+		},
+		off: { background: "var(--secondary)", color: "var(--muted-foreground)" },
+	},
+	other: {
+		on: {
+			background: "var(--color-badge-info-bg)",
+			color: "var(--color-badge-info)",
+		},
+		off: { background: "var(--secondary)", color: "var(--muted-foreground)" },
+	},
 };
 
 function NetworkUnlockPanel() {
@@ -316,10 +305,10 @@ function NetworkUnlockPanel() {
 		<div>
 			<div className="mb-3 flex items-center justify-between">
 				<div>
-					<h2 className="font-semibold text-[#f0f6fc] text-sm">
+					<h2 className="font-semibold text-foreground text-sm">
 						Server Network Unlock
 					</h2>
-					<p className="mt-0.5 text-xs" style={{ color: "#8b949e" }}>
+					<p className="mt-0.5 text-xs text-muted-foreground">
 						Platforms accessible from this server's IP
 					</p>
 				</div>
@@ -327,8 +316,7 @@ function NetworkUnlockPanel() {
 					type="button"
 					onClick={() => refetch()}
 					disabled={isFetching}
-					className="flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs transition-colors hover:bg-white/5 disabled:opacity-50"
-					style={{ borderColor: "#30363d", color: "#8b949e" }}
+					className="flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-white/5 disabled:opacity-50"
 				>
 					<RefreshCw
 						size={11}
@@ -338,17 +326,13 @@ function NetworkUnlockPanel() {
 					Refresh
 				</button>
 			</div>
-			<div
-				className="rounded-lg border p-4"
-				style={{ background: "#161b22", borderColor: "#30363d" }}
-			>
+			<div className="rounded-lg border border-border bg-card p-4">
 				{isLoading ? (
 					<div className="flex flex-wrap gap-2">
 						{PLATFORM_DEFS.map((p) => (
 							<div
 								key={p.key}
-								className="h-6 w-10 animate-pulse rounded"
-								style={{ background: "#21262d" }}
+								className="h-6 w-10 animate-pulse rounded bg-secondary"
 							/>
 						))}
 					</div>
@@ -359,8 +343,8 @@ function NetworkUnlockPanel() {
 								const val = data[p.key];
 								const available = typeof val === "boolean" ? val : val !== "";
 								const s = available
-									? BADGE_STYLES[p.style]
-									: { background: "#21262d", color: "#484f58" };
+									? BADGE_STYLES[p.style].on
+									: BADGE_STYLES[p.style].off;
 								return (
 									<span
 										key={p.key}
@@ -373,14 +357,20 @@ function NetworkUnlockPanel() {
 							})}
 						</div>
 						{(data.ip || data.country) && (
-							<p className="font-mono text-[11px]" style={{ color: "#6e7681" }}>
+							<p
+								className="font-mono text-[11px]"
+								style={{ color: "var(--color-dimmed)" }}
+							>
 								{data.country && <span className="mr-1">{data.country}</span>}
 								{data.ip}
 							</p>
 						)}
 					</div>
 				) : (
-					<p className="text-xs" style={{ color: "#6e7681" }}>
+					<p
+						className="text-xs"
+						style={{ color: "var(--color-dimmed)" }}
+					>
 						Click Refresh to check.
 					</p>
 				)}

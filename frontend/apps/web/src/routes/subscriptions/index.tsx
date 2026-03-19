@@ -110,12 +110,12 @@ function SubscriptionsPage() {
 	return (
 		<div className="space-y-5">
 			<div className="flex items-center justify-between">
-				<h1 className="font-semibold text-[#f0f6fc] text-lg">Subscriptions</h1>
+				<h1 className="font-semibold text-foreground text-lg">Subscriptions</h1>
 				<button
 					type="button"
 					onClick={() => setAdding(!adding)}
 					className="flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium text-sm text-white transition-opacity hover:opacity-90"
-					style={{ background: "#238636" }}
+					style={{ background: "var(--color-btn-success)" }}
 				>
 					<Plus size={13} strokeWidth={1.5} />
 					Add
@@ -123,12 +123,11 @@ function SubscriptionsPage() {
 			</div>
 
 			{adding && (
-				<div
-					className="space-y-3 rounded-lg border p-4"
-					style={{ background: "#161b22", borderColor: "#30363d" }}
-				>
+				<div className="space-y-3 rounded-lg border border-border bg-card p-4">
 					<div className="space-y-1.5">
-						<Label className="text-[#8b949e] text-xs">Name (optional)</Label>
+						<Label className="text-muted-foreground text-xs">
+							Name (optional)
+						</Label>
 						<Input
 							placeholder="My Sub"
 							value={name}
@@ -137,7 +136,9 @@ function SubscriptionsPage() {
 						/>
 					</div>
 					<div className="space-y-1.5">
-						<Label className="text-[#8b949e] text-xs">Subscription URL</Label>
+						<Label className="text-muted-foreground text-xs">
+							Subscription URL
+						</Label>
 						<Input
 							placeholder="https://..."
 							value={url}
@@ -150,7 +151,7 @@ function SubscriptionsPage() {
 							size="sm"
 							onClick={() => createMut.mutate()}
 							disabled={!url || createMut.isPending}
-							style={{ background: "#238636", color: "#fff" }}
+							style={{ background: "var(--color-btn-success)", color: "#fff" }}
 							className="border-0"
 						>
 							{createMut.isPending ? (
@@ -175,8 +176,7 @@ function SubscriptionsPage() {
 					? Array.from({ length: 3 }).map((_, i) => (
 							<div
 								key={i}
-								className="rounded-lg border p-4"
-								style={{ background: "#161b22", borderColor: "#30363d" }}
+								className="rounded-lg border border-border bg-card p-4"
 							>
 								<Skeleton className="mb-2 h-4 w-48" />
 								<Skeleton className="h-3 w-72" />
@@ -193,7 +193,7 @@ function SubscriptionsPage() {
 						))}
 
 				{!isLoading && subs.length === 0 && (
-					<p className="py-10 text-center text-sm" style={{ color: "#8b949e" }}>
+					<p className="py-10 text-center text-sm text-muted-foreground">
 						No subscriptions yet. Add one above.
 					</p>
 				)}
@@ -259,10 +259,7 @@ function SubRow({
 	}
 
 	return (
-		<div
-			className="rounded-lg border"
-			style={{ background: "#161b22", borderColor: "#30363d" }}
-		>
+		<div className="rounded-lg border border-border bg-card">
 			<div className="flex items-center gap-3 px-4 py-3">
 				{/* Info — entire left section navigates to detail */}
 				<Link
@@ -273,27 +270,28 @@ function SubRow({
 					{/* Status dot */}
 					<div
 						className="h-2 w-2 flex-shrink-0 rounded-full"
-						style={{ background: sub.last_run_at ? "#3fb950" : "#30363d" }}
+						style={{
+							background: sub.last_run_at
+								? "var(--color-success)"
+								: "var(--border)",
+						}}
 					/>
 					<div className="min-w-0 flex-1">
 						<p
 							className="font-medium text-sm hover:underline"
-							style={{ color: "#58a6ff" }}
+							style={{ color: "var(--primary)" }}
 						>
 							{sub.name || sub.url}
 						</p>
 						{sub.name && (
-							<p
-								className="mt-0.5 truncate font-mono text-xs"
-								style={{ color: "#8b949e" }}
-							>
+							<p className="mt-0.5 truncate font-mono text-xs text-muted-foreground">
 								{sub.url}
 							</p>
 						)}
 						{sub.cron_expr && (
 							<p
 								className="mt-0.5 flex items-center gap-1 text-xs"
-								style={{ color: "#6e7681" }}
+								style={{ color: "var(--color-dimmed)" }}
 							>
 								<Clock size={10} strokeWidth={1.5} />
 								{sub.cron_expr}
@@ -306,8 +304,7 @@ function SubRow({
 					<button
 						type="button"
 						onClick={() => setShowOpts(!showOpts)}
-						className="flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs transition-colors hover:bg-white/5"
-						style={{ borderColor: "#30363d", color: "#8b949e" }}
+						className="flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-white/5"
 					>
 						<Play size={11} strokeWidth={1.5} />
 						Check
@@ -321,7 +318,7 @@ function SubRow({
 							setShowOpts(false);
 						}}
 						className="rounded-md p-1.5 transition-colors hover:bg-white/5"
-						style={{ color: "#6e7681" }}
+						style={{ color: "var(--color-dimmed)" }}
 					>
 						<Pencil size={13} strokeWidth={1.5} />
 					</button>
@@ -330,7 +327,7 @@ function SubRow({
 						onClick={() => deleteMut.mutate(sub.id)}
 						disabled={deleteMut.isPending}
 						className="rounded-md p-1.5 transition-colors hover:bg-[#f85149]/10 hover:text-[#f85149] disabled:opacity-50"
-						style={{ color: "#6e7681" }}
+						style={{ color: "var(--color-dimmed)" }}
 					>
 						<Trash2 size={13} strokeWidth={1.5} />
 					</button>
@@ -338,20 +335,14 @@ function SubRow({
 			</div>
 
 			{showOpts && (
-				<div
-					className="space-y-3 border-t px-4 py-3"
-					style={{ borderColor: "#30363d" }}
-				>
+				<div className="space-y-3 border-t border-border px-4 py-3">
 					<label className="flex cursor-pointer select-none items-center gap-2">
 						<input
 							type="checkbox"
 							checked={speedTest}
 							onChange={(e) => setSpeedTest(e.target.checked)}
-							className="accent-[#58a6ff]"
 						/>
-						<span className="text-xs" style={{ color: "#8b949e" }}>
-							Speed test
-						</span>
+						<span className="text-xs text-muted-foreground">Speed test</span>
 					</label>
 					<div className="flex flex-wrap gap-2">
 						{MEDIA_APPS.map((app) => (
@@ -363,11 +354,9 @@ function SubRow({
 									type="checkbox"
 									checked={mediaApps.includes(app)}
 									onChange={() => toggleApp(app)}
-									className="accent-[#58a6ff]"
 								/>
 								<span
-									className="text-[11px] uppercase"
-									style={{ color: "#8b949e" }}
+									className="text-[11px] uppercase text-muted-foreground"
 								>
 									{app}
 								</span>
@@ -380,7 +369,7 @@ function SubRow({
 							onClick={handleCheck}
 							disabled={triggerMut.isPending}
 							className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-white disabled:opacity-50"
-							style={{ background: "#238636" }}
+							style={{ background: "var(--color-btn-success)" }}
 						>
 							{triggerMut.isPending ? (
 								<Loader2 size={13} className="animate-spin" />
@@ -391,8 +380,7 @@ function SubRow({
 						<button
 							type="button"
 							onClick={() => setShowOpts(false)}
-							className="rounded-md border px-3 py-1.5 text-sm"
-							style={{ borderColor: "#30363d", color: "#8b949e" }}
+							className="rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground"
 						>
 							Cancel
 						</button>
@@ -401,13 +389,10 @@ function SubRow({
 			)}
 
 			{showEdit && (
-				<div
-					className="space-y-3 border-t px-4 py-3"
-					style={{ borderColor: "#30363d" }}
-				>
+				<div className="space-y-3 border-t border-border px-4 py-3">
 					<div className="grid gap-3 sm:grid-cols-2">
 						<div className="space-y-1.5">
-							<Label className="text-[#8b949e] text-xs">Name</Label>
+							<Label className="text-muted-foreground text-xs">Name</Label>
 							<Input
 								value={editName}
 								onChange={(e) => setEditName(e.target.value)}
@@ -416,7 +401,7 @@ function SubRow({
 							/>
 						</div>
 						<div className="space-y-1.5">
-							<Label className="text-[#8b949e] text-xs">URL</Label>
+							<Label className="text-muted-foreground text-xs">URL</Label>
 							<Input
 								value={editUrl}
 								onChange={(e) => setEditUrl(e.target.value)}
@@ -431,7 +416,7 @@ function SubRow({
 							onClick={handleSaveEdit}
 							disabled={updateMut.isPending}
 							className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-white disabled:opacity-50"
-							style={{ background: "#238636" }}
+							style={{ background: "var(--color-btn-success)" }}
 						>
 							{updateMut.isPending ? (
 								<Loader2 size={13} className="animate-spin" />
@@ -442,8 +427,7 @@ function SubRow({
 						<button
 							type="button"
 							onClick={() => setShowEdit(false)}
-							className="rounded-md border px-3 py-1.5 text-sm"
-							style={{ borderColor: "#30363d", color: "#8b949e" }}
+							className="rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground"
 						>
 							Cancel
 						</button>

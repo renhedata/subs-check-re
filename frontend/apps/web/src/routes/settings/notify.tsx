@@ -109,10 +109,10 @@ function NotifyPage() {
 		<div className="space-y-5">
 			<div className="flex items-center justify-between">
 				<div>
-					<h1 className="font-semibold text-[#f0f6fc] text-lg">
+					<h1 className="font-semibold text-foreground text-lg">
 						Notification Channels
 					</h1>
-					<p className="mt-0.5 text-xs" style={{ color: "#8b949e" }}>
+					<p className="mt-0.5 text-xs text-muted-foreground">
 						Triggered automatically when a check job completes.
 					</p>
 				</div>
@@ -120,7 +120,7 @@ function NotifyPage() {
 					type="button"
 					onClick={() => setAdding(!adding)}
 					className="flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium text-sm text-white transition-opacity hover:opacity-90"
-					style={{ background: "#238636" }}
+					style={{ background: "var(--color-btn-success)" }}
 				>
 					<Plus size={13} strokeWidth={1.5} />
 					Add Channel
@@ -128,12 +128,9 @@ function NotifyPage() {
 			</div>
 
 			{adding && (
-				<div
-					className="space-y-3 rounded-lg border p-4"
-					style={{ background: "#161b22", borderColor: "#30363d" }}
-				>
+				<div className="space-y-3 rounded-lg border border-border bg-card p-4">
 					<div className="space-y-1.5">
-						<Label className="text-[#8b949e] text-xs">Name</Label>
+						<Label className="text-muted-foreground text-xs">Name</Label>
 						<Input
 							placeholder="My Channel"
 							value={name}
@@ -142,7 +139,7 @@ function NotifyPage() {
 						/>
 					</div>
 					<div className="space-y-1.5">
-						<Label className="text-[#8b949e] text-xs">Type</Label>
+						<Label className="text-muted-foreground text-xs">Type</Label>
 						<Select
 							value={type}
 							onValueChange={(v) => setType(v as "webhook" | "telegram")}
@@ -158,7 +155,7 @@ function NotifyPage() {
 					</div>
 					{type === "webhook" && (
 						<div className="space-y-1.5">
-							<Label className="text-[#8b949e] text-xs">URL</Label>
+							<Label className="text-muted-foreground text-xs">URL</Label>
 							<Input
 								placeholder="https://..."
 								value={webhookUrl}
@@ -170,7 +167,9 @@ function NotifyPage() {
 					{type === "telegram" && (
 						<>
 							<div className="space-y-1.5">
-								<Label className="text-[#8b949e] text-xs">Bot Token</Label>
+								<Label className="text-muted-foreground text-xs">
+									Bot Token
+								</Label>
 								<Input
 									placeholder="123456:ABC..."
 									value={botToken}
@@ -179,7 +178,7 @@ function NotifyPage() {
 								/>
 							</div>
 							<div className="space-y-1.5">
-								<Label className="text-[#8b949e] text-xs">Chat ID</Label>
+								<Label className="text-muted-foreground text-xs">Chat ID</Label>
 								<Input
 									placeholder="-1001234567890"
 									value={chatId}
@@ -195,7 +194,7 @@ function NotifyPage() {
 							onClick={() => createMut.mutate()}
 							disabled={createMut.isPending}
 							className="flex items-center gap-2 rounded-md px-3 py-1.5 font-medium text-sm text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-							style={{ background: "#238636" }}
+							style={{ background: "var(--color-btn-success)" }}
 						>
 							{createMut.isPending ? (
 								<Loader2 size={13} className="animate-spin" />
@@ -206,8 +205,7 @@ function NotifyPage() {
 						<button
 							type="button"
 							onClick={() => setAdding(false)}
-							className="rounded-md border px-3 py-1.5 text-sm transition-colors hover:bg-white/5"
-							style={{ borderColor: "#30363d", color: "#8b949e" }}
+							className="rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-white/5"
 						>
 							Cancel
 						</button>
@@ -249,7 +247,7 @@ function NotifyPage() {
 					/>
 				))}
 				{!channelsQuery.isLoading && channels.length === 0 && (
-					<p className="py-10 text-center text-sm" style={{ color: "#8b949e" }}>
+					<p className="py-10 text-center text-sm text-muted-foreground">
 						No channels configured.
 					</p>
 				)}
@@ -292,29 +290,27 @@ function ChannelRow({
 	const isEditing = editingId === ch.id;
 
 	return (
-		<div
-			className="rounded-lg border"
-			style={{ background: "#161b22", borderColor: "#30363d" }}
-		>
+		<div className="rounded-lg border border-border bg-card">
 			<div className="flex items-center justify-between px-4 py-3">
 				<div className="flex items-center gap-3">
 					{ch.enabled ? (
 						<CheckCircle2
 							size={14}
 							strokeWidth={1.5}
-							style={{ color: "#3fb950" }}
+							style={{ color: "var(--color-success)" }}
 						/>
 					) : (
-						<XCircle size={14} strokeWidth={1.5} style={{ color: "#6e7681" }} />
+						<XCircle
+							size={14}
+							strokeWidth={1.5}
+							style={{ color: "var(--color-dimmed)" }}
+						/>
 					)}
 					<div>
-						<p className="font-medium text-[#f0f6fc] text-sm">
+						<p className="font-medium text-foreground text-sm">
 							{ch.name || ch.id}
 						</p>
-						<p
-							className="mt-0.5 text-[11px] uppercase tracking-[0.4px]"
-							style={{ color: "#8b949e" }}
-						>
+						<p className="mt-0.5 text-[11px] uppercase tracking-[0.4px] text-muted-foreground">
 							{ch.type} · {ch.enabled ? "enabled" : "disabled"}
 						</p>
 					</div>
@@ -325,8 +321,7 @@ function ChannelRow({
 						onClick={onTest}
 						disabled={testPending}
 						title="Send test notification"
-						className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition-colors hover:bg-white/5 disabled:opacity-50"
-						style={{ borderColor: "#30363d", color: "#8b949e" }}
+						className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-white/5 disabled:opacity-50"
 					>
 						{testPending ? (
 							<Loader2 size={11} className="animate-spin" />
@@ -339,7 +334,9 @@ function ChannelRow({
 						type="button"
 						onClick={onEditOpen}
 						className="rounded-md p-1.5 transition-colors hover:bg-white/5"
-						style={{ color: isEditing ? "#58a6ff" : "#6e7681" }}
+						style={{
+							color: isEditing ? "var(--primary)" : "var(--color-dimmed)",
+						}}
 					>
 						<Pencil size={13} strokeWidth={1.5} />
 					</button>
@@ -348,19 +345,16 @@ function ChannelRow({
 						onClick={onDelete}
 						disabled={deletePending}
 						className="rounded-md p-1.5 transition-colors hover:bg-[#f85149]/10 hover:text-[#f85149] disabled:opacity-50"
-						style={{ color: "#6e7681" }}
+						style={{ color: "var(--color-dimmed)" }}
 					>
 						<Trash2 size={13} strokeWidth={1.5} />
 					</button>
 				</div>
 			</div>
 			{isEditing && (
-				<div
-					className="space-y-3 border-t px-4 py-3"
-					style={{ borderColor: "#30363d" }}
-				>
+				<div className="space-y-3 border-t border-border px-4 py-3">
 					<div className="space-y-1.5">
-						<Label className="text-[#8b949e] text-xs">Name</Label>
+						<Label className="text-muted-foreground text-xs">Name</Label>
 						<Input
 							value={editName}
 							onChange={(e) => setEditName(e.target.value)}
@@ -372,11 +366,8 @@ function ChannelRow({
 							type="checkbox"
 							checked={editEnabled}
 							onChange={(e) => setEditEnabled(e.target.checked)}
-							className="accent-[#58a6ff]"
 						/>
-						<span className="text-xs" style={{ color: "#8b949e" }}>
-							Enabled
-						</span>
+						<span className="text-xs text-muted-foreground">Enabled</span>
 					</label>
 					<div className="flex gap-2">
 						<button
@@ -384,7 +375,7 @@ function ChannelRow({
 							onClick={onSaveEdit}
 							disabled={editPending}
 							className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-white disabled:opacity-50"
-							style={{ background: "#238636" }}
+							style={{ background: "var(--color-btn-success)" }}
 						>
 							{editPending ? (
 								<Loader2 size={13} className="animate-spin" />
@@ -395,8 +386,7 @@ function ChannelRow({
 						<button
 							type="button"
 							onClick={onEditClose}
-							className="rounded-md border px-3 py-1.5 text-sm"
-							style={{ borderColor: "#30363d", color: "#8b949e" }}
+							className="rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground"
 						>
 							Cancel
 						</button>

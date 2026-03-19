@@ -45,18 +45,20 @@ function GeneralSettingsPage() {
 
 	return (
 		<div className="max-w-lg space-y-5">
-			<h1 className="font-semibold text-[#f0f6fc] text-lg">General Settings</h1>
+			<h1 className="font-semibold text-foreground text-lg">
+				General Settings
+			</h1>
 
-			<div
-				className="rounded-lg border p-5"
-				style={{ background: "#161b22", borderColor: "#30363d" }}
-			>
+			<div className="rounded-lg border border-border bg-card p-5">
 				<form
 					onSubmit={handleSubmit((d) => saveMutation.mutate(d))}
 					className="space-y-4"
 				>
 					<div className="space-y-1.5">
-						<Label htmlFor="speed_test_url" className="text-[#8b949e] text-xs">
+						<Label
+							htmlFor="speed_test_url"
+							className="text-muted-foreground text-xs"
+						>
 							Speed Test URL
 						</Label>
 						<Input
@@ -65,7 +67,10 @@ function GeneralSettingsPage() {
 							{...register("speed_test_url")}
 							className="h-8 font-mono text-sm"
 						/>
-						<p className="text-xs" style={{ color: "#6e7681" }}>
+						<p
+							className="text-xs"
+							style={{ color: "var(--color-dimmed)" }}
+						>
 							URL used to measure download speed. Leave blank to use default.
 						</p>
 					</div>
@@ -74,7 +79,7 @@ function GeneralSettingsPage() {
 						type="submit"
 						disabled={saveMutation.isPending}
 						className="flex items-center gap-2 rounded-md px-4 py-1.5 font-medium text-sm text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-						style={{ background: "#238636" }}
+						style={{ background: "var(--color-btn-success)" }}
 					>
 						{saveMutation.isPending ? (
 							<Loader2 size={13} className="animate-spin" />
