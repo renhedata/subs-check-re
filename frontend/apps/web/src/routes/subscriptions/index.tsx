@@ -10,6 +10,8 @@ import { toast } from "sonner";
 
 import { client, isApiError } from "@/lib/client";
 import type { subscription } from "@/lib/client.gen";
+import { PlatformIcon } from "@/components/platform-icons";
+import type { PlatformKey } from "@/components/platform-icons";
 
 type Subscription = subscription.Subscription;
 
@@ -355,11 +357,7 @@ function SubRow({
 									checked={mediaApps.includes(app)}
 									onChange={() => toggleApp(app)}
 								/>
-								<span
-									className="text-[11px] uppercase text-muted-foreground"
-								>
-									{app}
-								</span>
+								<PlatformIcon platform={app as PlatformKey} size={13} showLabel />
 							</label>
 						))}
 					</div>

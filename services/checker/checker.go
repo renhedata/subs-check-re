@@ -28,6 +28,19 @@ var db = sqldb.NewDatabase("checker", sqldb.DatabaseConfig{
 
 // --- PubSub ---
 
+// PlatformUnlockSummary holds how many nodes unlocked each streaming platform.
+type PlatformUnlockSummary struct {
+	Netflix        int `json:"netflix"`
+	YouTube        int `json:"youtube"`
+	YouTubePremium int `json:"youtube_premium"`
+	OpenAI         int `json:"openai"`
+	Claude         int `json:"claude"`
+	Gemini         int `json:"gemini"`
+	Grok           int `json:"grok"`
+	Disney         int `json:"disney"`
+	TikTok         int `json:"tiktok"`
+}
+
 // JobCompletedEvent is published when a check job finishes.
 type JobCompletedEvent struct {
 	JobID          string `json:"job_id"`
@@ -760,7 +773,7 @@ func runJob(parentCtx context.Context, jobID, subscriptionID, userID string) {
 	db.Exec(context.Background(), `UPDATE check_jobs SET status='completed', finished_at=$2, available=$3, total_traffic_bytes=$4 WHERE id=$1`,
 		jobID, time.Now(), available, totalTrafficBytes.Load())
 
-	// Publish completion event for notify service
+	// Publish completion event — notify service fetches details on demand via GetJobDetailedSummary
 	JobCompletedTopic.Publish(context.Background(), &JobCompletedEvent{
 		JobID:          jobID,
 		SubscriptionID: subscriptionID,

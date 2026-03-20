@@ -10,7 +10,9 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import {
+	Bell,
 	CheckCircle2,
+	Clock,
 	FlaskConical,
 	Loader2,
 	Pencil,
@@ -26,6 +28,20 @@ import type { JSONValue, notify } from "@/lib/client.gen";
 
 type NotifyChannel = notify.Channel;
 
+const CRON_PRESETS = [
+	{ label: "Disabled", value: "" },
+	{ label: "Every hour", value: "0 * * * *" },
+	{ label: "Every 2 hours", value: "0 */2 * * *" },
+	{ label: "Every 6 hours", value: "0 */6 * * *" },
+	{ label: "Every 12 hours", value: "0 */12 * * *" },
+	{ label: "Once a day", value: "0 0 * * *" },
+] as const;
+
+function cronToLabel(cron: string): string {
+	const preset = CRON_PRESETS.find((p) => p.value === cron);
+	return preset ? preset.label : cron;
+}
+
 export const Route = createFileRoute("/settings/notify")({
 	component: NotifyPage,
 });
@@ -33,14 +49,22 @@ export const Route = createFileRoute("/settings/notify")({
 function NotifyPage() {
 	const qc = useQueryClient();
 	const [adding, setAdding] = useState(false);
-	const [editingId, setEditingId] = useState<string | null>(null);
-	const [editName, setEditName] = useState("");
-	const [editEnabled, setEditEnabled] = useState(true);
+
+	// Create form state
 	const [type, setType] = useState<"webhook" | "telegram">("webhook");
 	const [name, setName] = useState("");
 	const [webhookUrl, setWebhookUrl] = useState("");
 	const [botToken, setBotToken] = useState("");
 	const [chatId, setChatId] = useState("");
+	const [onCheckComplete, setOnCheckComplete] = useState(false);
+	const [unlockCron, setUnlockCron] = useState("");
+
+	// Edit state
+	const [editingId, setEditingId] = useState<string | null>(null);
+	const [editName, setEditName] = useState("");
+	const [editEnabled, setEditEnabled] = useState(true);
+	const [editOnCheck, setEditOnCheck] = useState(false);
+	const [editUnlockCron, setEditUnlockCron] = useState("");
 
 	const channelsQuery = useQuery({
 		queryKey: ["notify-channels"],
@@ -53,7 +77,13 @@ function NotifyPage() {
 				type === "webhook"
 					? { url: webhookUrl, method: "POST" }
 					: { bot_token: botToken, chat_id: chatId };
-			return client.notify.CreateChannel({ name, type, config });
+			return client.notify.CreateChannel({
+				name,
+				type,
+				config,
+				on_check_complete: onCheckComplete,
+				unlock_cron: unlockCron,
+			});
 		},
 		onSuccess: () => {
 			qc.invalidateQueries({ queryKey: ["notify-channels"] });
@@ -62,6 +92,8 @@ function NotifyPage() {
 			setWebhookUrl("");
 			setBotToken("");
 			setChatId("");
+			setOnCheckComplete(false);
+			setUnlockCron("");
 			toast.success("Channel added");
 		},
 		onError: (e) => toast.error(isApiError(e) ? e.message : "Failed"),
@@ -92,10 +124,11 @@ function NotifyPage() {
 	});
 
 	const testMut = useMutation({
-		mutationFn: (id: string) => client.notify.TestChannel(id),
+		mutationFn: ({ id, reportType }: { id: string; reportType: string }) =>
+			client.notify.TestChannel(id, { report_type: reportType }),
 		onSuccess: (resp) => {
 			if (resp.ok) {
-				toast.success("Test notification sent successfully");
+				toast.success("Test notification sent");
 			} else {
 				toast.error(`Test failed: ${resp.error ?? "unknown error"}`);
 			}
@@ -113,7 +146,8 @@ function NotifyPage() {
 						Notification Channels
 					</h1>
 					<p className="mt-0.5 text-xs text-muted-foreground">
-						Triggered automatically when a check job completes.
+						Configure webhook or Telegram notifications for unlock reports and
+						check results.
 					</p>
 				</div>
 				<button
@@ -188,6 +222,14 @@ function NotifyPage() {
 							</div>
 						</>
 					)}
+
+					<ReportSettings
+						onCheckComplete={onCheckComplete}
+						setOnCheckComplete={setOnCheckComplete}
+						unlockCron={unlockCron}
+						setUnlockCron={setUnlockCron}
+					/>
+
 					<div className="flex gap-2">
 						<button
 							type="button"
@@ -218,15 +260,25 @@ function NotifyPage() {
 					<ChannelRow
 						key={ch.id}
 						ch={ch}
-						editingId={editingId}
+						isEditing={editingId === ch.id}
 						editName={editName}
 						editEnabled={editEnabled}
+						editOnCheck={editOnCheck}
+						editUnlockCron={editUnlockCron}
 						setEditName={setEditName}
 						setEditEnabled={setEditEnabled}
+						setEditOnCheck={setEditOnCheck}
+						setEditUnlockCron={setEditUnlockCron}
 						onEditOpen={() => {
-							setEditingId(editingId === ch.id ? null : ch.id);
-							setEditName(ch.name);
-							setEditEnabled(ch.enabled);
+							if (editingId === ch.id) {
+								setEditingId(null);
+							} else {
+								setEditingId(ch.id);
+								setEditName(ch.name);
+								setEditEnabled(ch.enabled);
+								setEditOnCheck(ch.on_check_complete);
+								setEditUnlockCron(ch.unlock_cron);
+							}
 						}}
 						onEditClose={() => setEditingId(null)}
 						onSaveEdit={() =>
@@ -236,14 +288,20 @@ function NotifyPage() {
 									name: editName,
 									enabled: editEnabled,
 									config: ch.config,
+									on_check_complete: editOnCheck,
+									unlock_cron: editUnlockCron,
 								},
 							})
 						}
 						onDelete={() => deleteMut.mutate(ch.id)}
-						onTest={() => testMut.mutate(ch.id)}
+						onTest={(reportType) =>
+							testMut.mutate({ id: ch.id, reportType })
+						}
 						editPending={updateMut.isPending}
 						deletePending={deleteMut.isPending}
-						testPending={testMut.isPending && testMut.variables === ch.id}
+						testPending={
+							testMut.isPending && testMut.variables?.id === ch.id
+						}
 					/>
 				))}
 				{!channelsQuery.isLoading && channels.length === 0 && (
@@ -256,13 +314,87 @@ function NotifyPage() {
 	);
 }
 
+// --- Report settings ---
+
+function ReportSettings({
+	onCheckComplete,
+	setOnCheckComplete,
+	unlockCron,
+	setUnlockCron,
+}: {
+	onCheckComplete: boolean;
+	setOnCheckComplete: (v: boolean) => void;
+	unlockCron: string;
+	setUnlockCron: (v: string) => void;
+}) {
+	return (
+		<div className="space-y-3 rounded-md border border-border/60 bg-secondary/30 p-3">
+			<p className="font-medium text-foreground text-xs">Report Types</p>
+
+			{/* Scheduled unlock report */}
+			<div className="space-y-1.5">
+				<div className="flex items-center gap-2">
+					<Clock size={12} strokeWidth={1.5} className="text-muted-foreground" />
+					<Label className="text-xs text-muted-foreground">
+						Scheduled network unlock report
+					</Label>
+				</div>
+				<Select
+					value={unlockCron || "__disabled__"}
+					onValueChange={(v) => setUnlockCron(!v || v === "__disabled__" ? "" : v)}
+				>
+					<SelectTrigger className="h-7 w-48 text-xs">
+						<SelectValue placeholder="Disabled" />
+					</SelectTrigger>
+					<SelectContent>
+						{CRON_PRESETS.map((p) => (
+							<SelectItem key={p.value || "__disabled__"} value={p.value || "__disabled__"}>
+								{p.label}
+							</SelectItem>
+						))}
+					</SelectContent>
+				</Select>
+				<p className="text-[10px] text-muted-foreground/70">
+					Periodically reports which streaming platforms are accessible from this
+					server's network.
+				</p>
+			</div>
+
+			{/* Check job report */}
+			<div className="space-y-1">
+				<label className="flex cursor-pointer select-none items-center gap-2">
+					<input
+						type="checkbox"
+						checked={onCheckComplete}
+						onChange={(e) => setOnCheckComplete(e.target.checked)}
+					/>
+					<Bell size={12} strokeWidth={1.5} className="text-muted-foreground" />
+					<span className="text-xs text-muted-foreground">
+						Notify on check completion
+					</span>
+				</label>
+				<p className="ml-[18px] text-[10px] text-muted-foreground/70">
+					Sends a detailed report when a subscription check finishes, including
+					speed stats, platform unlocks, top nodes, and country breakdown.
+				</p>
+			</div>
+		</div>
+	);
+}
+
+// --- Channel row ---
+
 function ChannelRow({
 	ch,
-	editingId,
+	isEditing,
 	editName,
 	editEnabled,
+	editOnCheck,
+	editUnlockCron,
 	setEditName,
 	setEditEnabled,
+	setEditOnCheck,
+	setEditUnlockCron,
 	onEditOpen,
 	onEditClose,
 	onSaveEdit,
@@ -273,21 +405,28 @@ function ChannelRow({
 	testPending,
 }: {
 	ch: NotifyChannel;
-	editingId: string | null;
+	isEditing: boolean;
 	editName: string;
 	editEnabled: boolean;
+	editOnCheck: boolean;
+	editUnlockCron: string;
 	setEditName: (v: string) => void;
 	setEditEnabled: (v: boolean) => void;
+	setEditOnCheck: (v: boolean) => void;
+	setEditUnlockCron: (v: string) => void;
 	onEditOpen: () => void;
 	onEditClose: () => void;
 	onSaveEdit: () => void;
 	onDelete: () => void;
-	onTest: () => void;
+	onTest: (reportType: string) => void;
 	editPending: boolean;
 	deletePending: boolean;
 	testPending: boolean;
 }) {
-	const isEditing = editingId === ch.id;
+	// Build feature tags
+	const tags: string[] = [];
+	if (ch.on_check_complete) tags.push("check report");
+	if (ch.unlock_cron) tags.push(cronToLabel(ch.unlock_cron));
 
 	return (
 		<div className="rounded-lg border border-border bg-card">
@@ -310,26 +449,50 @@ function ChannelRow({
 						<p className="font-medium text-foreground text-sm">
 							{ch.name || ch.id}
 						</p>
-						<p className="mt-0.5 text-[11px] uppercase tracking-[0.4px] text-muted-foreground">
-							{ch.type} · {ch.enabled ? "enabled" : "disabled"}
+						<p className="mt-0.5 text-[11px] tracking-[0.4px] text-muted-foreground">
+							<span className="uppercase">{ch.type}</span>
+							{" · "}
+							{ch.enabled ? "enabled" : "disabled"}
+							{tags.length > 0 && ` · ${tags.join(" · ")}`}
 						</p>
 					</div>
 				</div>
 				<div className="flex items-center gap-1">
-					<button
-						type="button"
-						onClick={onTest}
-						disabled={testPending}
-						title="Send test notification"
-						className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-white/5 disabled:opacity-50"
-					>
-						{testPending ? (
-							<Loader2 size={11} className="animate-spin" />
-						) : (
-							<FlaskConical size={11} strokeWidth={1.5} />
+					{/* Test buttons */}
+					<div className="flex gap-1">
+						{ch.unlock_cron && (
+							<button
+								type="button"
+								onClick={() => onTest("unlock")}
+								disabled={testPending}
+								title="Test unlock report"
+								className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-white/5 disabled:opacity-50"
+							>
+								{testPending ? (
+									<Loader2 size={10} className="animate-spin" />
+								) : (
+									<FlaskConical size={10} strokeWidth={1.5} />
+								)}
+								Unlock
+							</button>
 						)}
-						Test
-					</button>
+						{ch.on_check_complete && (
+							<button
+								type="button"
+								onClick={() => onTest("check")}
+								disabled={testPending}
+								title="Test check report"
+								className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-white/5 disabled:opacity-50"
+							>
+								{testPending ? (
+									<Loader2 size={10} className="animate-spin" />
+								) : (
+									<FlaskConical size={10} strokeWidth={1.5} />
+								)}
+								Check
+							</button>
+						)}
+					</div>
 					<button
 						type="button"
 						onClick={onEditOpen}
@@ -369,6 +532,12 @@ function ChannelRow({
 						/>
 						<span className="text-xs text-muted-foreground">Enabled</span>
 					</label>
+					<ReportSettings
+						onCheckComplete={editOnCheck}
+						setOnCheckComplete={setEditOnCheck}
+						unlockCron={editUnlockCron}
+						setUnlockCron={setEditUnlockCron}
+					/>
 					<div className="flex gap-2">
 						<button
 							type="button"

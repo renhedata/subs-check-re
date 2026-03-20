@@ -23,6 +23,8 @@ import { toast } from "sonner";
 
 import { client, isApiError } from "@/lib/client";
 import type { checker, scheduler, subscription } from "@/lib/client.gen";
+import { PlatformIcon } from "@/components/platform-icons";
+import type { PlatformKey } from "@/components/platform-icons";
 
 type CheckJob = checker.JobSummary;
 type ScheduledJob = scheduler.ScheduledJob;
@@ -309,9 +311,7 @@ function ScheduleForm({
 								checked={mediaApps.includes(app)}
 								onChange={() => toggleApp(app)}
 							/>
-							<span className="text-[11px] uppercase text-muted-foreground">
-								{app}
-							</span>
+							<PlatformIcon platform={app as PlatformKey} size={13} showLabel />
 						</label>
 					))}
 				</div>
@@ -459,15 +459,8 @@ function JobRow({
 					</span>
 				)}
 				{(job.media_apps ?? []).map((app) => (
-					<span
-						key={app}
-						className="rounded px-1.5 py-0.5 text-[10px] uppercase"
-						style={{
-							background: "var(--secondary)",
-							color: "var(--muted-foreground)",
-						}}
-					>
-						{app}
+					<span key={app} className="inline-flex">
+						<PlatformIcon platform={app as PlatformKey} size={12} />
 					</span>
 				))}
 			</div>

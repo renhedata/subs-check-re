@@ -8,6 +8,8 @@ import { toast } from "sonner";
 
 import { client } from "@/lib/client";
 import type { checker } from "@/lib/client.gen";
+import { PlatformIcon } from "@/components/platform-icons";
+import type { PlatformKey } from "@/components/platform-icons";
 
 type LocalUnlockResult = checker.LocalUnlockResult;
 
@@ -253,45 +255,11 @@ function DashboardPage() {
 	);
 }
 
-const PLATFORM_DEFS: {
-	key: keyof LocalUnlockResult;
-	label: string;
-	style: "media" | "ai" | "other";
-}[] = [
-	{ key: "openai", label: "GPT", style: "ai" },
-	{ key: "claude", label: "CL", style: "ai" },
-	{ key: "gemini", label: "GM", style: "ai" },
-	{ key: "grok", label: "GK", style: "ai" },
-	{ key: "netflix", label: "NF", style: "media" },
-	{ key: "youtube", label: "YT", style: "media" },
-	{ key: "youtube_premium", label: "YT+", style: "media" },
-	{ key: "disney", label: "D+", style: "other" },
-	{ key: "tiktok", label: "TK", style: "other" },
+const PLATFORM_KEYS: (keyof LocalUnlockResult)[] = [
+	"openai", "claude", "gemini", "grok",
+	"netflix", "youtube", "youtube_premium",
+	"disney", "tiktok",
 ];
-
-const BADGE_STYLES = {
-	media: {
-		on: {
-			background: "var(--color-badge-danger-bg)",
-			color: "var(--color-badge-danger)",
-		},
-		off: { background: "var(--secondary)", color: "var(--muted-foreground)" },
-	},
-	ai: {
-		on: {
-			background: "var(--color-badge-ai-bg)",
-			color: "var(--color-badge-ai)",
-		},
-		off: { background: "var(--secondary)", color: "var(--muted-foreground)" },
-	},
-	other: {
-		on: {
-			background: "var(--color-badge-info-bg)",
-			color: "var(--color-badge-info)",
-		},
-		off: { background: "var(--secondary)", color: "var(--muted-foreground)" },
-	},
-};
 
 function NetworkUnlockPanel() {
 	const { data, isLoading, isFetching, refetch } = useQuery({
@@ -328,30 +296,33 @@ function NetworkUnlockPanel() {
 			</div>
 			<div className="rounded-lg border border-border bg-card p-4">
 				{isLoading ? (
-					<div className="flex flex-wrap gap-2">
-						{PLATFORM_DEFS.map((p) => (
+					<div className="flex flex-wrap gap-3">
+						{PLATFORM_KEYS.map((k) => (
 							<div
-								key={p.key}
-								className="h-6 w-10 animate-pulse rounded bg-secondary"
+								key={k}
+								className="h-6 w-6 animate-pulse rounded bg-secondary"
 							/>
 						))}
 					</div>
 				) : data ? (
 					<div className="space-y-3">
-						<div className="flex flex-wrap gap-2">
-							{PLATFORM_DEFS.map((p) => {
-								const val = data[p.key];
+						<div className="flex flex-wrap gap-3">
+							{PLATFORM_KEYS.map((k) => {
+								const val = data[k];
 								const available = typeof val === "boolean" ? val : val !== "";
-								const s = available
-									? BADGE_STYLES[p.style].on
-									: BADGE_STYLES[p.style].off;
 								return (
 									<span
-										key={p.key}
-										className="rounded px-2 py-1 font-semibold text-[11px]"
-										style={s}
+										key={k}
+										className="inline-flex items-center gap-1.5 rounded-md px-2 py-1"
+										style={{
+											opacity: available ? 1 : 0.3,
+											background: available ? "var(--secondary)" : "transparent",
+										}}
 									>
-										{p.label}
+										<PlatformIcon platform={k as PlatformKey} size={16} showLabel />
+										{available ? (
+											<CheckCircle size={10} className="text-green-500" />
+										) : null}
 									</span>
 								);
 							})}

@@ -1,6 +1,8 @@
 import type { checker } from "@/lib/client.gen";
 import { formatBytes } from "@/lib/format";
 
+import { PlatformIcon } from "./platform-icons";
+
 type NodeResult = checker.NodeResult;
 
 interface Props {
@@ -11,37 +13,6 @@ function latencyColor(ms: number): string {
 	if (ms < 50) return "var(--color-success)";
 	if (ms <= 200) return "var(--color-warning)";
 	return "var(--destructive)";
-}
-
-function UnlockBadge({
-	label,
-	style,
-}: {
-	label: string;
-	style: "media" | "ai" | "other";
-}) {
-	const styles = {
-		media: {
-			background: "var(--color-badge-danger-bg)",
-			color: "var(--color-badge-danger)",
-		},
-		ai: {
-			background: "var(--color-badge-ai-bg)",
-			color: "var(--color-badge-ai)",
-		},
-		other: {
-			background: "var(--color-badge-info-bg)",
-			color: "var(--color-badge-info)",
-		},
-	};
-	return (
-		<span
-			className="rounded px-1.5 py-0.5 font-semibold text-[10px]"
-			style={styles[style]}
-		>
-			{label}
-		</span>
-	);
 }
 
 function StatusBadge({ alive }: { alive: boolean }) {
@@ -160,20 +131,20 @@ export function NodeTable({ results }: Props) {
 								{r.country || "—"}
 							</td>
 							<td className="px-3 py-2">
-								<div className="flex flex-wrap gap-1">
-									{r.netflix && <UnlockBadge label="NF" style="media" />}
+								<div className="flex flex-wrap gap-1.5">
+									{r.netflix && <PlatformIcon platform="netflix" />}
 									{r.youtube && !r.youtube_premium && (
-										<UnlockBadge label="YT" style="media" />
+										<PlatformIcon platform="youtube" />
 									)}
 									{r.youtube_premium && (
-										<UnlockBadge label="YT+" style="media" />
+										<PlatformIcon platform="youtube_premium" />
 									)}
-									{r.openai && <UnlockBadge label="GPT" style="ai" />}
-									{r.claude && <UnlockBadge label="CL" style="ai" />}
-									{r.gemini && <UnlockBadge label="GM" style="ai" />}
-									{r.grok && <UnlockBadge label="GK" style="ai" />}
-									{r.disney && <UnlockBadge label="D+" style="other" />}
-									{r.tiktok && <UnlockBadge label="TK" style="other" />}
+									{r.openai && <PlatformIcon platform="openai" />}
+									{r.claude && <PlatformIcon platform="claude" />}
+									{r.gemini && <PlatformIcon platform="gemini" />}
+									{r.grok && <PlatformIcon platform="grok" />}
+									{r.disney && <PlatformIcon platform="disney" />}
+									{r.tiktok && <PlatformIcon platform="tiktok" />}
 								</div>
 							</td>
 						</tr>

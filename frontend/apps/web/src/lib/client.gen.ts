@@ -334,6 +334,7 @@ export namespace checker {
 
         /**
          * Export generates a subscription link from the latest completed check results.
+         * If subscriptionID is "all", combines nodes from all subscriptions.
          */
         public async Export(method: "GET", subscriptionID: string, body?: RequestInit["body"], options?: CallParameters): Promise<globalThis.Response> {
             return this.baseClient.callAPI(method, `/export/${encodeURIComponent(subscriptionID)}`, body, options)
@@ -415,6 +416,8 @@ export namespace notify {
         type: string
         config: JSONValue
         enabled: boolean
+        "on_check_complete": boolean
+        "unlock_cron": string
         "created_at": string
     }
 
@@ -425,6 +428,8 @@ export namespace notify {
         name: string
         type: string
         config: JSONValue
+        "on_check_complete": boolean
+        "unlock_cron": string
     }
 
     /**
@@ -442,6 +447,16 @@ export namespace notify {
     }
 
     /**
+     * TestChannelParams selects which report type to test.
+     */
+    export interface TestChannelParams {
+        /**
+         * "check" or "unlock"
+         */
+        "report_type": string
+    }
+
+    /**
      * TestChannelResponse is the response for POST /notify/channels/:id/test.
      */
     export interface TestChannelResponse {
@@ -456,6 +471,8 @@ export namespace notify {
         name: string
         config: JSONValue
         enabled: boolean
+        "on_check_complete": boolean
+        "unlock_cron": string
     }
 
     export class ServiceClient {
@@ -500,9 +517,9 @@ export namespace notify {
         /**
          * TestChannel sends a test notification to verify the channel configuration.
          */
-        public async TestChannel(id: string): Promise<TestChannelResponse> {
+        public async TestChannel(id: string, params: TestChannelParams): Promise<TestChannelResponse> {
             // Now make the actual call to the API
-            const resp = await this.baseClient.callTypedAPI("POST", `/notify/channels/${encodeURIComponent(id)}/test`)
+            const resp = await this.baseClient.callTypedAPI("POST", `/notify/channels/${encodeURIComponent(id)}/test`, JSON.stringify(params))
             return await resp.json() as TestChannelResponse
         }
 

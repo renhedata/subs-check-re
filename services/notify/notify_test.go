@@ -7,6 +7,7 @@ import (
 
 	"encore.dev/beta/auth"
 	"encore.dev/et"
+	"github.com/robfig/cron/v3"
 
 	authsvc "subs-check-re/services/auth"
 )
@@ -16,9 +17,17 @@ func withAuth() context.Context {
 	return context.Background()
 }
 
+func testSvc() *Service {
+	return &Service{
+		cron:    cron.New(),
+		entries: make(map[string]cron.EntryID),
+	}
+}
+
 func TestCreateAndListChannel(t *testing.T) {
 	ctx := withAuth()
-	ch, err := CreateChannel(ctx, &CreateChannelParams{
+	s := testSvc()
+	ch, err := s.CreateChannel(ctx, &CreateChannelParams{
 		Name: "My Webhook",
 		Type: "webhook",
 	})
@@ -40,7 +49,8 @@ func TestCreateAndListChannel(t *testing.T) {
 
 func TestUpdateChannel(t *testing.T) {
 	ctx := withAuth()
-	ch, err := CreateChannel(ctx, &CreateChannelParams{
+	s := testSvc()
+	ch, err := s.CreateChannel(ctx, &CreateChannelParams{
 		Name: "Before",
 		Type: "webhook",
 	})
@@ -50,7 +60,7 @@ func TestUpdateChannel(t *testing.T) {
 
 	newName := "After"
 	enabled := false
-	updated, err := UpdateChannel(ctx, ch.ID, &UpdateChannelParams{
+	updated, err := s.UpdateChannel(ctx, ch.ID, &UpdateChannelParams{
 		Name:    &newName,
 		Enabled: &enabled,
 	})
@@ -67,7 +77,8 @@ func TestUpdateChannel(t *testing.T) {
 
 func TestCreateInvalidType(t *testing.T) {
 	ctx := withAuth()
-	_, err := CreateChannel(ctx, &CreateChannelParams{
+	s := testSvc()
+	_, err := s.CreateChannel(ctx, &CreateChannelParams{
 		Name: "Bad",
 		Type: "email",
 	})
