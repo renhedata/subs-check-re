@@ -16,6 +16,7 @@ function LoginPage() {
 	const [mode, setMode] = useState<"login" | "register">("login");
 	const [username, setUsername] = useState("");
 	const [password, setPassword] = useState("");
+	const [remember, setRemember] = useState(false);
 	const [loading, setLoading] = useState(false);
 
 	async function handleSubmit(e: React.FormEvent) {
@@ -28,7 +29,7 @@ function LoginPage() {
 				setMode("login");
 			} else {
 				const resp = await client.auth.Login({ username, password });
-				setToken(resp.token);
+				setToken(resp.token, remember);
 				navigate({ to: "/" });
 			}
 		} catch (err) {
@@ -76,6 +77,17 @@ function LoginPage() {
 						className="h-8 text-sm"
 					/>
 				</div>
+				{mode === "login" && (
+					<label className="flex cursor-pointer items-center gap-2">
+						<input
+							type="checkbox"
+							checked={remember}
+							onChange={(e) => setRemember(e.target.checked)}
+							className="h-3.5 w-3.5 rounded accent-[#238636]"
+						/>
+						<span className="text-[#8b949e] text-xs">Remember me</span>
+					</label>
+				)}
 				<button
 					type="submit"
 					disabled={loading}

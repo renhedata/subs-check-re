@@ -9,7 +9,7 @@ COPY packages/ui/package.json ./packages/ui/
 COPY packages/env/package.json ./packages/env/
 COPY packages/config/package.json ./packages/config/
 
-RUN bun install --frozen-lockfile
+RUN bun install
 
 # Copy source
 COPY . .

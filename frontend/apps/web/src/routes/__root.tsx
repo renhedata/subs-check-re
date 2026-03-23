@@ -1,5 +1,10 @@
 import { Toaster } from "@frontend/ui/components/sonner";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+	MutationCache,
+	QueryCache,
+	QueryClient,
+	QueryClientProvider,
+} from "@tanstack/react-query";
 import {
 	createRootRouteWithContext,
 	HeadContent,
@@ -11,6 +16,7 @@ import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 
 import { Sidebar } from "@/components/sidebar";
 import { isAuthenticated } from "@/lib/auth";
+import { handleUnauthorized, isApiError } from "@/lib/client";
 
 import "../index.css";
 
@@ -18,8 +24,20 @@ import "../index.css";
 export type RouterAppContext = {};
 
 const queryClient = new QueryClient({
+	queryCache: new QueryCache({
+		onError: (err) => handleUnauthorized(err),
+	}),
+	mutationCache: new MutationCache({
+		onError: (err) => handleUnauthorized(err),
+	}),
 	defaultOptions: {
-		queries: { staleTime: 30_000, retry: 2 },
+		queries: {
+			staleTime: 30_000,
+			retry: (failureCount, err) => {
+				if (isApiError(err) && err.status === 401) return false;
+				return failureCount < 2;
+			},
+		},
 	},
 });
 

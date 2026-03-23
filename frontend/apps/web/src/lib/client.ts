@@ -1,6 +1,6 @@
 // frontend/apps/web/src/lib/client.ts
-import { getToken } from "./auth";
-import Client from "./client.gen";
+import { clearToken, getToken } from "./auth";
+import Client, { isAPIError } from "./client.gen";
 
 export const client = new Client(
 	`${window.location.origin}/api`,
@@ -19,4 +19,13 @@ export function isApiError(
 		"status" in err &&
 		typeof (err as Record<string, unknown>).status === "number"
 	);
+}
+
+export function handleUnauthorized(err: unknown): boolean {
+	if (isAPIError(err) && err.status === 401) {
+		clearToken();
+		window.location.href = "/login";
+		return true;
+	}
+	return false;
 }
