@@ -21,6 +21,9 @@ import (
 // Export generates a subscription link from the latest completed check results.
 // If subscriptionID is "all", combines nodes from all subscriptions.
 //
+// Supported targets: clash (default), base64, routeros
+// For routeros target, use ?list=<address-list-name> (default: clash_servers)
+//
 //encore:api public raw method=GET path=/export/:subscriptionID
 func Export(w http.ResponseWriter, req *http.Request) {
 	ctx := req.Context()
@@ -50,6 +53,16 @@ func Export(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	userID := userResp.UserID
+
+	// RouterOS script export — handled separately (queries nodes table directly).
+	if target == "routeros" {
+		listName := req.URL.Query().Get("list")
+		if listName == "" {
+			listName = "clash_servers"
+		}
+		exportRouterOS(w, ctx, subscriptionID, userID, listName)
+		return
+	}
 
 	// Handle "all" case - combine all subscriptions.
 	if subscriptionID == "all" {
@@ -328,6 +341,86 @@ func exportSingleSubscription(w http.ResponseWriter, req *http.Request, ctx cont
 		renderBase64(w, proxies)
 	default:
 		renderClash(w, proxies)
+	}
+}
+
+// exportRouterOS generates a RouterOS .rsc script that rebuilds the firewall
+// address-list for all proxy server addresses (IPs and hostnames) in the
+// subscription.  subscriptionID may be "all" to include every subscription
+// owned by the user.
+func exportRouterOS(w http.ResponseWriter, ctx context.Context, subscriptionID, userID, listName string) {
+	servers, notFound, err := queryNodeServers(ctx, subscriptionID, userID)
+	if notFound {
+		http.Error(w, "subscription not found", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		http.Error(w, "db error", http.StatusInternalServerError)
+		return
+	}
+	renderRouterOS(w, servers, listName)
+}
+
+func queryNodeServers(ctx context.Context, subscriptionID, userID string) (servers []string, notFound bool, err error) {
+	if subscriptionID == "all" {
+		// Use check_jobs as an ownership bridge (nodes table has no user_id column).
+		rows, qErr := db.Query(ctx, `
+			SELECT DISTINCT n.server
+			FROM nodes n
+			INNER JOIN (
+				SELECT DISTINCT subscription_id FROM check_jobs WHERE user_id = $1
+			) owned ON owned.subscription_id = n.subscription_id
+			WHERE n.server != ''
+			ORDER BY n.server
+		`, userID)
+		if qErr != nil {
+			return nil, false, qErr
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var s string
+			if rows.Scan(&s) == nil && s != "" {
+				servers = append(servers, s)
+			}
+		}
+		return servers, false, rows.Err()
+	}
+
+	// Verify ownership via check_jobs (subscriptions table lives in a separate DB).
+	var count int
+	if scanErr := db.QueryRow(ctx,
+		`SELECT COUNT(*) FROM check_jobs WHERE subscription_id=$1 AND user_id=$2`,
+		subscriptionID, userID).Scan(&count); scanErr != nil || count == 0 {
+		return nil, true, nil
+	}
+
+	rows, qErr := db.Query(ctx, `
+		SELECT DISTINCT server FROM nodes
+		WHERE subscription_id = $1 AND server != ''
+		ORDER BY server
+	`, subscriptionID)
+	if qErr != nil {
+		return nil, false, qErr
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var s string
+		if rows.Scan(&s) == nil && s != "" {
+			servers = append(servers, s)
+		}
+	}
+	return servers, false, rows.Err()
+}
+
+// renderRouterOS writes a RouterOS .rsc script to w.
+// It first removes all existing entries for listName, then re-adds each server.
+func renderRouterOS(w http.ResponseWriter, servers []string, listName string) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.rsc"`, listName))
+
+	fmt.Fprintf(w, "/ip firewall address-list remove [find where list=%s]\n", listName)
+	for _, s := range servers {
+		fmt.Fprintf(w, "/ip firewall address-list add list=%s address=%s\n", listName, s)
 	}
 }
 

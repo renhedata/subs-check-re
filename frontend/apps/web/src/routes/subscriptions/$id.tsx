@@ -1,8 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import {
+	Check,
 	ChevronDown,
 	ChevronRight,
+	Copy,
 	Download,
 	RefreshCw,
 	Square,
@@ -367,7 +369,89 @@ function SubscriptionDetailPage() {
 
 			<NodeTable results={results} />
 
+			<ExportLinksSection subscriptionId={id} />
+
 			<ExportLogsSection subscriptionId={id} />
+		</div>
+	);
+}
+
+function CopyButton({ text }: { text: string }) {
+	const [copied, setCopied] = useState(false);
+	return (
+		<button
+			type="button"
+			onClick={() => {
+				navigator.clipboard.writeText(text);
+				setCopied(true);
+				setTimeout(() => setCopied(false), 1500);
+			}}
+			className="flex-shrink-0 rounded p-1 transition-colors hover:bg-secondary"
+			style={{ color: copied ? "var(--color-success)" : "var(--color-dimmed)" }}
+		>
+			{copied ? <Check size={12} /> : <Copy size={12} />}
+		</button>
+	);
+}
+
+function ExportLinksSection({ subscriptionId }: { subscriptionId: string }) {
+	const [open, setOpen] = useState(false);
+
+	const apiKeyQuery = useQuery({
+		queryKey: ["api-key"],
+		queryFn: () => client.settings.GetAPIKey(),
+		enabled: open,
+		staleTime: Number.POSITIVE_INFINITY,
+	});
+
+	const apiKey = apiKeyQuery.data?.api_key ?? "";
+	const base = `${window.location.origin}/api/export/${subscriptionId}`;
+
+	const links = [
+		{ label: "Clash", url: `${base}?token=${apiKey}&target=clash` },
+		{ label: "Base64", url: `${base}?token=${apiKey}&target=base64` },
+		{ label: "RouterOS (.rsc)", url: `${base}?token=${apiKey}&target=routeros` },
+	];
+
+	return (
+		<div className="rounded-lg border border-border bg-card">
+			<button
+				type="button"
+				onClick={() => setOpen(!open)}
+				className="flex w-full items-center justify-between px-4 py-3"
+			>
+				<div className="flex items-center gap-2 text-sm text-muted-foreground">
+					<Download size={13} strokeWidth={1.5} />
+					Export links
+				</div>
+				{open ? (
+					<ChevronDown size={13} strokeWidth={1.5} style={{ color: "var(--color-dimmed)" }} />
+				) : (
+					<ChevronRight size={13} strokeWidth={1.5} style={{ color: "var(--color-dimmed)" }} />
+				)}
+			</button>
+
+			{open && (
+				<div className="space-y-2 border-t border-border px-4 py-3">
+					{apiKeyQuery.isLoading && (
+						<p className="text-xs" style={{ color: "var(--color-dimmed)" }}>Loading…</p>
+					)}
+					{!apiKeyQuery.isLoading && links.map(({ label, url }) => (
+						<div key={label}>
+							<p className="mb-1 text-[11px] font-medium text-muted-foreground">{label}</p>
+							<div className="flex items-center gap-1.5 rounded-md border border-border bg-background px-2.5 py-1.5">
+								<span
+									className="min-w-0 flex-1 truncate font-mono text-[11px]"
+									style={{ color: "var(--color-code)" }}
+								>
+									{url}
+								</span>
+								<CopyButton text={url} />
+							</div>
+						</div>
+					))}
+				</div>
+			)}
 		</div>
 	);
 }

@@ -165,7 +165,7 @@ function DashboardPage() {
 							All Subscriptions
 						</p>
 						<div className="flex flex-col gap-1.5">
-							{(["clash", "base64"] as const).map((t) => {
+							{(["clash", "base64", "routeros"] as const).map((t) => {
 								const url = `${origin}/api/export/all?token=${apiKey}&target=${t}`;
 								return (
 									<div key={t} className="flex items-center gap-2">
@@ -203,7 +203,7 @@ function DashboardPage() {
 										{sub.name || sub.url}
 									</p>
 									<div className="flex flex-col gap-1.5">
-										{(["clash", "base64"] as const).map((t) => (
+										{(["clash", "base64", "routeros"] as const).map((t) => (
 											<div key={t} className="flex items-center gap-2">
 												<code className="flex-1 truncate rounded bg-background px-2 py-1 font-mono text-muted-foreground text-[11px]">
 													{base}&target={t}
@@ -244,7 +244,14 @@ function DashboardPage() {
 								<td className="py-0.5 pr-4 font-mono text-primary">target</td>
 								<td>
 									<code>clash</code> (default) — Clash YAML ·{" "}
-									<code>base64</code> — base64-encoded URI list
+									<code>base64</code> — base64-encoded URI list ·{" "}
+									<code>routeros</code> — RouterOS .rsc firewall script
+								</td>
+							</tr>
+						<tr>
+								<td className="py-0.5 pr-4 font-mono text-primary">list</td>
+								<td>
+									RouterOS address-list name (default: <code>clash_servers</code>)
 								</td>
 							</tr>
 						</tbody>
