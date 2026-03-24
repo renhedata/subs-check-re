@@ -173,11 +173,23 @@ func exportAllSubscriptions(w http.ResponseWriter, req *http.Request, ctx contex
 				SELECT COALESCE(n.config, cr.node_config) AS config,
 				       COALESCE(n.name, cr.node_name) AS node_name,
 				       cr.netflix, cr.youtube, cr.youtube_premium, cr.openai, cr.claude, cr.gemini, cr.grok, cr.disney, cr.tiktok,
-				       cr.speed_kbps, cr.latency_ms
+				       CASE WHEN cr.speed_kbps > 0 THEN cr.speed_kbps
+				            ELSE COALESCE((
+				                SELECT cr2.speed_kbps
+				                FROM check_results cr2
+				                JOIN check_jobs cj2 ON cj2.id = cr2.job_id
+				                WHERE cr2.node_name = cr.node_name
+				                  AND cj2.subscription_id = $2
+				                  AND cr2.speed_kbps > 0
+				                ORDER BY cr2.checked_at DESC
+				                LIMIT 1
+				            ), 0)
+				       END AS speed_kbps,
+				       cr.latency_ms
 				FROM check_results cr
 				LEFT JOIN nodes n ON n.id = cr.node_id
 				WHERE cr.job_id = $1 AND cr.alive = true
-			`, js.jobID)
+			`, js.jobID, js.subscriptionID)
 			if err != nil {
 				return
 			}
