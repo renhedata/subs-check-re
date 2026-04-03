@@ -57,7 +57,7 @@ func parseProxies(data []byte) ([]map[string]any, error) {
 	var clash struct {
 		Proxies []map[string]any `yaml:"proxies"`
 	}
-	if err := yaml.Unmarshal(data, &clash); err == nil && len(clash.Proxies) > 0 {
+	if err := yaml.Unmarshal(data, &clash); err == nil && clash.Proxies != nil {
 		return clash.Proxies, nil
 	}
 
@@ -65,9 +65,6 @@ func parseProxies(data []byte) ([]map[string]any, error) {
 	proxyList, err := convert.ConvertsV2Ray(data)
 	if err != nil {
 		return nil, fmt.Errorf("unable to parse as Clash YAML or V2Ray format: %w", err)
-	}
-	if len(proxyList) == 0 {
-		return nil, fmt.Errorf("subscription contains no proxies")
 	}
 	return proxyList, nil
 }
