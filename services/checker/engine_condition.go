@@ -70,3 +70,85 @@ func runConditionRule(ctx context.Context, client *http.Client, defRaw json.RawM
 	}
 	return true, nil
 }
+
+type conditionDebug struct {
+	ok          bool
+	statusCode  int
+	finalURL    string
+	bodyPreview string
+}
+
+// testConditionVerbose is like runConditionRule but also returns HTTP response details for the test UI.
+func testConditionVerbose(ctx context.Context, client *http.Client, defRaw json.RawMessage) (*conditionDebug, error) {
+	var def ConditionDef
+	if err := json.Unmarshal(defRaw, &def); err != nil {
+		return nil, err
+	}
+
+	method := def.Method
+	if method == "" {
+		method = "GET"
+	}
+	req, err := http.NewRequestWithContext(ctx, method, def.URL, nil)
+	if err != nil {
+		return nil, err
+	}
+	for k, v := range def.Headers {
+		req.Header.Set(k, v)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 256*1024))
+	resp.Body.Close()
+
+	bodyStr := string(body)
+	finalURL := resp.Request.URL.String()
+
+	preview := bodyStr
+	if len(preview) > 400 {
+		preview = preview[:400] + "…"
+	}
+
+	ok := true
+	if def.StatusCode != 0 && resp.StatusCode != def.StatusCode {
+		ok = false
+	}
+	for _, s := range def.BodyContains {
+		if !strings.Contains(bodyStr, s) {
+			ok = false
+		}
+	}
+	if ok && len(def.BodyContainsAny) > 0 {
+		found := false
+		for _, s := range def.BodyContainsAny {
+			if strings.Contains(bodyStr, s) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			ok = false
+		}
+	}
+	for _, s := range def.BodyNotContains {
+		if strings.Contains(bodyStr, s) {
+			ok = false
+		}
+	}
+	if def.FinalURLContains != "" && !strings.Contains(finalURL, def.FinalURLContains) {
+		ok = false
+	}
+	if def.FinalURLNotContains != "" && strings.Contains(finalURL, def.FinalURLNotContains) {
+		ok = false
+	}
+
+	return &conditionDebug{
+		ok:          ok,
+		statusCode:  resp.StatusCode,
+		finalURL:    finalURL,
+		bodyPreview: preview,
+	}, nil
+}

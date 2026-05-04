@@ -95,8 +95,12 @@ type TestRuleParams struct {
 
 // TestRuleResult is returned by POST /platform-rules/test.
 type TestRuleResult struct {
-	OK    bool   `json:"ok"`
-	Error string `json:"error,omitempty"`
+	OK          bool   `json:"ok"`
+	Error       string `json:"error,omitempty"`
+	StatusCode  int    `json:"status_code,omitempty"`
+	FinalURL    string `json:"final_url,omitempty"`
+	BodyPreview string `json:"body_preview,omitempty"`
+	DurationMs  int64  `json:"duration_ms,omitempty"`
 }
 
 var validRuleTypes = map[string]bool{
@@ -235,14 +239,31 @@ func TestRule(ctx context.Context, p *TestRuleParams) (*TestRuleResult, error) {
 		return nil, errs.B().Code(errs.InvalidArgument).Msg("invalid rule_type").Err()
 	}
 
-	rule := &PlatformRule{RuleType: p.RuleType, Definition: p.Definition}
-	client := &http.Client{Timeout: 15 * time.Second}
+	httpClient := &http.Client{Timeout: 15 * time.Second}
+	start := time.Now()
 
-	ok, err := runRule(ctx, client, rule)
-	if err != nil {
-		return &TestRuleResult{OK: false, Error: err.Error()}, nil
+	if p.RuleType == "condition" {
+		dbg, err := testConditionVerbose(ctx, httpClient, p.Definition)
+		ms := time.Since(start).Milliseconds()
+		if err != nil {
+			return &TestRuleResult{OK: false, Error: err.Error(), DurationMs: ms}, nil
+		}
+		return &TestRuleResult{
+			OK:          dbg.ok,
+			StatusCode:  dbg.statusCode,
+			FinalURL:    dbg.finalURL,
+			BodyPreview: dbg.bodyPreview,
+			DurationMs:  ms,
+		}, nil
 	}
-	return &TestRuleResult{OK: ok}, nil
+
+	rule := &PlatformRule{RuleType: p.RuleType, Definition: p.Definition}
+	ok, err := runRule(ctx, httpClient, rule)
+	ms := time.Since(start).Milliseconds()
+	if err != nil {
+		return &TestRuleResult{OK: false, Error: err.Error(), DurationMs: ms}, nil
+	}
+	return &TestRuleResult{OK: ok, DurationMs: ms}, nil
 }
 
 // loadUserRules fetches all platform rules for a user ordered by sort_order.

@@ -346,6 +346,10 @@ export namespace checker {
     export interface TestRuleResult {
         ok: boolean
         error: string
+        "status_code": number
+        "final_url": string
+        "body_preview": string
+        "duration_ms": number
     }
 
     /**
