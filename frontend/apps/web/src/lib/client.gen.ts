@@ -184,6 +184,7 @@ export namespace checker {
     export interface CreateRuleParams {
         name: string
         key: string
+        icon: string
         enabled: boolean
         "rule_type": string
         definition: JSONValue
@@ -315,6 +316,7 @@ export namespace checker {
         "user_id": string
         name: string
         key: string
+        icon: string
         enabled: boolean
         "rule_type": string
         definition: JSONValue
@@ -372,6 +374,7 @@ export namespace checker {
      */
     export interface UpdateRuleParams {
         name: string
+        icon: string
         enabled: boolean
         "rule_type": string
         definition: JSONValue

@@ -293,6 +293,44 @@ function PlatformsPage() {
 	);
 }
 
+// ─── Icon display ─────────────────────────────────────────────────────────────
+
+function IconDisplay({
+	icon,
+	name,
+	size = "md",
+}: { icon: string; name: string; size?: "sm" | "md" }) {
+	const dim = size === "sm" ? "h-5 w-5 text-sm" : "h-7 w-7 text-base";
+
+	if (!icon) {
+		return (
+			<span
+				className={`flex flex-shrink-0 items-center justify-center rounded bg-secondary font-medium text-muted-foreground ${dim}`}
+			>
+				{name.charAt(0).toUpperCase()}
+			</span>
+		);
+	}
+
+	const isUrl = icon.startsWith("http://") || icon.startsWith("https://") || icon.startsWith("data:");
+	if (isUrl) {
+		return (
+			<img
+				src={icon}
+				alt={name}
+				className={`flex-shrink-0 rounded object-contain ${dim}`}
+				onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+			/>
+		);
+	}
+
+	return (
+		<span className={`flex flex-shrink-0 items-center justify-center ${dim}`} aria-hidden>
+			{icon}
+		</span>
+	);
+}
+
 // ─── Rule card ────────────────────────────────────────────────────────────────
 
 function RuleCard({
@@ -319,6 +357,7 @@ function RuleCard({
 		mutationFn: (enabled: boolean) =>
 			client.checker.UpdateRule(rule.id, {
 				name: rule.name,
+				icon: rule.icon,
 				enabled,
 				rule_type: rule.rule_type,
 				definition: rule.definition,
@@ -330,23 +369,26 @@ function RuleCard({
 
 	return (
 		<div className="flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-3">
+			{/* Toggle: h-5/w-9 track, h-4/w-4 thumb, 2px padding, on=translate-x-[18px] = 36-16-2 */}
 			<button
 				type="button"
 				onClick={() => toggleMut.mutate(!rule.enabled)}
 				disabled={toggleMut.isPending}
 				className={[
-					"relative h-4 w-7 flex-shrink-0 rounded-full transition-colors",
+					"relative h-5 w-9 flex-shrink-0 rounded-full transition-colors",
 					rule.enabled ? "bg-green-500" : "bg-muted",
 				].join(" ")}
 				aria-label="Toggle"
 			>
 				<span
 					className={[
-						"absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-transform",
-						rule.enabled ? "translate-x-3" : "translate-x-0.5",
+						"absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform",
+						rule.enabled ? "translate-x-[18px]" : "translate-x-0.5",
 					].join(" ")}
 				/>
 			</button>
+
+			<IconDisplay icon={rule.icon} name={rule.name} />
 
 			<div className="min-w-0 flex-1">
 				<div className="flex flex-wrap items-center gap-2">
@@ -410,6 +452,7 @@ function RuleEditorDialog({
 
 	const [name, setName] = useState(rule?.name ?? "");
 	const [key, setKey] = useState(rule?.key ?? "");
+	const [icon, setIcon] = useState(rule?.icon ?? "");
 	const [ruleType, setRuleType] = useState<RuleType>((rule?.rule_type as RuleType) ?? "js");
 	const [def, setDef] = useState<Record<string, unknown>>(
 		(rule?.definition as Record<string, unknown>) ?? defaultDef("js"),
@@ -448,6 +491,7 @@ function RuleEditorDialog({
 			if (isEdit && rule) {
 				const p: UpdateRuleParams = {
 					name,
+					icon,
 					enabled: rule.enabled,
 					rule_type: ruleType,
 					definition: def as never,
@@ -458,6 +502,7 @@ function RuleEditorDialog({
 			const p: CreateRuleParams = {
 				name,
 				key,
+				icon,
 				enabled: true,
 				rule_type: ruleType,
 				definition: def as never,
@@ -503,6 +548,16 @@ function RuleEditorDialog({
 							{rule?.key}
 						</span>
 					)}
+					{/* Icon field: emoji or image URL */}
+					<div className="flex items-center gap-1">
+						{icon && <IconDisplay icon={icon} name={name} size="sm" />}
+						<input
+							value={icon}
+							onChange={(e) => setIcon(e.target.value)}
+							placeholder="🎬 or https://…"
+							className="h-7 w-32 rounded border border-border bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+						/>
+					</div>
 					<select
 						value={ruleType}
 						onChange={(e) => handleTypeChange(e.target.value as RuleType)}

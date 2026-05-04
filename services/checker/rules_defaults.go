@@ -11,6 +11,7 @@ import (
 type defaultRule struct {
 	name      string
 	key       string
+	icon      string
 	ruleType  string
 	sortOrder int
 	def       any
@@ -20,6 +21,7 @@ var defaultRules = []defaultRule{
 	{
 		name:      "Netflix",
 		key:       "netflix",
+		icon:      "🎬",
 		ruleType:  "js",
 		sortOrder: 0,
 		def: ScriptDef{Code: `
@@ -36,6 +38,7 @@ return false;
 	{
 		name:      "YouTube",
 		key:       "youtube",
+		icon:      "▶️",
 		ruleType:  "condition",
 		sortOrder: 1,
 		def: ConditionDef{
@@ -48,6 +51,7 @@ return false;
 	{
 		name:      "YouTube Premium",
 		key:       "youtube_premium",
+		icon:      "⭐",
 		ruleType:  "condition",
 		sortOrder: 2,
 		def: ConditionDef{
@@ -59,6 +63,7 @@ return false;
 	{
 		name:      "OpenAI",
 		key:       "openai",
+		icon:      "🤖",
 		ruleType:  "js",
 		sortOrder: 3,
 		def: ScriptDef{Code: `
@@ -69,6 +74,7 @@ return r.status === 401 || r.status === 200;
 	{
 		name:      "Claude",
 		key:       "claude",
+		icon:      "🔮",
 		ruleType:  "js",
 		sortOrder: 4,
 		def: ScriptDef{Code: `
@@ -81,6 +87,7 @@ return r.body.indexOf("claude") !== -1 || r.body.indexOf("anthropic") !== -1;
 	{
 		name:      "Gemini",
 		key:       "gemini",
+		icon:      "✨",
 		ruleType:  "condition",
 		sortOrder: 5,
 		def: ConditionDef{
@@ -92,6 +99,7 @@ return r.body.indexOf("claude") !== -1 || r.body.indexOf("anthropic") !== -1;
 	{
 		name:      "Grok",
 		key:       "grok",
+		icon:      "🧠",
 		ruleType:  "js",
 		sortOrder: 6,
 		def: ScriptDef{Code: `
@@ -102,6 +110,7 @@ return r.status === 401 || r.status === 200;
 	{
 		name:      "Disney+",
 		key:       "disney",
+		icon:      "🏰",
 		ruleType:  "condition",
 		sortOrder: 7,
 		def: ConditionDef{
@@ -112,6 +121,7 @@ return r.status === 401 || r.status === 200;
 	{
 		name:      "TikTok",
 		key:       "tiktok",
+		icon:      "🎵",
 		ruleType:  "js",
 		sortOrder: 8,
 		def: ScriptDef{Code: `
@@ -131,10 +141,10 @@ func seedDefaultRules(ctx context.Context, userID string) error {
 	for _, dr := range defaultRules {
 		defJSON, _ := json.Marshal(dr.def)
 		if _, err := db.Exec(ctx, `
-			INSERT INTO platform_rules (id, user_id, name, key, enabled, rule_type, definition, is_default, sort_order, created_at, updated_at)
-			VALUES ($1,$2,$3,$4,true,$5,$6,true,$7,$8,$8)
+			INSERT INTO platform_rules (id, user_id, name, key, icon, enabled, rule_type, definition, is_default, sort_order, created_at, updated_at)
+			VALUES ($1,$2,$3,$4,$5,true,$6,$7,true,$8,$9,$9)
 			ON CONFLICT (user_id, key) DO NOTHING
-		`, uuid.New().String(), userID, dr.name, dr.key, dr.ruleType, defJSON, dr.sortOrder, now); err != nil {
+		`, uuid.New().String(), userID, dr.name, dr.key, dr.icon, dr.ruleType, defJSON, dr.sortOrder, now); err != nil {
 			return err
 		}
 	}

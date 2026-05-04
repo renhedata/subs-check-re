@@ -54,6 +54,7 @@ type PlatformRule struct {
 	UserID     string          `json:"user_id"`
 	Name       string          `json:"name"`
 	Key        string          `json:"key"`
+	Icon       string          `json:"icon"`
 	Enabled    bool            `json:"enabled"`
 	RuleType   string          `json:"rule_type"`
 	Definition json.RawMessage `json:"definition"`
@@ -72,6 +73,7 @@ type ListRulesResponse struct {
 type CreateRuleParams struct {
 	Name       string          `json:"name"`
 	Key        string          `json:"key"`
+	Icon       string          `json:"icon"`
 	Enabled    bool            `json:"enabled"`
 	RuleType   string          `json:"rule_type"`
 	Definition json.RawMessage `json:"definition"`
@@ -81,6 +83,7 @@ type CreateRuleParams struct {
 // UpdateRuleParams is the request body for PUT /platform-rules/:ruleId.
 type UpdateRuleParams struct {
 	Name       string          `json:"name"`
+	Icon       string          `json:"icon"`
 	Enabled    bool            `json:"enabled"`
 	RuleType   string          `json:"rule_type"`
 	Definition json.RawMessage `json:"definition"`
@@ -153,9 +156,9 @@ func CreateRule(ctx context.Context, p *CreateRuleParams) (*PlatformRule, error)
 	defJSON, _ := json.Marshal(p.Definition)
 
 	if _, err := db.Exec(ctx, `
-		INSERT INTO platform_rules (id, user_id, name, key, enabled, rule_type, definition, is_default, sort_order, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,false,$8,$9,$9)
-	`, id, claims.UserID, p.Name, p.Key, p.Enabled, p.RuleType, defJSON, p.SortOrder, now); err != nil {
+		INSERT INTO platform_rules (id, user_id, name, key, icon, enabled, rule_type, definition, is_default, sort_order, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,false,$9,$10,$10)
+	`, id, claims.UserID, p.Name, p.Key, p.Icon, p.Enabled, p.RuleType, defJSON, p.SortOrder, now); err != nil {
 		return nil, errs.B().Code(errs.Internal).Msg("failed to create rule").Err()
 	}
 
@@ -164,6 +167,7 @@ func CreateRule(ctx context.Context, p *CreateRuleParams) (*PlatformRule, error)
 		UserID:     claims.UserID,
 		Name:       p.Name,
 		Key:        p.Key,
+		Icon:       p.Icon,
 		Enabled:    p.Enabled,
 		RuleType:   p.RuleType,
 		Definition: p.Definition,
@@ -189,9 +193,9 @@ func UpdateRule(ctx context.Context, ruleId string, p *UpdateRuleParams) (*Platf
 
 	result, err := db.Exec(ctx, `
 		UPDATE platform_rules
-		SET name=$3, enabled=$4, rule_type=$5, definition=$6, sort_order=$7, updated_at=$8
+		SET name=$3, icon=$4, enabled=$5, rule_type=$6, definition=$7, sort_order=$8, updated_at=$9
 		WHERE id=$1 AND user_id=$2
-	`, ruleId, claims.UserID, p.Name, p.Enabled, p.RuleType, defJSON, p.SortOrder, now)
+	`, ruleId, claims.UserID, p.Name, p.Icon, p.Enabled, p.RuleType, defJSON, p.SortOrder, now)
 	if err != nil {
 		return nil, errs.B().Code(errs.Internal).Msg("failed to update rule").Err()
 	}
@@ -203,10 +207,10 @@ func UpdateRule(ctx context.Context, ruleId string, p *UpdateRuleParams) (*Platf
 	var rule PlatformRule
 	var rawDef []byte
 	if err := db.QueryRow(ctx,
-		`SELECT id, user_id, name, key, enabled, rule_type, definition, is_default, sort_order, created_at, updated_at
+		`SELECT id, user_id, name, key, icon, enabled, rule_type, definition, is_default, sort_order, created_at, updated_at
 		 FROM platform_rules WHERE id=$1`,
 		ruleId,
-	).Scan(&rule.ID, &rule.UserID, &rule.Name, &rule.Key, &rule.Enabled, &rule.RuleType,
+	).Scan(&rule.ID, &rule.UserID, &rule.Name, &rule.Key, &rule.Icon, &rule.Enabled, &rule.RuleType,
 		&rawDef, &rule.IsDefault, &rule.SortOrder, &rule.CreatedAt, &rule.UpdatedAt); err != nil {
 		return nil, errs.B().Code(errs.Internal).Msg("failed to read updated rule").Err()
 	}
@@ -269,7 +273,7 @@ func TestRule(ctx context.Context, p *TestRuleParams) (*TestRuleResult, error) {
 // loadUserRules fetches all platform rules for a user ordered by sort_order.
 func loadUserRules(ctx context.Context, userID string) ([]*PlatformRule, error) {
 	rows, err := db.Query(ctx,
-		`SELECT id, user_id, name, key, enabled, rule_type, definition, is_default, sort_order, created_at, updated_at
+		`SELECT id, user_id, name, key, icon, enabled, rule_type, definition, is_default, sort_order, created_at, updated_at
 		 FROM platform_rules WHERE user_id=$1 ORDER BY sort_order, created_at`,
 		userID,
 	)
@@ -282,7 +286,7 @@ func loadUserRules(ctx context.Context, userID string) ([]*PlatformRule, error) 
 	for rows.Next() {
 		var r PlatformRule
 		var rawDef []byte
-		if err := rows.Scan(&r.ID, &r.UserID, &r.Name, &r.Key, &r.Enabled, &r.RuleType,
+		if err := rows.Scan(&r.ID, &r.UserID, &r.Name, &r.Key, &r.Icon, &r.Enabled, &r.RuleType,
 			&rawDef, &r.IsDefault, &r.SortOrder, &r.CreatedAt, &r.UpdatedAt); err != nil {
 			return nil, err
 		}
