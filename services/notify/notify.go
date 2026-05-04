@@ -4,9 +4,11 @@ package notify
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/smtp"
 	"sort"
 	"strings"
 	"sync"
@@ -15,12 +17,14 @@ import (
 	encauth "encore.dev/beta/auth"
 	"encore.dev/beta/errs"
 	"encore.dev/pubsub"
+	"encore.dev/rlog"
 	"encore.dev/storage/sqldb"
 	"github.com/google/uuid"
 	"github.com/robfig/cron/v3"
 
 	authsvc "subs-check-re/services/auth"
 	checkersvc "subs-check-re/services/checker"
+	settingssvc "subs-check-re/services/settings"
 )
 
 var db = sqldb.NewDatabase("notify", sqldb.DatabaseConfig{
@@ -45,7 +49,7 @@ func initService() (*Service, error) {
 	// Load all channels with unlock_cron on startup
 	ctx := context.Background()
 	rows, err := db.Query(ctx, `
-		SELECT id, type, config, unlock_cron
+		SELECT id, user_id, type, config, unlock_cron
 		FROM notify_channels
 		WHERE enabled = true AND unlock_cron IS NOT NULL AND unlock_cron != ''
 	`)
@@ -55,19 +59,19 @@ func initService() (*Service, error) {
 	defer rows.Close()
 
 	for rows.Next() {
-		var chID, chType, cronExpr string
+		var chID, userID, chType, cronExpr string
 		var configJSON []byte
-		if err := rows.Scan(&chID, &chType, &configJSON, &cronExpr); err != nil {
+		if err := rows.Scan(&chID, &userID, &chType, &configJSON, &cronExpr); err != nil {
 			continue
 		}
-		svc.registerCron(chID, cronExpr, chType, configJSON)
+		svc.registerCron(chID, cronExpr, userID, chType, configJSON)
 	}
 
 	svc.cron.Start()
 	return svc, nil
 }
 
-func (s *Service) registerCron(channelID, cronExpr, chType string, configJSON []byte) {
+func (s *Service) registerCron(channelID, cronExpr, userID, chType string, configJSON []byte) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -80,7 +84,7 @@ func (s *Service) registerCron(channelID, cronExpr, chType string, configJSON []
 	entryID, err := s.cron.AddFunc(cronExpr, func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		sendUnlockReport(ctx, chType, configJSON)
+		sendUnlockReport(ctx, userID, chType, configJSON)
 	})
 	if err == nil {
 		s.entries[channelID] = entryID
@@ -119,7 +123,6 @@ func handleJobCompleted(ctx context.Context, event *checkersvc.JobCompletedEvent
 	// Fetch detailed summary from checker
 	summary, err := checkersvc.GetJobDetailedSummary(ctx, event.JobID)
 	if err != nil {
-		// Fallback to basic event data
 		summary = &checkersvc.JobDetailedSummary{
 			JobID:            event.JobID,
 			SubscriptionName: event.SubscriptionID,
@@ -138,18 +141,28 @@ func handleJobCompleted(ctx context.Context, event *checkersvc.JobCompletedEvent
 		}
 		switch chType {
 		case "webhook":
-			sendWebhook(configJSON, summary) //nolint:errcheck
+			if err := sendWebhook(configJSON, summary); err != nil {
+				rlog.Warn("webhook notification failed", "job_id", event.JobID, "err", err)
+			}
 		case "telegram":
-			msg := formatCheckReport(summary)
-			sendTelegram(configJSON, msg, "HTML") //nolint:errcheck
+			if err := sendTelegram(configJSON, formatCheckReport(summary), "HTML"); err != nil {
+				rlog.Warn("telegram notification failed", "job_id", event.JobID, "err", err)
+			}
+		case "email":
+			subject := fmt.Sprintf("✅ Check Complete — %s (%d/%d alive)", summary.SubscriptionName, summary.Available, summary.Total)
+			if err := sendEmail(ctx, event.UserID, subject, htmlWrap(formatCheckReport(summary))); err != nil {
+				rlog.Warn("email notification failed", "job_id", event.JobID, "err", err)
+			}
 		}
 	}
+
+	checkPlatformAlerts(ctx, event.UserID, event.SubscriptionID, summary)
 	return nil
 }
 
 // --- Unlock report (scheduled) ---
 
-func sendUnlockReport(ctx context.Context, chType string, configJSON []byte) {
+func sendUnlockReport(ctx context.Context, userID, chType string, configJSON []byte) {
 	result, err := checkersvc.GetLocalUnlock(ctx)
 	if err != nil {
 		return
@@ -160,8 +173,9 @@ func sendUnlockReport(ctx context.Context, chType string, configJSON []byte) {
 		payload, _ := json.Marshal(result)
 		sendWebhookRaw(configJSON, payload) //nolint:errcheck
 	case "telegram":
-		msg := formatUnlockReport(result)
-		sendTelegram(configJSON, msg, "HTML") //nolint:errcheck
+		sendTelegram(configJSON, formatUnlockReport(result), "HTML") //nolint:errcheck
+	case "email":
+		sendEmail(ctx, userID, "🌐 Network Unlock Report", htmlWrap(formatUnlockReport(result))) //nolint:errcheck
 	}
 }
 
@@ -173,7 +187,6 @@ func formatCheckReport(s *checkersvc.JobDetailedSummary) string {
 	b.WriteString(fmt.Sprintf("✅ <b>Check Completed</b>\n📋 %s\n", s.SubscriptionName))
 	b.WriteString(fmt.Sprintf("📊 Available: <b>%d/%d</b> nodes\n", s.Available, s.Total))
 
-	// Speed stats
 	if s.MaxSpeedKbps > 0 {
 		b.WriteString(fmt.Sprintf("\n⚡ <b>Speed:</b> avg %s, max %s\n",
 			formatSpeed(s.AvgSpeedKbps), formatSpeed(s.MaxSpeedKbps)))
@@ -182,7 +195,6 @@ func formatCheckReport(s *checkersvc.JobDetailedSummary) string {
 		b.WriteString(fmt.Sprintf("⏱ <b>Latency:</b> avg %dms\n", s.AvgLatencyMs))
 	}
 
-	// Platform unlocks
 	entries := platformEntries(s.Platforms)
 	var unlocked []string
 	for _, e := range entries {
@@ -198,7 +210,6 @@ func formatCheckReport(s *checkersvc.JobDetailedSummary) string {
 		}
 	}
 
-	// Top nodes
 	if len(s.TopNodes) > 0 {
 		b.WriteString("\n🏆 <b>Top fastest:</b>\n")
 		for i, n := range s.TopNodes {
@@ -211,7 +222,6 @@ func formatCheckReport(s *checkersvc.JobDetailedSummary) string {
 		}
 	}
 
-	// Country breakdown
 	if len(s.Countries) > 0 {
 		b.WriteString("\n🌍 <b>Countries:</b> ")
 		type kv struct {
@@ -388,6 +398,7 @@ type Channel struct {
 	Enabled         bool            `json:"enabled"`
 	OnCheckComplete bool            `json:"on_check_complete"`
 	UnlockCron      string          `json:"unlock_cron"`
+	PlatformAlerts  []string        `json:"platform_alerts"`
 	CreatedAt       time.Time       `json:"created_at"`
 }
 
@@ -403,6 +414,7 @@ type CreateChannelParams struct {
 	Config          json.RawMessage `json:"config"`
 	OnCheckComplete bool            `json:"on_check_complete"`
 	UnlockCron      string          `json:"unlock_cron"`
+	PlatformAlerts  []string        `json:"platform_alerts"`
 }
 
 // DeleteChannelResponse is the response for DELETE /notify/channels/:id.
@@ -418,7 +430,7 @@ type TestChannelResponse struct {
 
 // TestChannelParams selects which report type to test.
 type TestChannelParams struct {
-	ReportType string `json:"report_type"` // "check" or "unlock"
+	ReportType string `json:"report_type"` // "check", "unlock", or "platform_alert"
 }
 
 // --- API endpoints ---
@@ -429,7 +441,8 @@ type TestChannelParams struct {
 func ListChannels(ctx context.Context) (*ListChannelsResponse, error) {
 	claims := encauth.Data().(*authsvc.UserClaims)
 	rows, err := db.Query(ctx, `
-		SELECT id, user_id, name, type, config, enabled, on_check_complete, COALESCE(unlock_cron, ''), created_at
+		SELECT id, user_id, name, type, config, enabled, on_check_complete,
+		       COALESCE(unlock_cron, ''), platform_alerts, created_at
 		FROM notify_channels WHERE user_id = $1 ORDER BY created_at DESC
 	`, claims.UserID)
 	if err != nil {
@@ -440,9 +453,13 @@ func ListChannels(ctx context.Context) (*ListChannelsResponse, error) {
 	var channels []Channel
 	for rows.Next() {
 		var c Channel
+		var alertsJSON []byte
 		if err := rows.Scan(&c.ID, &c.UserID, &c.Name, &c.Type, &c.Config, &c.Enabled,
-			&c.OnCheckComplete, &c.UnlockCron, &c.CreatedAt); err != nil {
+			&c.OnCheckComplete, &c.UnlockCron, &alertsJSON, &c.CreatedAt); err != nil {
 			return nil, errs.B().Code(errs.Internal).Msg("scan failed").Err()
+		}
+		if err := json.Unmarshal(alertsJSON, &c.PlatformAlerts); err != nil || c.PlatformAlerts == nil {
+			c.PlatformAlerts = []string{}
 		}
 		channels = append(channels, c)
 	}
@@ -458,8 +475,8 @@ func ListChannels(ctx context.Context) (*ListChannelsResponse, error) {
 func (s *Service) CreateChannel(ctx context.Context, p *CreateChannelParams) (*Channel, error) {
 	claims := encauth.Data().(*authsvc.UserClaims)
 
-	if p.Type != "webhook" && p.Type != "telegram" {
-		return nil, errs.B().Code(errs.InvalidArgument).Msg("type must be webhook or telegram").Err()
+	if p.Type != "webhook" && p.Type != "telegram" && p.Type != "email" {
+		return nil, errs.B().Code(errs.InvalidArgument).Msg("type must be webhook, telegram, or email").Err()
 	}
 	if p.UnlockCron != "" {
 		if _, err := cron.ParseStandard(p.UnlockCron); err != nil {
@@ -478,17 +495,22 @@ func (s *Service) CreateChannel(ctx context.Context, p *CreateChannelParams) (*C
 		unlockCron = &p.UnlockCron
 	}
 
+	alerts := p.PlatformAlerts
+	if alerts == nil {
+		alerts = []string{}
+	}
+	alertsJSON, _ := json.Marshal(alerts)
+
 	if _, err := db.Exec(ctx, `
-		INSERT INTO notify_channels (id, user_id, name, type, config, on_check_complete, unlock_cron, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		INSERT INTO notify_channels (id, user_id, name, type, config, on_check_complete, unlock_cron, platform_alerts, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 	`, id, claims.UserID, p.Name, p.Type, []byte(configJSON),
-		p.OnCheckComplete, unlockCron, time.Now()); err != nil {
+		p.OnCheckComplete, unlockCron, alertsJSON, time.Now()); err != nil {
 		return nil, errs.B().Code(errs.Internal).Msg("failed to create channel").Err()
 	}
 
-	// Register cron if needed
 	if p.UnlockCron != "" {
-		s.registerCron(id, p.UnlockCron, p.Type, configJSON)
+		s.registerCron(id, p.UnlockCron, claims.UserID, p.Type, configJSON)
 	}
 
 	return &Channel{
@@ -500,6 +522,7 @@ func (s *Service) CreateChannel(ctx context.Context, p *CreateChannelParams) (*C
 		Enabled:         true,
 		OnCheckComplete: p.OnCheckComplete,
 		UnlockCron:      p.UnlockCron,
+		PlatformAlerts:  alerts,
 	}, nil
 }
 
@@ -510,6 +533,7 @@ type UpdateChannelParams struct {
 	Enabled         *bool           `json:"enabled"`
 	OnCheckComplete *bool           `json:"on_check_complete"`
 	UnlockCron      *string         `json:"unlock_cron"`
+	PlatformAlerts  []string        `json:"platform_alerts"`
 }
 
 // UpdateChannel modifies an existing notification channel.
@@ -524,6 +548,12 @@ func (s *Service) UpdateChannel(ctx context.Context, id string, p *UpdateChannel
 		}
 	}
 
+	updAlerts := p.PlatformAlerts
+	if updAlerts == nil {
+		updAlerts = []string{}
+	}
+	updAlertsJSON, _ := json.Marshal(updAlerts)
+
 	result, err := db.Exec(ctx, `
 		UPDATE notify_channels
 		SET
@@ -531,9 +561,10 @@ func (s *Service) UpdateChannel(ctx context.Context, id string, p *UpdateChannel
 			config            = COALESCE($4, config),
 			enabled           = COALESCE($5, enabled),
 			on_check_complete = COALESCE($6, on_check_complete),
-			unlock_cron       = COALESCE($7, unlock_cron)
+			unlock_cron       = COALESCE($7, unlock_cron),
+			platform_alerts   = $8::jsonb
 		WHERE id=$1 AND user_id=$2
-	`, id, claims.UserID, p.Name, nullableJSON(p.Config), p.Enabled, p.OnCheckComplete, p.UnlockCron)
+	`, id, claims.UserID, p.Name, nullableJSON(p.Config), p.Enabled, p.OnCheckComplete, p.UnlockCron, updAlertsJSON)
 	if err != nil {
 		return nil, errs.B().Code(errs.Internal).Msg("update failed").Err()
 	}
@@ -541,23 +572,25 @@ func (s *Service) UpdateChannel(ctx context.Context, id string, p *UpdateChannel
 		return nil, errs.B().Code(errs.NotFound).Msg("channel not found").Err()
 	}
 
-	// Re-read channel and update cron
 	var c Channel
 	var unlockCron *string
+	var retAlertsJSON []byte
 	if err := db.QueryRow(ctx, `
-		SELECT id, user_id, name, type, config, enabled, on_check_complete, unlock_cron, created_at
+		SELECT id, user_id, name, type, config, enabled, on_check_complete, unlock_cron, platform_alerts, created_at
 		FROM notify_channels WHERE id=$1
 	`, id).Scan(&c.ID, &c.UserID, &c.Name, &c.Type, &c.Config, &c.Enabled,
-		&c.OnCheckComplete, &unlockCron, &c.CreatedAt); err != nil {
+		&c.OnCheckComplete, &unlockCron, &retAlertsJSON, &c.CreatedAt); err != nil {
 		return nil, errs.B().Code(errs.Internal).Msg("fetch after update failed").Err()
 	}
 	if unlockCron != nil {
 		c.UnlockCron = *unlockCron
 	}
+	if err := json.Unmarshal(retAlertsJSON, &c.PlatformAlerts); err != nil || c.PlatformAlerts == nil {
+		c.PlatformAlerts = []string{}
+	}
 
-	// Update cron scheduler
 	if c.Enabled && c.UnlockCron != "" {
-		s.registerCron(c.ID, c.UnlockCron, c.Type, c.Config)
+		s.registerCron(c.ID, c.UnlockCron, claims.UserID, c.Type, c.Config)
 	} else {
 		s.removeCron(c.ID)
 	}
@@ -587,7 +620,6 @@ func TestChannel(ctx context.Context, id string, p *TestChannelParams) (*TestCha
 	var sendErr error
 	switch reportType {
 	case "unlock":
-		// Test with live local unlock data
 		result, err := checkersvc.GetLocalUnlock(ctx)
 		if err != nil {
 			return &TestChannelResponse{OK: false, Error: "failed to get local unlock status"}, nil
@@ -598,10 +630,11 @@ func TestChannel(ctx context.Context, id string, p *TestChannelParams) (*TestCha
 			sendErr = sendWebhookRaw(configJSON, data)
 		case "telegram":
 			sendErr = sendTelegram(configJSON, formatUnlockReport(result), "HTML")
+		case "email":
+			sendErr = sendEmail(ctx, claims.UserID, "🌐 Network Unlock Report (test)", htmlWrap(formatUnlockReport(result)))
 		}
 
 	case "check":
-		// Test with sample data
 		sample := &checkersvc.JobDetailedSummary{
 			JobID:            "test",
 			SubscriptionName: "Test Subscription",
@@ -626,10 +659,26 @@ func TestChannel(ctx context.Context, id string, p *TestChannelParams) (*TestCha
 			sendErr = sendWebhook(configJSON, sample)
 		case "telegram":
 			sendErr = sendTelegram(configJSON, formatCheckReport(sample), "HTML")
+		case "email":
+			sendErr = sendEmail(ctx, claims.UserID, "✅ Check Complete (test) — Test Subscription", htmlWrap(formatCheckReport(sample)))
+		}
+
+	case "platform_alert":
+		msg := formatPlatformAlert("Test Subscription", []string{"netflix", "openai"})
+		switch chType {
+		case "webhook":
+			sendErr = sendWebhook(configJSON, map[string]any{
+				"type": "platform_alert", "subscription": "Test Subscription",
+				"lost_platforms": []string{"netflix", "openai"},
+			})
+		case "telegram":
+			sendErr = sendTelegram(configJSON, msg, "HTML")
+		case "email":
+			sendErr = sendEmail(ctx, claims.UserID, "⚠️ Platform Alert (test) — Netflix, OpenAI", htmlWrap(msg))
 		}
 
 	default:
-		return nil, errs.B().Code(errs.InvalidArgument).Msg("report_type must be 'check' or 'unlock'").Err()
+		return nil, errs.B().Code(errs.InvalidArgument).Msg("report_type must be 'check', 'unlock', or 'platform_alert'").Err()
 	}
 
 	if sendErr != nil {
@@ -662,4 +711,219 @@ func nullableJSON(r json.RawMessage) []byte {
 		return nil
 	}
 	return []byte(r)
+}
+
+// --- Email sender (reads global SMTP config from settings service) ---
+
+func sendEmail(ctx context.Context, userID, subject, htmlBody string) error {
+	cfg, err := settingssvc.GetEmailConfigForUser(ctx, userID)
+	if err != nil || cfg.SMTPHost == "" || cfg.To == "" {
+		return fmt.Errorf("email not configured: set SMTP settings in General Settings")
+	}
+
+	port := cfg.SMTPPort
+	if port == 0 {
+		port = 587
+	}
+	from := cfg.From
+	if from == "" {
+		from = cfg.SMTPUser
+	}
+
+	recipients := strings.Split(cfg.To, ",")
+	for i := range recipients {
+		recipients[i] = strings.TrimSpace(recipients[i])
+	}
+
+	header := fmt.Sprintf(
+		"From: %s\r\nTo: %s\r\nSubject: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n",
+		from, cfg.To, subject,
+	)
+	msg := []byte(header + htmlBody)
+	addr := fmt.Sprintf("%s:%d", cfg.SMTPHost, port)
+
+	if port == 465 {
+		tlsConfig := &tls.Config{ServerName: cfg.SMTPHost}
+		conn, err := tls.Dial("tcp", addr, tlsConfig)
+		if err != nil {
+			return fmt.Errorf("tls connect: %w", err)
+		}
+		defer conn.Close()
+		c, err := smtp.NewClient(conn, cfg.SMTPHost)
+		if err != nil {
+			return fmt.Errorf("smtp client: %w", err)
+		}
+		defer c.Close()
+		if cfg.SMTPUser != "" {
+			if err := c.Auth(smtp.PlainAuth("", cfg.SMTPUser, cfg.SMTPPass, cfg.SMTPHost)); err != nil {
+				return fmt.Errorf("smtp auth: %w", err)
+			}
+		}
+		if err := c.Mail(from); err != nil {
+			return fmt.Errorf("smtp mail from: %w", err)
+		}
+		for _, to := range recipients {
+			if err := c.Rcpt(to); err != nil {
+				return fmt.Errorf("smtp rcpt: %w", err)
+			}
+		}
+		w, err := c.Data()
+		if err != nil {
+			return fmt.Errorf("smtp data: %w", err)
+		}
+		_, err = w.Write(msg)
+		w.Close()
+		return err
+	}
+
+	var auth smtp.Auth
+	if cfg.SMTPUser != "" {
+		auth = smtp.PlainAuth("", cfg.SMTPUser, cfg.SMTPPass, cfg.SMTPHost)
+	}
+	return smtp.SendMail(addr, auth, from, recipients, msg)
+}
+
+// htmlWrap turns a Telegram HTML message into a minimal HTML email body.
+func htmlWrap(telegramHTML string) string {
+	body := strings.NewReplacer("\n", "<br>\n").Replace(telegramHTML)
+	return fmt.Sprintf(`<!DOCTYPE html><html><head><meta charset="UTF-8">
+<style>body{font-family:monospace;line-height:1.6;padding:24px;max-width:640px;color:#222;}
+b{font-weight:bold;}</style></head><body>%s</body></html>`, body)
+}
+
+// --- Platform availability alerts ---
+
+var platformNames = map[string]string{
+	"netflix":         "Netflix",
+	"youtube":         "YouTube",
+	"youtube_premium": "YouTube Premium",
+	"openai":          "OpenAI",
+	"claude":          "Claude",
+	"gemini":          "Gemini",
+	"grok":            "Grok",
+	"disney":          "Disney+",
+	"tiktok":          "TikTok",
+}
+
+func platformDisplayName(key string) string {
+	if n, ok := platformNames[key]; ok {
+		return n
+	}
+	return key
+}
+
+func formatPlatformAlert(subName string, lostPlatforms []string) string {
+	names := make([]string, len(lostPlatforms))
+	for i, p := range lostPlatforms {
+		names[i] = platformDisplayName(p)
+	}
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("⚠️ <b>Platform Alert</b>\n📋 %s\n\n", subName))
+	b.WriteString("The following platforms are no longer accessible through this subscription:\n")
+	for _, n := range names {
+		b.WriteString(fmt.Sprintf("  ❌ %s\n", n))
+	}
+	b.WriteString("\n<i>Alert fires when a previously available platform becomes inaccessible after a check.</i>")
+	return b.String()
+}
+
+// checkPlatformAlerts compares the current job's platform counts against the stored
+// last-known state and sends alerts for any platform that dropped from available to zero.
+func checkPlatformAlerts(ctx context.Context, userID, subID string, summary *checkersvc.JobDetailedSummary) {
+	current := map[string]bool{
+		"netflix":         summary.Platforms.Netflix > 0,
+		"youtube":         summary.Platforms.YouTube > 0,
+		"youtube_premium": summary.Platforms.YouTubePremium > 0,
+		"openai":          summary.Platforms.OpenAI > 0,
+		"claude":          summary.Platforms.Claude > 0,
+		"gemini":          summary.Platforms.Gemini > 0,
+		"grok":            summary.Platforms.Grok > 0,
+		"disney":          summary.Platforms.Disney > 0,
+		"tiktok":          summary.Platforms.TikTok > 0,
+	}
+
+	prev := map[string]bool{}
+	rows, err := db.Query(ctx,
+		`SELECT platform, available FROM subscription_platform_state WHERE subscription_id=$1`, subID)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var platform string
+			var available bool
+			if rows.Scan(&platform, &available) == nil {
+				prev[platform] = available
+			}
+		}
+	}
+
+	for platform, available := range current {
+		db.Exec(ctx, `
+			INSERT INTO subscription_platform_state (subscription_id, user_id, platform, available, updated_at)
+			VALUES ($1, $2, $3, $4, NOW())
+			ON CONFLICT (subscription_id, platform) DO UPDATE SET available=$4, updated_at=NOW()
+		`, subID, userID, platform, available) //nolint:errcheck
+	}
+
+	var lostPlatforms []string
+	for platform, nowAvail := range current {
+		if wasAvail, hadPrev := prev[platform]; hadPrev && wasAvail && !nowAvail {
+			lostPlatforms = append(lostPlatforms, platform)
+		}
+	}
+	if len(lostPlatforms) == 0 {
+		return
+	}
+
+	chRows, err := db.Query(ctx, `
+		SELECT type, config, platform_alerts FROM notify_channels
+		WHERE user_id=$1 AND enabled=true AND platform_alerts != '[]'::jsonb
+	`, userID)
+	if err != nil {
+		return
+	}
+	defer chRows.Close()
+
+	for chRows.Next() {
+		var chType string
+		var configJSON, alertsJSON []byte
+		if err := chRows.Scan(&chType, &configJSON, &alertsJSON); err != nil {
+			continue
+		}
+		var watched []string
+		json.Unmarshal(alertsJSON, &watched) //nolint:errcheck
+
+		var matched []string
+		for _, lost := range lostPlatforms {
+			for _, w := range watched {
+				if lost == w {
+					matched = append(matched, lost)
+					break
+				}
+			}
+		}
+		if len(matched) == 0 {
+			continue
+		}
+
+		names := make([]string, len(matched))
+		for i, p := range matched {
+			names[i] = platformDisplayName(p)
+		}
+		subject := fmt.Sprintf("⚠️ Platform Alert — %s", strings.Join(names, ", "))
+		msg := formatPlatformAlert(summary.SubscriptionName, matched)
+
+		switch chType {
+		case "webhook":
+			sendWebhook(configJSON, map[string]any{ //nolint:errcheck
+				"type":           "platform_alert",
+				"subscription":   summary.SubscriptionName,
+				"lost_platforms": matched,
+				"timestamp":      time.Now().UTC(),
+			})
+		case "telegram":
+			sendTelegram(configJSON, msg, "HTML") //nolint:errcheck
+		case "email":
+			sendEmail(ctx, userID, subject, htmlWrap(msg)) //nolint:errcheck
+		}
+	}
 }

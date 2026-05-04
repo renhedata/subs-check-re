@@ -83,7 +83,7 @@ function SubscriptionDetailPage() {
 	const [jobId, setJobId] = useState<string | null>(jobIdFromSearch ?? null);
 	const [progress, setProgress] = useState<SSEProgress | null>(null);
 	const [logEntries, setLogEntries] = useState<SSEProgress[]>([]);
-	const logEndRef = useRef<HTMLDivElement | null>(null);
+	const logContainerRef = useRef<HTMLDivElement | null>(null);
 	const esRef = useRef<EventSource | null>(null);
 	const qc = useQueryClient();
 	const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
@@ -166,10 +166,11 @@ function SubscriptionDetailPage() {
 		return () => es.close();
 	}, [jobId, resultsQuery.refetch, qc, id]);
 
-	// Auto-scroll log to bottom
+	// Auto-scroll only within the log container, not the page
 	// biome-ignore lint/correctness/useExhaustiveDependencies: scroll on new entries
 	useEffect(() => {
-		logEndRef.current?.scrollIntoView({ behavior: "smooth" });
+		const el = logContainerRef.current;
+		if (el) el.scrollTop = el.scrollHeight;
 	}, [logEntries.length]);
 
 	const job = resultsQuery.data?.job;
@@ -200,19 +201,32 @@ function SubscriptionDetailPage() {
 						const active =
 							selectedJobId === j.id ||
 							(!selectedJobId && j.id === resultsQuery.data?.job.id);
+						const failed = j.status === "failed";
+						const running = j.status === "running" || j.status === "queued";
+						const borderColor = active
+							? "var(--primary)"
+							: failed
+								? "var(--destructive)"
+								: "var(--border)";
+						const textColor = active
+							? "var(--primary)"
+							: failed
+								? "var(--destructive)"
+								: running
+									? "var(--primary)"
+									: "var(--color-dimmed)";
+						const bg = active
+							? "var(--color-badge-info-bg)"
+							: failed
+								? "var(--color-badge-danger-bg)"
+								: "transparent";
 						return (
 							<button
 								key={j.id}
 								type="button"
 								onClick={() => setSelectedJobId(j.id)}
 								className="rounded-full border px-2.5 py-0.5 font-mono text-[11px] transition-colors"
-								style={{
-									borderColor: active ? "var(--primary)" : "var(--border)",
-									color: active ? "var(--primary)" : "var(--color-dimmed)",
-									background: active
-										? "var(--color-badge-info-bg)"
-										: "transparent",
-								}}
+								style={{ borderColor, color: textColor, background: bg }}
 							>
 								{new Date(j.created_at).toLocaleString(undefined, {
 									month: "short",
@@ -282,6 +296,7 @@ function SubscriptionDetailPage() {
 					{/* Scrollable log */}
 					{logEntries.length > 0 && (
 						<div
+							ref={logContainerRef}
 							className="max-h-48 overflow-y-auto"
 							style={{ scrollbarWidth: "thin" }}
 						>
@@ -326,7 +341,6 @@ function SubscriptionDetailPage() {
 									) : null}
 								</div>
 							))}
-							<div ref={logEndRef} />
 						</div>
 					)}
 				</div>

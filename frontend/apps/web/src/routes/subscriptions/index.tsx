@@ -1,4 +1,5 @@
 import { Button } from "@frontend/ui/components/button";
+import { Checkbox } from "@frontend/ui/components/checkbox";
 import { Input } from "@frontend/ui/components/input";
 import { Label } from "@frontend/ui/components/label";
 import { Skeleton } from "@frontend/ui/components/skeleton";
@@ -339,10 +340,9 @@ function SubRow({
 			{showOpts && (
 				<div className="space-y-3 border-t border-border px-4 py-3">
 					<label className="flex cursor-pointer select-none items-center gap-2">
-						<input
-							type="checkbox"
+						<Checkbox
 							checked={speedTest}
-							onChange={(e) => setSpeedTest(e.target.checked)}
+							onCheckedChange={(v) => setSpeedTest(v === true)}
 						/>
 						<span className="text-xs text-muted-foreground">Speed test</span>
 					</label>
@@ -350,12 +350,11 @@ function SubRow({
 						{MEDIA_APPS.map((app) => (
 							<label
 								key={app}
-								className="flex cursor-pointer select-none items-center gap-1"
+								className="flex cursor-pointer select-none items-center gap-1.5"
 							>
-								<input
-									type="checkbox"
+								<Checkbox
 									checked={mediaApps.includes(app)}
-									onChange={() => toggleApp(app)}
+									onCheckedChange={() => toggleApp(app)}
 								/>
 								<PlatformIcon platform={app as PlatformKey} size={13} showLabel />
 							</label>

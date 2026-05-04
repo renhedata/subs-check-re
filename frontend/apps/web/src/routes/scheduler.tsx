@@ -1,4 +1,5 @@
 import { Button } from "@frontend/ui/components/button";
+import { Checkbox } from "@frontend/ui/components/checkbox";
 import {
 	Select,
 	SelectContent,
@@ -290,10 +291,9 @@ function ScheduleForm({
 			<div className="space-y-2">
 				<p className="text-muted-foreground text-xs">Check options</p>
 				<label className="flex cursor-pointer select-none items-center gap-2">
-					<input
-						type="checkbox"
+					<Checkbox
 						checked={speedTest}
-						onChange={(e) => setSpeedTest(e.target.checked)}
+						onCheckedChange={(v) => setSpeedTest(v === true)}
 					/>
 					<span className="flex items-center gap-1 text-xs text-muted-foreground">
 						<Zap size={11} strokeWidth={1.5} />
@@ -304,12 +304,11 @@ function ScheduleForm({
 					{MEDIA_APPS.map((app) => (
 						<label
 							key={app}
-							className="flex cursor-pointer select-none items-center gap-1"
+							className="flex cursor-pointer select-none items-center gap-1.5"
 						>
-							<input
-								type="checkbox"
+							<Checkbox
 								checked={mediaApps.includes(app)}
-								onChange={() => toggleApp(app)}
+								onCheckedChange={() => toggleApp(app)}
 							/>
 							<PlatformIcon platform={app as PlatformKey} size={13} showLabel />
 						</label>

@@ -117,6 +117,7 @@ export namespace auth {
     export interface LoginParams {
         username: string
         password: string
+        remember: boolean
     }
 
     export interface LoginResponse {
@@ -335,6 +336,9 @@ export namespace checker {
         /**
          * Export generates a subscription link from the latest completed check results.
          * If subscriptionID is "all", combines nodes from all subscriptions.
+         * 
+         * Supported targets: clash (default), base64, routeros
+         * For routeros target, use ?list=<address-list-name> (default: clash_servers)
          */
         public async Export(method: "GET", subscriptionID: string, body?: RequestInit["body"], options?: CallParameters): Promise<globalThis.Response> {
             return this.baseClient.callAPI(method, `/export/${encodeURIComponent(subscriptionID)}`, body, options)
@@ -418,6 +422,7 @@ export namespace notify {
         enabled: boolean
         "on_check_complete": boolean
         "unlock_cron": string
+        "platform_alerts": string[]
         "created_at": string
     }
 
@@ -430,6 +435,7 @@ export namespace notify {
         config: JSONValue
         "on_check_complete": boolean
         "unlock_cron": string
+        "platform_alerts": string[]
     }
 
     /**
@@ -451,7 +457,7 @@ export namespace notify {
      */
     export interface TestChannelParams {
         /**
-         * "check" or "unlock"
+         * "check", "unlock", or "platform_alert"
          */
         "report_type": string
     }
@@ -473,6 +479,7 @@ export namespace notify {
         enabled: boolean
         "on_check_complete": boolean
         "unlock_cron": string
+        "platform_alerts": string[]
     }
 
     export class ServiceClient {
@@ -619,10 +626,23 @@ export namespace settings {
     }
 
     /**
+     * EmailConfig holds global SMTP settings for email notifications.
+     */
+    export interface EmailConfig {
+        "smtp_host": string
+        "smtp_port": number
+        "smtp_user": string
+        "smtp_pass": string
+        from: string
+        to: string
+    }
+
+    /**
      * UserSettings holds configurable per-user settings.
      */
     export interface UserSettings {
         "speed_test_url": string
+        "email_config": EmailConfig
     }
 
     export class ServiceClient {

@@ -3,7 +3,8 @@
 import { Skeleton } from "@frontend/ui/components/skeleton";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { CheckCircle, Clock, FileText, RefreshCw } from "lucide-react";
+import { Check, CheckCircle, ChevronDown, ChevronRight, Clock, Copy, FileText, RefreshCw } from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
 
 import { client } from "@/lib/client";
@@ -191,41 +192,15 @@ function DashboardPage() {
 
 				{/* Per-subscription URLs */}
 				{subs.length > 0 && apiKey && (
-					<div className="space-y-2">
-						{subs.map((sub) => {
-							const base = `${origin}/api/export/${sub.id}?token=${apiKey}`;
-							return (
-								<div
-									key={sub.id}
-									className="space-y-2 rounded-lg border border-border bg-card p-4"
-								>
-									<p className="font-medium text-foreground text-sm">
-										{sub.name || sub.url}
-									</p>
-									<div className="flex flex-col gap-1.5">
-										{(["clash", "base64", "routeros"] as const).map((t) => (
-											<div key={t} className="flex items-center gap-2">
-												<code className="flex-1 truncate rounded bg-background px-2 py-1 font-mono text-muted-foreground text-[11px]">
-													{base}&target={t}
-												</code>
-												<button
-													type="button"
-													onClick={() => {
-														navigator.clipboard.writeText(
-															`${base}&target=${t}`,
-														);
-														toast.success("Copied");
-													}}
-													className="flex-shrink-0 rounded border border-border px-2 py-1 text-[11px] text-muted-foreground hover:bg-white/5"
-												>
-													{t}
-												</button>
-											</div>
-										))}
-									</div>
-								</div>
-							);
-						})}
+					<div className="space-y-1.5">
+						{subs.map((sub) => (
+							<SubExportRow
+								key={sub.id}
+								sub={sub}
+								apiKey={apiKey}
+								origin={origin}
+							/>
+						))}
 					</div>
 				)}
 
@@ -258,6 +233,73 @@ function DashboardPage() {
 					</table>
 				</div>
 			</div>
+		</div>
+	);
+}
+
+function CopyIconButton({ text }: { text: string }) {
+	const [copied, setCopied] = useState(false);
+	return (
+		<button
+			type="button"
+			onClick={() => {
+				navigator.clipboard.writeText(text);
+				setCopied(true);
+				setTimeout(() => setCopied(false), 1500);
+			}}
+			className="flex-shrink-0 rounded p-1 transition-colors hover:bg-white/5"
+			style={{ color: copied ? "var(--color-success)" : "var(--color-dimmed)" }}
+		>
+			{copied ? <Check size={11} /> : <Copy size={11} />}
+		</button>
+	);
+}
+
+function SubExportRow({
+	sub,
+	apiKey,
+	origin,
+}: {
+	sub: { id: string; name: string; url: string };
+	apiKey: string;
+	origin: string;
+}) {
+	const [open, setOpen] = useState(false);
+	const base = `${origin}/api/export/${sub.id}?token=${apiKey}`;
+
+	return (
+		<div className="rounded-lg border border-border bg-card">
+			<button
+				type="button"
+				onClick={() => setOpen(!open)}
+				className="flex w-full items-center justify-between px-4 py-2.5"
+			>
+				<span className="truncate text-left text-sm text-muted-foreground">
+					{sub.name || sub.url}
+				</span>
+				{open ? (
+					<ChevronDown size={13} strokeWidth={1.5} style={{ color: "var(--color-dimmed)" }} />
+				) : (
+					<ChevronRight size={13} strokeWidth={1.5} style={{ color: "var(--color-dimmed)" }} />
+				)}
+			</button>
+			{open && (
+				<div className="flex flex-col gap-1.5 border-t border-border px-4 py-3">
+					{(["clash", "base64", "routeros"] as const).map((t) => (
+						<div key={t} className="flex items-center gap-2">
+							<span
+								className="w-16 flex-shrink-0 text-[11px] text-muted-foreground"
+							>
+								{t}
+							</span>
+							<code className="flex-1 truncate rounded bg-background px-2 py-1 font-mono text-[11px]" style={{ color: "var(--color-code)" }}>
+								{base}&target={t}
+							</code>
+							<CopyIconButton text={`${base}&target=${t}`} />
+						</div>
+					))}
+				</div>
+			)}
 		</div>
 	);
 }

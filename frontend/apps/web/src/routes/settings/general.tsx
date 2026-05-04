@@ -2,7 +2,7 @@ import { Input } from "@frontend/ui/components/input";
 import { Label } from "@frontend/ui/components/label";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { Loader2 } from "lucide-react";
+import { Loader2, Mail } from "lucide-react";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
@@ -27,7 +27,10 @@ function GeneralSettingsPage() {
 	});
 
 	const { register, handleSubmit, reset } = useForm<UserSettings>({
-		defaultValues: { speed_test_url: "" },
+		defaultValues: {
+			speed_test_url: "",
+			email_config: { smtp_host: "", smtp_port: 587, smtp_user: "", smtp_pass: "", from: "", to: "" },
+		},
 	});
 
 	useEffect(() => {
@@ -49,16 +52,15 @@ function GeneralSettingsPage() {
 				General Settings
 			</h1>
 
-			<div className="rounded-lg border border-border bg-card p-5">
-				<form
-					onSubmit={handleSubmit((d) => saveMutation.mutate(d))}
-					className="space-y-4"
-				>
+			<form
+				onSubmit={handleSubmit((d) => saveMutation.mutate(d))}
+				className="space-y-5"
+			>
+				{/* Speed test */}
+				<div className="rounded-lg border border-border bg-card p-5">
+					<p className="mb-3 font-medium text-foreground text-sm">Speed Test</p>
 					<div className="space-y-1.5">
-						<Label
-							htmlFor="speed_test_url"
-							className="text-muted-foreground text-xs"
-						>
+						<Label htmlFor="speed_test_url" className="text-muted-foreground text-xs">
 							Speed Test URL
 						</Label>
 						<Input
@@ -67,28 +69,109 @@ function GeneralSettingsPage() {
 							{...register("speed_test_url")}
 							className="h-8 font-mono text-sm"
 						/>
-						<p
-							className="text-xs"
-							style={{ color: "var(--color-dimmed)" }}
-						>
+						<p className="text-xs" style={{ color: "var(--color-dimmed)" }}>
 							URL used to measure download speed. Leave blank to use default.
 						</p>
 					</div>
+				</div>
 
-					<button
-						type="submit"
-						disabled={saveMutation.isPending}
-						className="flex items-center gap-2 rounded-md px-4 py-1.5 font-medium text-sm text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-						style={{ background: "var(--color-btn-success)" }}
-					>
-						{saveMutation.isPending ? (
-							<Loader2 size={13} className="animate-spin" />
-						) : (
-							"Save"
-						)}
-					</button>
-				</form>
-			</div>
+				{/* Email / SMTP */}
+				<div className="rounded-lg border border-border bg-card p-5">
+					<div className="mb-3 flex items-center gap-1.5">
+						<Mail size={13} strokeWidth={1.5} className="text-muted-foreground" />
+						<p className="font-medium text-foreground text-sm">
+							Email Notifications (SMTP)
+						</p>
+					</div>
+					<div className="space-y-3">
+						<div className="grid grid-cols-3 gap-3">
+							<div className="col-span-2 space-y-1.5">
+								<Label className="text-muted-foreground text-xs">SMTP Host</Label>
+								<Input
+									placeholder="smtp.gmail.com"
+									{...register("email_config.smtp_host")}
+									className="h-8 font-mono text-sm"
+								/>
+							</div>
+							<div className="space-y-1.5">
+								<Label className="text-muted-foreground text-xs">Port</Label>
+								<Input
+									placeholder="587"
+									type="number"
+									{...register("email_config.smtp_port", { valueAsNumber: true })}
+									className="h-8 font-mono text-sm"
+								/>
+							</div>
+						</div>
+						<div className="grid grid-cols-2 gap-3">
+							<div className="space-y-1.5">
+								<Label className="text-muted-foreground text-xs">Username</Label>
+								<Input
+									placeholder="user@example.com"
+									{...register("email_config.smtp_user")}
+									className="h-8 text-sm"
+								/>
+							</div>
+							<div className="space-y-1.5">
+								<Label className="text-muted-foreground text-xs">Password</Label>
+								<Input
+									type="password"
+									placeholder="••••••••"
+									{...register("email_config.smtp_pass")}
+									className="h-8 text-sm"
+								/>
+							</div>
+						</div>
+						<div className="space-y-1.5">
+							<Label className="text-muted-foreground text-xs">From address</Label>
+							<Input
+								placeholder="alerts@example.com"
+								{...register("email_config.from")}
+								className="h-8 text-sm"
+							/>
+						</div>
+						<div className="space-y-1.5">
+							<Label className="text-muted-foreground text-xs">
+								To address(es){" "}
+								<span className="opacity-60">(comma-separated)</span>
+							</Label>
+							<Input
+								placeholder="you@example.com, team@example.com"
+								{...register("email_config.to")}
+								className="h-8 text-sm"
+							/>
+						</div>
+						<p className="text-xs" style={{ color: "var(--color-dimmed)" }}>
+							Port 465 = SSL/TLS · Port 587 = STARTTLS. Leave blank to disable
+							email notifications.
+						</p>
+					</div>
+				</div>
+
+				<button
+					type="submit"
+					disabled={saveMutation.isPending}
+					className="flex items-center gap-2 rounded-md px-4 py-1.5 font-medium text-sm text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+					style={{ background: "var(--color-btn-success)" }}
+				>
+					{saveMutation.isPending ? (
+						<Loader2 size={13} className="animate-spin" />
+					) : (
+						"Save"
+					)}
+				</button>
+			</form>
+
+			<p className="text-xs" style={{ color: "var(--color-dimmed)" }}>
+				After saving, add an <b>Email</b> channel in{" "}
+				<a
+					href="/settings/notify"
+					className="underline underline-offset-2 hover:text-foreground"
+				>
+					Notification Channels
+				</a>{" "}
+				and use its Test button to verify delivery.
+			</p>
 		</div>
 	);
 }

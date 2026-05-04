@@ -1,3 +1,4 @@
+import { Checkbox } from "@frontend/ui/components/checkbox";
 import { Input } from "@frontend/ui/components/input";
 import { Label } from "@frontend/ui/components/label";
 import {
@@ -10,6 +11,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import {
+	AlertTriangle,
 	Bell,
 	CheckCircle2,
 	Clock,
@@ -23,6 +25,8 @@ import {
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { PlatformIcon } from "@/components/platform-icons";
+import type { PlatformKey } from "@/components/platform-icons";
 import { client, isApiError } from "@/lib/client";
 import type { JSONValue, notify } from "@/lib/client.gen";
 
@@ -36,6 +40,18 @@ const CRON_PRESETS = [
 	{ label: "Every 12 hours", value: "0 */12 * * *" },
 	{ label: "Once a day", value: "0 0 * * *" },
 ] as const;
+
+const ALL_PLATFORMS: { key: PlatformKey; label: string }[] = [
+	{ key: "netflix", label: "Netflix" },
+	{ key: "youtube", label: "YouTube" },
+	{ key: "youtube_premium", label: "YouTube Premium" },
+	{ key: "openai", label: "OpenAI" },
+	{ key: "claude", label: "Claude" },
+	{ key: "gemini", label: "Gemini" },
+	{ key: "grok", label: "Grok" },
+	{ key: "disney", label: "Disney+" },
+	{ key: "tiktok", label: "TikTok" },
+];
 
 function cronToLabel(cron: string): string {
 	const preset = CRON_PRESETS.find((p) => p.value === cron);
@@ -51,20 +67,14 @@ function NotifyPage() {
 	const [adding, setAdding] = useState(false);
 
 	// Create form state
-	const [type, setType] = useState<"webhook" | "telegram">("webhook");
+	const [type, setType] = useState<"webhook" | "telegram" | "email">("webhook");
 	const [name, setName] = useState("");
 	const [webhookUrl, setWebhookUrl] = useState("");
 	const [botToken, setBotToken] = useState("");
 	const [chatId, setChatId] = useState("");
 	const [onCheckComplete, setOnCheckComplete] = useState(false);
 	const [unlockCron, setUnlockCron] = useState("");
-
-	// Edit state
-	const [editingId, setEditingId] = useState<string | null>(null);
-	const [editName, setEditName] = useState("");
-	const [editEnabled, setEditEnabled] = useState(true);
-	const [editOnCheck, setEditOnCheck] = useState(false);
-	const [editUnlockCron, setEditUnlockCron] = useState("");
+	const [platformAlerts, setPlatformAlerts] = useState<string[]>([]);
 
 	const channelsQuery = useQuery({
 		queryKey: ["notify-channels"],
@@ -76,13 +86,16 @@ function NotifyPage() {
 			const config: JSONValue =
 				type === "webhook"
 					? { url: webhookUrl, method: "POST" }
-					: { bot_token: botToken, chat_id: chatId };
+					: type === "telegram"
+						? { bot_token: botToken, chat_id: chatId }
+						: {};
 			return client.notify.CreateChannel({
 				name,
 				type,
 				config,
 				on_check_complete: onCheckComplete,
 				unlock_cron: unlockCron,
+				platform_alerts: platformAlerts,
 			});
 		},
 		onSuccess: () => {
@@ -94,6 +107,7 @@ function NotifyPage() {
 			setChatId("");
 			setOnCheckComplete(false);
 			setUnlockCron("");
+			setPlatformAlerts([]);
 			toast.success("Channel added");
 		},
 		onError: (e) => toast.error(isApiError(e) ? e.message : "Failed"),
@@ -108,16 +122,10 @@ function NotifyPage() {
 	});
 
 	const updateMut = useMutation({
-		mutationFn: ({
-			id,
-			data,
-		}: {
-			id: string;
-			data: notify.UpdateChannelParams;
-		}) => client.notify.UpdateChannel(id, data),
+		mutationFn: ({ id, data }: { id: string; data: notify.UpdateChannelParams }) =>
+			client.notify.UpdateChannel(id, data),
 		onSuccess: () => {
 			qc.invalidateQueries({ queryKey: ["notify-channels"] });
-			setEditingId(null);
 			toast.success("Updated");
 		},
 		onError: (e) => toast.error(isApiError(e) ? e.message : "Update failed"),
@@ -146,8 +154,12 @@ function NotifyPage() {
 						Notification Channels
 					</h1>
 					<p className="mt-0.5 text-xs text-muted-foreground">
-						Configure webhook or Telegram notifications for unlock reports and
-						check results.
+						Receive webhook, Telegram, or email alerts for check results,
+						scheduled unlock reports, and platform availability changes.
+						{" "}Email SMTP settings are in{" "}
+						<a href="/settings/general" className="underline underline-offset-2 hover:text-foreground">
+							General Settings
+						</a>.
 					</p>
 				</div>
 				<button
@@ -176,7 +188,7 @@ function NotifyPage() {
 						<Label className="text-muted-foreground text-xs">Type</Label>
 						<Select
 							value={type}
-							onValueChange={(v) => setType(v as "webhook" | "telegram")}
+							onValueChange={(v) => setType(v as "webhook" | "telegram" | "email")}
 						>
 							<SelectTrigger className="h-8 text-sm">
 								<SelectValue />
@@ -184,9 +196,11 @@ function NotifyPage() {
 							<SelectContent>
 								<SelectItem value="webhook">Webhook</SelectItem>
 								<SelectItem value="telegram">Telegram</SelectItem>
+								<SelectItem value="email">Email</SelectItem>
 							</SelectContent>
 						</Select>
 					</div>
+
 					{type === "webhook" && (
 						<div className="space-y-1.5">
 							<Label className="text-muted-foreground text-xs">URL</Label>
@@ -201,9 +215,7 @@ function NotifyPage() {
 					{type === "telegram" && (
 						<>
 							<div className="space-y-1.5">
-								<Label className="text-muted-foreground text-xs">
-									Bot Token
-								</Label>
+								<Label className="text-muted-foreground text-xs">Bot Token</Label>
 								<Input
 									placeholder="123456:ABC..."
 									value={botToken}
@@ -222,12 +234,22 @@ function NotifyPage() {
 							</div>
 						</>
 					)}
+					{type === "email" && (
+						<p className="rounded-md bg-secondary/40 px-3 py-2 text-xs text-muted-foreground">
+							Uses SMTP settings from{" "}
+							<a href="/settings/general" className="underline underline-offset-2 hover:text-foreground">
+								General Settings
+							</a>.
+						</p>
+					)}
 
 					<ReportSettings
 						onCheckComplete={onCheckComplete}
 						setOnCheckComplete={setOnCheckComplete}
 						unlockCron={unlockCron}
 						setUnlockCron={setUnlockCron}
+						platformAlerts={platformAlerts}
+						setPlatformAlerts={setPlatformAlerts}
 					/>
 
 					<div className="flex gap-2">
@@ -260,48 +282,12 @@ function NotifyPage() {
 					<ChannelRow
 						key={ch.id}
 						ch={ch}
-						isEditing={editingId === ch.id}
-						editName={editName}
-						editEnabled={editEnabled}
-						editOnCheck={editOnCheck}
-						editUnlockCron={editUnlockCron}
-						setEditName={setEditName}
-						setEditEnabled={setEditEnabled}
-						setEditOnCheck={setEditOnCheck}
-						setEditUnlockCron={setEditUnlockCron}
-						onEditOpen={() => {
-							if (editingId === ch.id) {
-								setEditingId(null);
-							} else {
-								setEditingId(ch.id);
-								setEditName(ch.name);
-								setEditEnabled(ch.enabled);
-								setEditOnCheck(ch.on_check_complete);
-								setEditUnlockCron(ch.unlock_cron);
-							}
-						}}
-						onEditClose={() => setEditingId(null)}
-						onSaveEdit={() =>
-							updateMut.mutate({
-								id: ch.id,
-								data: {
-									name: editName,
-									enabled: editEnabled,
-									config: ch.config,
-									on_check_complete: editOnCheck,
-									unlock_cron: editUnlockCron,
-								},
-							})
-						}
+						onSave={(data) => updateMut.mutate({ id: ch.id, data })}
 						onDelete={() => deleteMut.mutate(ch.id)}
-						onTest={(reportType) =>
-							testMut.mutate({ id: ch.id, reportType })
-						}
-						editPending={updateMut.isPending}
+						onTest={(reportType) => testMut.mutate({ id: ch.id, reportType })}
+						savePending={updateMut.isPending && updateMut.variables?.id === ch.id}
 						deletePending={deleteMut.isPending}
-						testPending={
-							testMut.isPending && testMut.variables?.id === ch.id
-						}
+						testPending={testMut.isPending && testMut.variables?.id === ch.id}
 					/>
 				))}
 				{!channelsQuery.isLoading && channels.length === 0 && (
@@ -314,6 +300,60 @@ function NotifyPage() {
 	);
 }
 
+// --- Platform alerts multi-select ---
+
+function PlatformAlertsSelect({
+	selected,
+	onChange,
+}: {
+	selected: string[];
+	onChange: (v: string[]) => void;
+}) {
+	function toggle(key: string) {
+		onChange(
+			selected.includes(key) ? selected.filter((k) => k !== key) : [...selected, key],
+		);
+	}
+
+	return (
+		<div className="space-y-1.5">
+			<div className="flex items-center gap-2">
+				<AlertTriangle size={12} strokeWidth={1.5} className="text-muted-foreground" />
+				<Label className="text-xs text-muted-foreground">
+					Platform unavailability alerts
+				</Label>
+			</div>
+			<div className="flex flex-wrap gap-1.5">
+				{ALL_PLATFORMS.map(({ key, label }) => {
+					const active = selected.includes(key);
+					return (
+						<button
+							key={key}
+							type="button"
+							onClick={() => toggle(key)}
+							title={label}
+							className="flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] transition-colors"
+							style={{
+								borderColor: active ? "var(--primary)" : "var(--border)",
+								background: active ? "color-mix(in srgb, var(--primary) 12%, transparent)" : "transparent",
+								color: active ? "var(--primary)" : "var(--muted-foreground)",
+								opacity: active ? 1 : 0.6,
+							}}
+						>
+							<PlatformIcon platform={key} size={12} />
+							<span>{label}</span>
+						</button>
+					);
+				})}
+			</div>
+			<p className="text-[10px] text-muted-foreground/60">
+				Alert fires when a selected platform drops from available to unavailable
+				after a check.
+			</p>
+		</div>
+	);
+}
+
 // --- Report settings ---
 
 function ReportSettings({
@@ -321,17 +361,20 @@ function ReportSettings({
 	setOnCheckComplete,
 	unlockCron,
 	setUnlockCron,
+	platformAlerts,
+	setPlatformAlerts,
 }: {
 	onCheckComplete: boolean;
 	setOnCheckComplete: (v: boolean) => void;
 	unlockCron: string;
 	setUnlockCron: (v: string) => void;
+	platformAlerts: string[];
+	setPlatformAlerts: (v: string[]) => void;
 }) {
 	return (
 		<div className="space-y-3 rounded-md border border-border/60 bg-secondary/30 p-3">
 			<p className="font-medium text-foreground text-xs">Report Types</p>
 
-			{/* Scheduled unlock report */}
 			<div className="space-y-1.5">
 				<div className="flex items-center gap-2">
 					<Clock size={12} strokeWidth={1.5} className="text-muted-foreground" />
@@ -360,13 +403,11 @@ function ReportSettings({
 				</p>
 			</div>
 
-			{/* Check job report */}
 			<div className="space-y-1">
 				<label className="flex cursor-pointer select-none items-center gap-2">
-					<input
-						type="checkbox"
+					<Checkbox
 						checked={onCheckComplete}
-						onChange={(e) => setOnCheckComplete(e.target.checked)}
+						onCheckedChange={(v) => setOnCheckComplete(v === true)}
 					/>
 					<Bell size={12} strokeWidth={1.5} className="text-muted-foreground" />
 					<span className="text-xs text-muted-foreground">
@@ -378,6 +419,8 @@ function ReportSettings({
 					speed stats, platform unlocks, top nodes, and country breakdown.
 				</p>
 			</div>
+
+			<PlatformAlertsSelect selected={platformAlerts} onChange={setPlatformAlerts} />
 		</div>
 	);
 }
@@ -386,47 +429,53 @@ function ReportSettings({
 
 function ChannelRow({
 	ch,
-	isEditing,
-	editName,
-	editEnabled,
-	editOnCheck,
-	editUnlockCron,
-	setEditName,
-	setEditEnabled,
-	setEditOnCheck,
-	setEditUnlockCron,
-	onEditOpen,
-	onEditClose,
-	onSaveEdit,
+	onSave,
 	onDelete,
 	onTest,
-	editPending,
+	savePending,
 	deletePending,
 	testPending,
 }: {
 	ch: NotifyChannel;
-	isEditing: boolean;
-	editName: string;
-	editEnabled: boolean;
-	editOnCheck: boolean;
-	editUnlockCron: string;
-	setEditName: (v: string) => void;
-	setEditEnabled: (v: boolean) => void;
-	setEditOnCheck: (v: boolean) => void;
-	setEditUnlockCron: (v: string) => void;
-	onEditOpen: () => void;
-	onEditClose: () => void;
-	onSaveEdit: () => void;
+	onSave: (data: notify.UpdateChannelParams) => void;
 	onDelete: () => void;
 	onTest: (reportType: string) => void;
-	editPending: boolean;
+	savePending: boolean;
 	deletePending: boolean;
 	testPending: boolean;
 }) {
-	// Build feature tags
+	const [isEditing, setIsEditing] = useState(false);
+	const [editName, setEditName] = useState("");
+	const [editEnabled, setEditEnabled] = useState(true);
+	const [editOnCheck, setEditOnCheck] = useState(false);
+	const [editUnlockCron, setEditUnlockCron] = useState("");
+	const [editPlatformAlerts, setEditPlatformAlerts] = useState<string[]>([]);
+
+	function openEdit() {
+		setEditName(ch.name);
+		setEditEnabled(ch.enabled);
+		setEditOnCheck(ch.on_check_complete);
+		setEditUnlockCron(ch.unlock_cron);
+		setEditPlatformAlerts(ch.platform_alerts ?? []);
+		setIsEditing(true);
+	}
+
+	function handleSave() {
+		onSave({
+			name: editName,
+			enabled: editEnabled,
+			config: ch.config,
+			on_check_complete: editOnCheck,
+			unlock_cron: editUnlockCron,
+			platform_alerts: editPlatformAlerts,
+		});
+		setIsEditing(false);
+	}
+
 	const tags: string[] = [];
 	if (ch.on_check_complete) tags.push("check report");
 	if (ch.unlock_cron) tags.push(cronToLabel(ch.unlock_cron));
+	if ((ch.platform_alerts ?? []).length > 0) tags.push("platform alerts");
 
 	return (
 		<div className="rounded-lg border border-border bg-card">
@@ -458,48 +507,31 @@ function ChannelRow({
 					</div>
 				</div>
 				<div className="flex items-center gap-1">
-					{/* Test buttons */}
+					{(ch.platform_alerts ?? []).length > 0 && (
+						<div className="mr-1 flex items-center gap-0.5">
+							{ch.platform_alerts.map((p) => (
+								<span key={p} title={p} className="opacity-50">
+									<PlatformIcon platform={p as PlatformKey} size={13} />
+								</span>
+							))}
+						</div>
+					)}
 					<div className="flex gap-1">
 						{ch.unlock_cron && (
-							<button
-								type="button"
-								onClick={() => onTest("unlock")}
-								disabled={testPending}
-								title="Test unlock report"
-								className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-white/5 disabled:opacity-50"
-							>
-								{testPending ? (
-									<Loader2 size={10} className="animate-spin" />
-								) : (
-									<FlaskConical size={10} strokeWidth={1.5} />
-								)}
-								Unlock
-							</button>
+							<TestButton label="Unlock" pending={testPending} onClick={() => onTest("unlock")} />
 						)}
 						{ch.on_check_complete && (
-							<button
-								type="button"
-								onClick={() => onTest("check")}
-								disabled={testPending}
-								title="Test check report"
-								className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-white/5 disabled:opacity-50"
-							>
-								{testPending ? (
-									<Loader2 size={10} className="animate-spin" />
-								) : (
-									<FlaskConical size={10} strokeWidth={1.5} />
-								)}
-								Check
-							</button>
+							<TestButton label="Check" pending={testPending} onClick={() => onTest("check")} />
+						)}
+						{(ch.platform_alerts ?? []).length > 0 && (
+							<TestButton label="Alert" pending={testPending} onClick={() => onTest("platform_alert")} />
 						)}
 					</div>
 					<button
 						type="button"
-						onClick={onEditOpen}
+						onClick={() => (isEditing ? setIsEditing(false) : openEdit())}
 						className="rounded-md p-1.5 transition-colors hover:bg-white/5"
-						style={{
-							color: isEditing ? "var(--primary)" : "var(--color-dimmed)",
-						}}
+						style={{ color: isEditing ? "var(--primary)" : "var(--color-dimmed)" }}
 					>
 						<Pencil size={13} strokeWidth={1.5} />
 					</button>
@@ -525,10 +557,9 @@ function ChannelRow({
 						/>
 					</div>
 					<label className="flex cursor-pointer select-none items-center gap-2">
-						<input
-							type="checkbox"
+						<Checkbox
 							checked={editEnabled}
-							onChange={(e) => setEditEnabled(e.target.checked)}
+							onCheckedChange={(v) => setEditEnabled(v === true)}
 						/>
 						<span className="text-xs text-muted-foreground">Enabled</span>
 					</label>
@@ -537,24 +568,22 @@ function ChannelRow({
 						setOnCheckComplete={setEditOnCheck}
 						unlockCron={editUnlockCron}
 						setUnlockCron={setEditUnlockCron}
+						platformAlerts={editPlatformAlerts}
+						setPlatformAlerts={setEditPlatformAlerts}
 					/>
 					<div className="flex gap-2">
 						<button
 							type="button"
-							onClick={onSaveEdit}
-							disabled={editPending}
+							onClick={handleSave}
+							disabled={savePending}
 							className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-white disabled:opacity-50"
 							style={{ background: "var(--color-btn-success)" }}
 						>
-							{editPending ? (
-								<Loader2 size={13} className="animate-spin" />
-							) : (
-								"Save"
-							)}
+							{savePending ? <Loader2 size={13} className="animate-spin" /> : "Save"}
 						</button>
 						<button
 							type="button"
-							onClick={onEditClose}
+							onClick={() => setIsEditing(false)}
 							className="rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground"
 						>
 							Cancel
@@ -563,5 +592,31 @@ function ChannelRow({
 				</div>
 			)}
 		</div>
+	);
+}
+
+function TestButton({
+	label,
+	pending,
+	onClick,
+}: {
+	label: string;
+	pending: boolean;
+	onClick: () => void;
+}) {
+	return (
+		<button
+			type="button"
+			onClick={onClick}
+			disabled={pending}
+			className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-white/5 disabled:opacity-50"
+		>
+			{pending ? (
+				<Loader2 size={10} className="animate-spin" />
+			) : (
+				<FlaskConical size={10} strokeWidth={1.5} />
+			)}
+			{label}
+		</button>
 	);
 }

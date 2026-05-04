@@ -641,7 +641,7 @@ const (
 )
 
 func runJob(parentCtx context.Context, jobID, subscriptionID, userID string) {
-	ctx, cancel := context.WithCancel(parentCtx)
+	ctx, cancel := context.WithTimeout(parentCtx, 4*time.Hour)
 	defer cancel()
 	storeJobCancel(jobID, cancel)
 	defer removeJobCancel(jobID)

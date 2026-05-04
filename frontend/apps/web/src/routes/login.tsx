@@ -1,3 +1,4 @@
+import { Checkbox } from "@frontend/ui/components/checkbox";
 import { Input } from "@frontend/ui/components/input";
 import { Label } from "@frontend/ui/components/label";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
@@ -28,7 +29,7 @@ function LoginPage() {
 				toast.success("Account created — please log in");
 				setMode("login");
 			} else {
-				const resp = await client.auth.Login({ username, password });
+				const resp = await client.auth.Login({ username, password, remember });
 				setToken(resp.token, remember);
 				navigate({ to: "/" });
 			}
@@ -79,11 +80,9 @@ function LoginPage() {
 				</div>
 				{mode === "login" && (
 					<label className="flex cursor-pointer items-center gap-2">
-						<input
-							type="checkbox"
+						<Checkbox
 							checked={remember}
-							onChange={(e) => setRemember(e.target.checked)}
-							className="h-3.5 w-3.5 rounded accent-[#238636]"
+							onCheckedChange={(v) => setRemember(v === true)}
 						/>
 						<span className="text-[#8b949e] text-xs">Remember me</span>
 					</label>

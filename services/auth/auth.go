@@ -54,6 +54,7 @@ func Register(ctx context.Context, p *RegisterParams) (*RegisterResponse, error)
 type LoginParams struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
+	Remember bool   `json:"remember"`
 }
 
 type LoginResponse struct {
@@ -73,7 +74,11 @@ func Login(ctx context.Context, p *LoginParams) (*LoginResponse, error) {
 	if err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(p.Password)); err != nil {
 		return nil, errs.B().Code(errs.Unauthenticated).Msg("invalid username or password").Err()
 	}
-	token, err := generateJWT(id)
+	expiry := 24 * time.Hour
+	if p.Remember {
+		expiry = 30 * 24 * time.Hour
+	}
+	token, err := generateJWT(id, expiry)
 	if err != nil {
 		return nil, errs.B().Code(errs.Internal).Msg("failed to generate token").Err()
 	}

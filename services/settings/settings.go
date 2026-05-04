@@ -3,6 +3,7 @@ package settings
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/google/uuid"
 
@@ -17,9 +18,20 @@ var db = sqldb.NewDatabase("settings", sqldb.DatabaseConfig{
 	Migrations: "./migrations",
 })
 
+// EmailConfig holds global SMTP settings for email notifications.
+type EmailConfig struct {
+	SMTPHost string `json:"smtp_host"`
+	SMTPPort int    `json:"smtp_port"`
+	SMTPUser string `json:"smtp_user"`
+	SMTPPass string `json:"smtp_pass"`
+	From     string `json:"from"`
+	To       string `json:"to"`
+}
+
 // UserSettings holds configurable per-user settings.
 type UserSettings struct {
-	SpeedTestURL string `json:"speed_test_url"`
+	SpeedTestURL string      `json:"speed_test_url"`
+	EmailConfig  EmailConfig `json:"email_config"`
 }
 
 // GetSettings returns the current user's settings.
@@ -29,13 +41,16 @@ func GetSettings(ctx context.Context) (*UserSettings, error) {
 	claims := encauth.Data().(*authsvc.UserClaims)
 
 	var s UserSettings
+	var emailConfigJSON []byte
 	err := db.QueryRow(ctx,
-		`SELECT COALESCE(speed_test_url, '') FROM user_settings WHERE user_id = $1`,
+		`SELECT COALESCE(speed_test_url, ''), COALESCE(email_config, 'null'::jsonb) FROM user_settings WHERE user_id = $1`,
 		claims.UserID,
-	).Scan(&s.SpeedTestURL)
+	).Scan(&s.SpeedTestURL, &emailConfigJSON)
 	if err != nil {
-		// No row yet — return defaults
-		return &UserSettings{SpeedTestURL: ""}, nil
+		return &UserSettings{}, nil
+	}
+	if len(emailConfigJSON) > 0 {
+		json.Unmarshal(emailConfigJSON, &s.EmailConfig) //nolint:errcheck
 	}
 	return &s, nil
 }
@@ -46,11 +61,15 @@ func GetSettings(ctx context.Context) (*UserSettings, error) {
 func UpdateSettings(ctx context.Context, p *UserSettings) (*UserSettings, error) {
 	claims := encauth.Data().(*authsvc.UserClaims)
 
+	emailConfigJSON, _ := json.Marshal(p.EmailConfig)
+
 	if _, err := db.Exec(ctx, `
-		INSERT INTO user_settings (user_id, speed_test_url)
-		VALUES ($1, $2)
-		ON CONFLICT (user_id) DO UPDATE SET speed_test_url = EXCLUDED.speed_test_url
-	`, claims.UserID, p.SpeedTestURL); err != nil {
+		INSERT INTO user_settings (user_id, speed_test_url, email_config)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (user_id) DO UPDATE
+		  SET speed_test_url = EXCLUDED.speed_test_url,
+		      email_config   = EXCLUDED.email_config
+	`, claims.UserID, p.SpeedTestURL, emailConfigJSON); err != nil {
 		return nil, errs.B().Code(errs.Internal).Msg("failed to save settings").Err()
 	}
 	return p, nil
@@ -133,4 +152,23 @@ func GetSpeedTestURLForUser(ctx context.Context, userID string) (*UserSettings, 
 		return &UserSettings{SpeedTestURL: ""}, nil
 	}
 	return &s, nil
+}
+
+// GetEmailConfigForUser is an internal helper used by the notify service.
+//
+//encore:api private method=GET path=/internal/settings/:userID/email-config
+func GetEmailConfigForUser(ctx context.Context, userID string) (*EmailConfig, error) {
+	var emailConfigJSON []byte
+	err := db.QueryRow(ctx,
+		`SELECT COALESCE(email_config, 'null'::jsonb) FROM user_settings WHERE user_id = $1`,
+		userID,
+	).Scan(&emailConfigJSON)
+	if err != nil {
+		return &EmailConfig{}, nil
+	}
+	var cfg EmailConfig
+	if len(emailConfigJSON) > 0 {
+		json.Unmarshal(emailConfigJSON, &cfg) //nolint:errcheck
+	}
+	return &cfg, nil
 }

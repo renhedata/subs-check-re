@@ -1,3 +1,4 @@
+import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
 	Bell,
@@ -11,6 +12,7 @@ import {
 	User,
 } from "lucide-react";
 import { clearToken } from "@/lib/auth";
+import { client } from "@/lib/client";
 import { useTheme } from "@/lib/theme";
 
 const NAV_ITEMS = [
@@ -65,6 +67,12 @@ function NavItem({
 export function Sidebar() {
 	const navigate = useNavigate();
 	const { theme, toggle } = useTheme();
+	const meQuery = useQuery({
+		queryKey: ["me"],
+		queryFn: () => client.auth.Me(),
+		staleTime: Number.POSITIVE_INFINITY,
+	});
+	const username = meQuery.data?.username ?? "…";
 
 	function logout() {
 		clearToken();
@@ -127,8 +135,7 @@ export function Sidebar() {
 					>
 						<User size={10} strokeWidth={1.5} />
 					</div>
-					{/* TODO: replace "admin" with actual username once user-profile API is available */}
-					<span className="flex-1 text-left">admin</span>
+					<span className="flex-1 truncate text-left">{username}</span>
 					<LogOut size={12} strokeWidth={1.5} />
 				</button>
 			</div>
