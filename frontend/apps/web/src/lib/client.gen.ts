@@ -179,6 +179,18 @@ export namespace checker {
     }
 
     /**
+     * CreateRuleParams is the request body for POST /platform-rules.
+     */
+    export interface CreateRuleParams {
+        name: string
+        key: string
+        enabled: boolean
+        "rule_type": string
+        definition: JSONValue
+        "sort_order": number
+    }
+
+    /**
      * ExportLog is one export request record.
      */
     export interface ExportLog {
@@ -248,6 +260,13 @@ export namespace checker {
     }
 
     /**
+     * ListRulesResponse is returned by GET /platform-rules.
+     */
+    export interface ListRulesResponse {
+        rules: PlatformRule[]
+    }
+
+    /**
      * LocalUnlockResult holds platform accessibility from the server's own network.
      */
     export interface LocalUnlockResult {
@@ -289,11 +308,44 @@ export namespace checker {
     }
 
     /**
+     * PlatformRule is a user-defined platform detection rule.
+     */
+    export interface PlatformRule {
+        id: string
+        "user_id": string
+        name: string
+        key: string
+        enabled: boolean
+        "rule_type": string
+        definition: JSONValue
+        "is_default": boolean
+        "sort_order": number
+        "created_at": string
+        "updated_at": string
+    }
+
+    /**
      * ResultsResponse is returned by GET /check/:subscriptionID/results.
      */
     export interface ResultsResponse {
         job: Job
         results: NodeResult[]
+    }
+
+    /**
+     * TestRuleParams is the request body for POST /platform-rules/test.
+     */
+    export interface TestRuleParams {
+        "rule_type": string
+        definition: JSONValue
+    }
+
+    /**
+     * TestRuleResult is returned by POST /platform-rules/test.
+     */
+    export interface TestRuleResult {
+        ok: boolean
+        error: string
     }
 
     /**
@@ -311,19 +363,35 @@ export namespace checker {
         "job_id": string
     }
 
+    /**
+     * UpdateRuleParams is the request body for PUT /platform-rules/:ruleId.
+     */
+    export interface UpdateRuleParams {
+        name: string
+        enabled: boolean
+        "rule_type": string
+        definition: JSONValue
+        "sort_order": number
+    }
+
     export class ServiceClient {
         private baseClient: BaseClient
 
         constructor(baseClient: BaseClient) {
             this.baseClient = baseClient
             this.CancelCheck = this.CancelCheck.bind(this)
+            this.CreateRule = this.CreateRule.bind(this)
+            this.DeleteRule = this.DeleteRule.bind(this)
             this.Export = this.Export.bind(this)
             this.GetExportLogs = this.GetExportLogs.bind(this)
             this.GetLocalUnlock = this.GetLocalUnlock.bind(this)
             this.GetProgress = this.GetProgress.bind(this)
             this.GetResults = this.GetResults.bind(this)
             this.ListJobs = this.ListJobs.bind(this)
+            this.ListRules = this.ListRules.bind(this)
+            this.TestRule = this.TestRule.bind(this)
             this.TriggerCheck = this.TriggerCheck.bind(this)
+            this.UpdateRule = this.UpdateRule.bind(this)
         }
 
         /**
@@ -331,6 +399,22 @@ export namespace checker {
          */
         public async CancelCheck(jobID: string): Promise<void> {
             await this.baseClient.callTypedAPI("DELETE", `/check/${encodeURIComponent(jobID)}`)
+        }
+
+        /**
+         * CreateRule creates a new platform rule for the current user.
+         */
+        public async CreateRule(params: CreateRuleParams): Promise<PlatformRule> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("POST", `/platform-rules`, JSON.stringify(params))
+            return await resp.json() as PlatformRule
+        }
+
+        /**
+         * DeleteRule removes a platform rule owned by the current user.
+         */
+        public async DeleteRule(ruleId: string): Promise<void> {
+            await this.baseClient.callTypedAPI("DELETE", `/platform-rules/${encodeURIComponent(ruleId)}`)
         }
 
         /**
@@ -399,12 +483,40 @@ export namespace checker {
         }
 
         /**
+         * ListRules returns all platform rules for the current user.
+         * Seeds default rules on first call if none exist.
+         */
+        public async ListRules(): Promise<ListRulesResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("GET", `/platform-rules`)
+            return await resp.json() as ListRulesResponse
+        }
+
+        /**
+         * TestRule runs a rule definition against a direct HTTP connection (no proxy) and returns the result.
+         */
+        public async TestRule(params: TestRuleParams): Promise<TestRuleResult> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("POST", `/platform-rules/test`, JSON.stringify(params))
+            return await resp.json() as TestRuleResult
+        }
+
+        /**
          * TriggerCheck creates a new check job for the given subscription.
          */
         public async TriggerCheck(subscriptionID: string, params: TriggerParams): Promise<TriggerResponse> {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("POST", `/check/${encodeURIComponent(subscriptionID)}`, JSON.stringify(params))
             return await resp.json() as TriggerResponse
+        }
+
+        /**
+         * UpdateRule updates a platform rule owned by the current user.
+         */
+        public async UpdateRule(ruleId: string, params: UpdateRuleParams): Promise<PlatformRule> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("PUT", `/platform-rules/${encodeURIComponent(ruleId)}`, JSON.stringify(params))
+            return await resp.json() as PlatformRule
         }
     }
 }

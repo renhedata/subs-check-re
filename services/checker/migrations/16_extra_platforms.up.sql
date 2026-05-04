@@ -1,0 +1,1 @@
+ALTER TABLE check_results ADD COLUMN IF NOT EXISTS extra_platforms JSONB NOT NULL DEFAULT '{}';

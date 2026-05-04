@@ -204,10 +204,13 @@ type nodeCheckResult struct {
 	Disney         bool
 	TikTok         bool
 	TrafficBytes   int64
+	ExtraPlatforms map[string]bool
 }
 
 // checkNode runs all checks for a single proxy mapping and returns the result.
-func checkNode(ctx context.Context, nodeID string, mapping map[string]any, speedTestURL string, opts CheckOptions) nodeCheckResult {
+// User rules override the corresponding built-in checks; rules with non-builtin
+// keys are stored in ExtraPlatforms.
+func checkNode(ctx context.Context, nodeID string, mapping map[string]any, speedTestURL string, opts CheckOptions, rules []*PlatformRule) nodeCheckResult {
 	name, _ := mapping["name"].(string)
 	result := nodeCheckResult{NodeID: nodeID, NodeName: name}
 
@@ -232,30 +235,52 @@ func checkNode(ctx context.Context, nodeID string, mapping map[string]any, speed
 			Timeout:   8 * time.Second,
 		}
 		result.IP, result.Country = getProxyInfo(ctx, mediaClient)
+
+		ruleResults := runUserRules(ctx, mediaClient, rules)
+
+		extra := make(map[string]bool)
+		for k, v := range ruleResults {
+			if !builtinKeys[k] {
+				extra[k] = v
+			}
+		}
+		if len(extra) > 0 {
+			result.ExtraPlatforms = extra
+		}
+
+		// Use rule result when available, otherwise fall back to built-in function.
+		resolve := func(key string, fallback func(context.Context, *http.Client) (bool, error)) bool {
+			if v, ok := ruleResults[key]; ok {
+				return v
+			}
+			v, _ := fallback(ctx, mediaClient)
+			return v
+		}
+
 		if hasApp(opts, "netflix") {
-			result.Netflix, _ = checkNetflix(ctx, mediaClient)
+			result.Netflix = resolve("netflix", checkNetflix)
 		}
 		if hasApp(opts, "youtube") {
-			result.YouTube, _ = checkYouTube(ctx, mediaClient)
-			result.YouTubePremium, _ = checkYouTubePremium(ctx, mediaClient)
+			result.YouTube = resolve("youtube", checkYouTube)
+			result.YouTubePremium = resolve("youtube_premium", checkYouTubePremium)
 		}
 		if hasApp(opts, "openai") {
-			result.OpenAI, _ = checkOpenAI(ctx, mediaClient)
+			result.OpenAI = resolve("openai", checkOpenAI)
 		}
 		if hasApp(opts, "claude") {
-			result.Claude, _ = checkClaude(ctx, mediaClient)
+			result.Claude = resolve("claude", checkClaude)
 		}
 		if hasApp(opts, "gemini") {
-			result.Gemini, _ = checkGemini(ctx, mediaClient)
+			result.Gemini = resolve("gemini", checkGemini)
 		}
 		if hasApp(opts, "grok") {
-			result.Grok, _ = checkGrok(ctx, mediaClient)
+			result.Grok = resolve("grok", checkGrok)
 		}
 		if hasApp(opts, "disney") {
-			result.Disney, _ = checkDisney(ctx, mediaClient)
+			result.Disney = resolve("disney", checkDisney)
 		}
 		if hasApp(opts, "tiktok") {
-			result.TikTok, _ = checkTikTok(ctx, mediaClient)
+			result.TikTok = resolve("tiktok", checkTikTok)
 		}
 	}
 

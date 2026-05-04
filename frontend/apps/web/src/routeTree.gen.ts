@@ -14,6 +14,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as SubscriptionsIndexRouteImport } from './routes/subscriptions/index'
 import { Route as SubscriptionsIdRouteImport } from './routes/subscriptions/$id'
+import { Route as SettingsPlatformsRouteImport } from './routes/settings/platforms'
 import { Route as SettingsNotifyRouteImport } from './routes/settings/notify'
 import { Route as SettingsGeneralRouteImport } from './routes/settings/general'
 
@@ -42,6 +43,11 @@ const SubscriptionsIdRoute = SubscriptionsIdRouteImport.update({
   path: '/subscriptions/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SettingsPlatformsRoute = SettingsPlatformsRouteImport.update({
+  id: '/settings/platforms',
+  path: '/settings/platforms',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SettingsNotifyRoute = SettingsNotifyRouteImport.update({
   id: '/settings/notify',
   path: '/settings/notify',
@@ -59,6 +65,7 @@ export interface FileRoutesByFullPath {
   '/scheduler': typeof SchedulerRoute
   '/settings/general': typeof SettingsGeneralRoute
   '/settings/notify': typeof SettingsNotifyRoute
+  '/settings/platforms': typeof SettingsPlatformsRoute
   '/subscriptions/$id': typeof SubscriptionsIdRoute
   '/subscriptions/': typeof SubscriptionsIndexRoute
 }
@@ -68,6 +75,7 @@ export interface FileRoutesByTo {
   '/scheduler': typeof SchedulerRoute
   '/settings/general': typeof SettingsGeneralRoute
   '/settings/notify': typeof SettingsNotifyRoute
+  '/settings/platforms': typeof SettingsPlatformsRoute
   '/subscriptions/$id': typeof SubscriptionsIdRoute
   '/subscriptions': typeof SubscriptionsIndexRoute
 }
@@ -78,6 +86,7 @@ export interface FileRoutesById {
   '/scheduler': typeof SchedulerRoute
   '/settings/general': typeof SettingsGeneralRoute
   '/settings/notify': typeof SettingsNotifyRoute
+  '/settings/platforms': typeof SettingsPlatformsRoute
   '/subscriptions/$id': typeof SubscriptionsIdRoute
   '/subscriptions/': typeof SubscriptionsIndexRoute
 }
@@ -89,6 +98,7 @@ export interface FileRouteTypes {
     | '/scheduler'
     | '/settings/general'
     | '/settings/notify'
+    | '/settings/platforms'
     | '/subscriptions/$id'
     | '/subscriptions/'
   fileRoutesByTo: FileRoutesByTo
@@ -98,6 +108,7 @@ export interface FileRouteTypes {
     | '/scheduler'
     | '/settings/general'
     | '/settings/notify'
+    | '/settings/platforms'
     | '/subscriptions/$id'
     | '/subscriptions'
   id:
@@ -107,6 +118,7 @@ export interface FileRouteTypes {
     | '/scheduler'
     | '/settings/general'
     | '/settings/notify'
+    | '/settings/platforms'
     | '/subscriptions/$id'
     | '/subscriptions/'
   fileRoutesById: FileRoutesById
@@ -117,6 +129,7 @@ export interface RootRouteChildren {
   SchedulerRoute: typeof SchedulerRoute
   SettingsGeneralRoute: typeof SettingsGeneralRoute
   SettingsNotifyRoute: typeof SettingsNotifyRoute
+  SettingsPlatformsRoute: typeof SettingsPlatformsRoute
   SubscriptionsIdRoute: typeof SubscriptionsIdRoute
   SubscriptionsIndexRoute: typeof SubscriptionsIndexRoute
 }
@@ -158,6 +171,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SubscriptionsIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/settings/platforms': {
+      id: '/settings/platforms'
+      path: '/settings/platforms'
+      fullPath: '/settings/platforms'
+      preLoaderRoute: typeof SettingsPlatformsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/settings/notify': {
       id: '/settings/notify'
       path: '/settings/notify'
@@ -181,6 +201,7 @@ const rootRouteChildren: RootRouteChildren = {
   SchedulerRoute: SchedulerRoute,
   SettingsGeneralRoute: SettingsGeneralRoute,
   SettingsNotifyRoute: SettingsNotifyRoute,
+  SettingsPlatformsRoute: SettingsPlatformsRoute,
   SubscriptionsIdRoute: SubscriptionsIdRoute,
   SubscriptionsIndexRoute: SubscriptionsIndexRoute,
 }

@@ -9,6 +9,7 @@ import {
 	Moon,
 	Settings,
 	Sun,
+	Tv2,
 	User,
 } from "lucide-react";
 import { clearToken } from "@/lib/auth";
@@ -20,6 +21,7 @@ const NAV_ITEMS = [
 	{ to: "/subscriptions", label: "Subscriptions", icon: List, exact: false },
 	{ to: "/scheduler", label: "Scheduler", icon: Clock, exact: true },
 	{ to: "/settings/notify", label: "Notify", icon: Bell, exact: false },
+	{ to: "/settings/platforms", label: "Platforms", icon: Tv2, exact: false },
 ] as const;
 
 const BOTTOM_ITEMS = [

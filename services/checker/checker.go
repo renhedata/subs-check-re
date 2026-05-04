@@ -701,6 +701,9 @@ func runJob(parentCtx context.Context, jobID, subscriptionID, userID string) {
 		`, id, subscriptionID, name, ptype, server, port, configJSON)
 	}
 
+	// Load user-defined platform rules (best-effort; falls back to built-ins on error).
+	userRules, _ := loadUserRules(ctx, userID)
+
 	// Run concurrent checks
 	type task struct {
 		index  int
@@ -719,23 +722,24 @@ func runJob(parentCtx context.Context, jobID, subscriptionID, userID string) {
 			defer func() { recover() }() // prevent a mihomo panic from killing the worker
 			for t := range taskCh {
 				nodeCtx, cancel := context.WithTimeout(ctx, nodeTimeout)
-				res := checkNode(nodeCtx, t.nodeID, t.proxy, speedTestURL, opts)
+				res := checkNode(nodeCtx, t.nodeID, t.proxy, speedTestURL, opts, userRules)
 				cancel()
 
 				nodeName := res.NodeName
 				nodeType, _ := t.proxy["type"].(string)
 				resultID := uuid.New().String()
 				nodeConfigJSON, _ := json.Marshal(t.proxy)
+				extraJSON, _ := json.Marshal(res.ExtraPlatforms)
 				db.Exec(context.Background(), `
 					INSERT INTO check_results
 					  (id, job_id, node_id, node_name, node_type, node_config, checked_at, alive, latency_ms, speed_kbps, country, ip,
-					   netflix, youtube, youtube_premium, openai, claude, gemini, grok, disney, tiktok, traffic_bytes)
-					VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
+					   netflix, youtube, youtube_premium, openai, claude, gemini, grok, disney, tiktok, traffic_bytes, extra_platforms)
+					VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
 				`, resultID, jobID, t.nodeID, nodeName, nodeType, nodeConfigJSON, time.Now(),
 					res.Alive, res.LatencyMs, res.SpeedKbps, res.Country, res.IP,
 					res.Netflix, res.YouTube, res.YouTubePremium, res.OpenAI,
 					res.Claude, res.Gemini, res.Grok, res.Disney, res.TikTok,
-					res.TrafficBytes,
+					res.TrafficBytes, extraJSON,
 				)
 
 				totalTrafficBytes.Add(res.TrafficBytes)
