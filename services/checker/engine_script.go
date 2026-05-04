@@ -19,7 +19,7 @@ func runJSRule(ctx context.Context, client *http.Client, ruleType string, defRaw
 		return false, err
 	}
 
-	code := def.Code
+	code := def.Prelude + "\n" + def.Code
 	if ruleType == "ts" {
 		var err error
 		code, err = transpileTS(code)

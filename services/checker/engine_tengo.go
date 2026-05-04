@@ -20,7 +20,7 @@ func runTengoRule(ctx context.Context, client *http.Client, defRaw json.RawMessa
 		return false, err
 	}
 
-	fullCode := "output := false\n" + def.Code
+	fullCode := "output := false\n" + def.Prelude + "\n" + def.Code
 
 	script := tengo.NewScript([]byte(fullCode))
 	script.SetImports(stdlib.GetModuleMap(stdlib.AllModuleNames()...))

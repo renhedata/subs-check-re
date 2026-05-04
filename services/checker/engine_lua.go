@@ -72,6 +72,11 @@ func runLuaRule(ctx context.Context, client *http.Client, defRaw json.RawMessage
 		return 1
 	}))
 
+	if def.Prelude != "" {
+		if err := L.DoString(def.Prelude); err != nil {
+			return false, fmt.Errorf("lua prelude error: %w", err)
+		}
+	}
 	if err := L.DoString(def.Code); err != nil {
 		return false, fmt.Errorf("lua error: %w", err)
 	}

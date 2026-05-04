@@ -42,8 +42,10 @@ type ConditionDef struct {
 }
 
 // ScriptDef holds the script source code for tengo/lua/js/ts rule types.
+// Prelude is optional user-defined shared code (helpers, constants) injected before Code.
 type ScriptDef struct {
-	Code string `json:"code"`
+	Prelude string `json:"prelude,omitempty"`
+	Code    string `json:"code"`
 }
 
 // PlatformRule is a user-defined platform detection rule.
