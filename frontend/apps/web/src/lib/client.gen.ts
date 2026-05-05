@@ -268,6 +268,13 @@ export namespace checker {
     }
 
     /**
+     * ListTestNodesResponse is returned by GET /platform-rules/test-nodes.
+     */
+    export interface ListTestNodesResponse {
+        nodes: NodeSummary[]
+    }
+
+    /**
      * LocalUnlockResult holds platform accessibility from the server's own network.
      */
     export interface LocalUnlockResult {
@@ -310,6 +317,15 @@ export namespace checker {
     }
 
     /**
+     * NodeSummary is a minimal proxy node entry for the test node picker.
+     */
+    export interface NodeSummary {
+        id: string
+        name: string
+        type: string
+    }
+
+    /**
      * PlatformRule is a user-defined platform detection rule.
      */
     export interface PlatformRule {
@@ -341,6 +357,7 @@ export namespace checker {
     export interface TestRuleParams {
         "rule_type": string
         definition: JSONValue
+        "node_id": string
     }
 
     /**
@@ -351,7 +368,9 @@ export namespace checker {
         error: string
         "status_code": number
         "final_url": string
-        "body_preview": string
+        body: string
+        "response_headers": { [key: string]: string }
+        "node_name": string
         "duration_ms": number
     }
 
@@ -397,6 +416,7 @@ export namespace checker {
             this.GetResults = this.GetResults.bind(this)
             this.ListJobs = this.ListJobs.bind(this)
             this.ListRules = this.ListRules.bind(this)
+            this.ListTestNodes = this.ListTestNodes.bind(this)
             this.TestRule = this.TestRule.bind(this)
             this.TriggerCheck = this.TriggerCheck.bind(this)
             this.UpdateRule = this.UpdateRule.bind(this)
@@ -501,7 +521,17 @@ export namespace checker {
         }
 
         /**
-         * TestRule runs a rule definition against a direct HTTP connection (no proxy) and returns the result.
+         * ListTestNodes returns all proxy nodes available to the current user, for the test node picker.
+         */
+        public async ListTestNodes(): Promise<ListTestNodesResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("GET", `/platform-rules/test-nodes`)
+            return await resp.json() as ListTestNodesResponse
+        }
+
+        /**
+         * TestRule runs a rule definition and returns verbose debug output.
+         * If NodeID is set, the request is routed through that node's proxy.
          */
         public async TestRule(params: TestRuleParams): Promise<TestRuleResult> {
             // Now make the actual call to the API
@@ -762,6 +792,7 @@ export namespace settings {
      */
     export interface UserSettings {
         "speed_test_url": string
+        "latency_test_url": string
         "email_config": EmailConfig
     }
 

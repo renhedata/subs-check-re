@@ -21,7 +21,7 @@ var defaultRules = []defaultRule{
 	{
 		name:      "Netflix",
 		key:       "netflix",
-		icon:      "🎬",
+		icon:      "simple-icons:netflix",
 		ruleType:  "js",
 		sortOrder: 0,
 		def: ScriptDef{Code: `
@@ -38,7 +38,7 @@ return false;
 	{
 		name:      "YouTube",
 		key:       "youtube",
-		icon:      "▶️",
+		icon:      "simple-icons:youtube",
 		ruleType:  "condition",
 		sortOrder: 1,
 		def: ConditionDef{
@@ -51,7 +51,7 @@ return false;
 	{
 		name:      "YouTube Premium",
 		key:       "youtube_premium",
-		icon:      "⭐",
+		icon:      "simple-icons:youtube",
 		ruleType:  "condition",
 		sortOrder: 2,
 		def: ConditionDef{
@@ -63,7 +63,7 @@ return false;
 	{
 		name:      "OpenAI",
 		key:       "openai",
-		icon:      "🤖",
+		icon:      "simple-icons:openai",
 		ruleType:  "js",
 		sortOrder: 3,
 		def: ScriptDef{Code: `
@@ -74,7 +74,7 @@ return r.status === 401 || r.status === 200;
 	{
 		name:      "Claude",
 		key:       "claude",
-		icon:      "🔮",
+		icon:      "simple-icons:anthropic",
 		ruleType:  "js",
 		sortOrder: 4,
 		def: ScriptDef{Code: `
@@ -87,7 +87,7 @@ return r.body.indexOf("claude") !== -1 || r.body.indexOf("anthropic") !== -1;
 	{
 		name:      "Gemini",
 		key:       "gemini",
-		icon:      "✨",
+		icon:      "simple-icons:googlegemini",
 		ruleType:  "condition",
 		sortOrder: 5,
 		def: ConditionDef{
@@ -99,7 +99,7 @@ return r.body.indexOf("claude") !== -1 || r.body.indexOf("anthropic") !== -1;
 	{
 		name:      "Grok",
 		key:       "grok",
-		icon:      "🧠",
+		icon:      "simple-icons:xai",
 		ruleType:  "js",
 		sortOrder: 6,
 		def: ScriptDef{Code: `
@@ -110,7 +110,7 @@ return r.status === 401 || r.status === 200;
 	{
 		name:      "Disney+",
 		key:       "disney",
-		icon:      "🏰",
+		icon:      "simple-icons:disneyplus",
 		ruleType:  "condition",
 		sortOrder: 7,
 		def: ConditionDef{
@@ -121,7 +121,7 @@ return r.status === 401 || r.status === 200;
 	{
 		name:      "TikTok",
 		key:       "tiktok",
-		icon:      "🎵",
+		icon:      "simple-icons:tiktok",
 		ruleType:  "js",
 		sortOrder: 8,
 		def: ScriptDef{Code: `

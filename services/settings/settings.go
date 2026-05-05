@@ -30,8 +30,9 @@ type EmailConfig struct {
 
 // UserSettings holds configurable per-user settings.
 type UserSettings struct {
-	SpeedTestURL string      `json:"speed_test_url"`
-	EmailConfig  EmailConfig `json:"email_config"`
+	SpeedTestURL   string      `json:"speed_test_url"`
+	LatencyTestURL string      `json:"latency_test_url"`
+	EmailConfig    EmailConfig `json:"email_config"`
 }
 
 // GetSettings returns the current user's settings.
@@ -43,9 +44,9 @@ func GetSettings(ctx context.Context) (*UserSettings, error) {
 	var s UserSettings
 	var emailConfigJSON []byte
 	err := db.QueryRow(ctx,
-		`SELECT COALESCE(speed_test_url, ''), COALESCE(email_config, 'null'::jsonb) FROM user_settings WHERE user_id = $1`,
+		`SELECT COALESCE(speed_test_url, ''), COALESCE(latency_test_url, ''), COALESCE(email_config, 'null'::jsonb) FROM user_settings WHERE user_id = $1`,
 		claims.UserID,
-	).Scan(&s.SpeedTestURL, &emailConfigJSON)
+	).Scan(&s.SpeedTestURL, &s.LatencyTestURL, &emailConfigJSON)
 	if err != nil {
 		return &UserSettings{}, nil
 	}
@@ -64,12 +65,13 @@ func UpdateSettings(ctx context.Context, p *UserSettings) (*UserSettings, error)
 	emailConfigJSON, _ := json.Marshal(p.EmailConfig)
 
 	if _, err := db.Exec(ctx, `
-		INSERT INTO user_settings (user_id, speed_test_url, email_config)
-		VALUES ($1, $2, $3)
+		INSERT INTO user_settings (user_id, speed_test_url, latency_test_url, email_config)
+		VALUES ($1, $2, $3, $4)
 		ON CONFLICT (user_id) DO UPDATE
-		  SET speed_test_url = EXCLUDED.speed_test_url,
-		      email_config   = EXCLUDED.email_config
-	`, claims.UserID, p.SpeedTestURL, emailConfigJSON); err != nil {
+		  SET speed_test_url   = EXCLUDED.speed_test_url,
+		      latency_test_url = EXCLUDED.latency_test_url,
+		      email_config     = EXCLUDED.email_config
+	`, claims.UserID, p.SpeedTestURL, p.LatencyTestURL, emailConfigJSON); err != nil {
 		return nil, errs.B().Code(errs.Internal).Msg("failed to save settings").Err()
 	}
 	return p, nil
@@ -145,11 +147,11 @@ func GetUserIDByAPIKey(ctx context.Context, apiKey string) (*UserIDResponse, err
 func GetSpeedTestURLForUser(ctx context.Context, userID string) (*UserSettings, error) {
 	var s UserSettings
 	err := db.QueryRow(ctx,
-		`SELECT COALESCE(speed_test_url, '') FROM user_settings WHERE user_id = $1`,
+		`SELECT COALESCE(speed_test_url, ''), COALESCE(latency_test_url, '') FROM user_settings WHERE user_id = $1`,
 		userID,
-	).Scan(&s.SpeedTestURL)
+	).Scan(&s.SpeedTestURL, &s.LatencyTestURL)
 	if err != nil {
-		return &UserSettings{SpeedTestURL: ""}, nil
+		return &UserSettings{}, nil
 	}
 	return &s, nil
 }

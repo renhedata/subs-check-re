@@ -17,6 +17,7 @@ export const Route = createFileRoute("/settings/general")({
 
 const DEFAULT_SPEED_TEST_URL =
 	"https://speed.cloudflare.com/__down?bytes=204800";
+const DEFAULT_LATENCY_TEST_URL = "http://www.gstatic.com/generate_204";
 
 function GeneralSettingsPage() {
 	const qc = useQueryClient();
@@ -29,6 +30,7 @@ function GeneralSettingsPage() {
 	const { register, handleSubmit, reset } = useForm<UserSettings>({
 		defaultValues: {
 			speed_test_url: "",
+			latency_test_url: "",
 			email_config: { smtp_host: "", smtp_port: 587, smtp_user: "", smtp_pass: "", from: "", to: "" },
 		},
 	});
@@ -56,6 +58,25 @@ function GeneralSettingsPage() {
 				onSubmit={handleSubmit((d) => saveMutation.mutate(d))}
 				className="space-y-5"
 			>
+				{/* Latency test */}
+				<div className="rounded-lg border border-border bg-card p-5">
+					<p className="mb-3 font-medium text-foreground text-sm">Latency Test</p>
+					<div className="space-y-1.5">
+						<Label htmlFor="latency_test_url" className="text-muted-foreground text-xs">
+							Latency Test URL
+						</Label>
+						<Input
+							id="latency_test_url"
+							placeholder={DEFAULT_LATENCY_TEST_URL}
+							{...register("latency_test_url")}
+							className="h-8 font-mono text-sm"
+						/>
+						<p className="text-xs" style={{ color: "var(--color-dimmed)" }}>
+							URL used to measure round-trip latency and check if a node is alive. Leave blank to use default ({DEFAULT_LATENCY_TEST_URL}).
+						</p>
+					</div>
+				</div>
+
 				{/* Speed test */}
 				<div className="rounded-lg border border-border bg-card p-5">
 					<p className="mb-3 font-medium text-foreground text-sm">Speed Test</p>

@@ -72,10 +72,11 @@ func runConditionRule(ctx context.Context, client *http.Client, defRaw json.RawM
 }
 
 type conditionDebug struct {
-	ok          bool
-	statusCode  int
-	finalURL    string
-	bodyPreview string
+	ok              bool
+	statusCode      int
+	finalURL        string
+	body            string
+	responseHeaders map[string]string
 }
 
 // testConditionVerbose is like runConditionRule but also returns HTTP response details for the test UI.
@@ -107,9 +108,12 @@ func testConditionVerbose(ctx context.Context, client *http.Client, defRaw json.
 	bodyStr := string(body)
 	finalURL := resp.Request.URL.String()
 
-	preview := bodyStr
-	if len(preview) > 400 {
-		preview = preview[:400] + "…"
+	// Collect response headers (canonicalized, one value per key).
+	hdrs := make(map[string]string, len(resp.Header))
+	for k, vv := range resp.Header {
+		if len(vv) > 0 {
+			hdrs[k] = vv[0]
+		}
 	}
 
 	ok := true
@@ -146,9 +150,10 @@ func testConditionVerbose(ctx context.Context, client *http.Client, defRaw json.
 	}
 
 	return &conditionDebug{
-		ok:          ok,
-		statusCode:  resp.StatusCode,
-		finalURL:    finalURL,
-		bodyPreview: preview,
+		ok:              ok,
+		statusCode:      resp.StatusCode,
+		finalURL:        finalURL,
+		body:            bodyStr,
+		responseHeaders: hdrs,
 	}, nil
 }

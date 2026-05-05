@@ -94,16 +94,31 @@ type UpdateRuleParams struct {
 type TestRuleParams struct {
 	RuleType   string          `json:"rule_type"`
 	Definition json.RawMessage `json:"definition"`
+	NodeID     string          `json:"node_id,omitempty"`
 }
 
 // TestRuleResult is returned by POST /platform-rules/test.
 type TestRuleResult struct {
-	OK          bool   `json:"ok"`
-	Error       string `json:"error,omitempty"`
-	StatusCode  int    `json:"status_code,omitempty"`
-	FinalURL    string `json:"final_url,omitempty"`
-	BodyPreview string `json:"body_preview,omitempty"`
-	DurationMs  int64  `json:"duration_ms,omitempty"`
+	OK              bool              `json:"ok"`
+	Error           string            `json:"error,omitempty"`
+	StatusCode      int               `json:"status_code,omitempty"`
+	FinalURL        string            `json:"final_url,omitempty"`
+	Body            string            `json:"body,omitempty"`
+	ResponseHeaders map[string]string `json:"response_headers,omitempty"`
+	NodeName        string            `json:"node_name,omitempty"`
+	DurationMs      int64             `json:"duration_ms,omitempty"`
+}
+
+// NodeSummary is a minimal proxy node entry for the test node picker.
+type NodeSummary struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Type string `json:"type"`
+}
+
+// ListTestNodesResponse is returned by GET /platform-rules/test-nodes.
+type ListTestNodesResponse struct {
+	Nodes []*NodeSummary `json:"nodes"`
 }
 
 var validRuleTypes = map[string]bool{
@@ -235,29 +250,59 @@ func DeleteRule(ctx context.Context, ruleId string) error {
 	return nil
 }
 
-// TestRule runs a rule definition against a direct HTTP connection (no proxy) and returns the result.
+// TestRule runs a rule definition and returns verbose debug output.
+// If NodeID is set, the request is routed through that node's proxy.
 //
 //encore:api auth method=POST path=/platform-rules/test
 func TestRule(ctx context.Context, p *TestRuleParams) (*TestRuleResult, error) {
 	if !validRuleTypes[p.RuleType] {
 		return nil, errs.B().Code(errs.InvalidArgument).Msg("invalid rule_type").Err()
 	}
+	claims := encauth.Data().(*authsvc.UserClaims)
 
-	httpClient := &http.Client{Timeout: 15 * time.Second}
+	var httpClient *http.Client
+	var nodeName string
+
+	if p.NodeID != "" {
+		var configJSON []byte
+		err := db.QueryRow(ctx, `
+			SELECT n.name, n.config FROM nodes n
+			WHERE n.id = $1
+			  AND n.subscription_id IN (
+			        SELECT DISTINCT subscription_id FROM check_jobs WHERE user_id = $2
+			      )
+		`, p.NodeID, claims.UserID).Scan(&nodeName, &configJSON)
+		if err == nil && len(configJSON) > 0 {
+			var mapping map[string]any
+			if json.Unmarshal(configJSON, &mapping) == nil {
+				if pc := newProxyClient(mapping); pc != nil {
+					defer pc.close()
+					httpClient = pc.Client
+				}
+			}
+		}
+	}
+	if httpClient == nil {
+		httpClient = &http.Client{Timeout: 15 * time.Second}
+		nodeName = ""
+	}
+
 	start := time.Now()
 
 	if p.RuleType == "condition" {
 		dbg, err := testConditionVerbose(ctx, httpClient, p.Definition)
 		ms := time.Since(start).Milliseconds()
 		if err != nil {
-			return &TestRuleResult{OK: false, Error: err.Error(), DurationMs: ms}, nil
+			return &TestRuleResult{OK: false, Error: err.Error(), DurationMs: ms, NodeName: nodeName}, nil
 		}
 		return &TestRuleResult{
-			OK:          dbg.ok,
-			StatusCode:  dbg.statusCode,
-			FinalURL:    dbg.finalURL,
-			BodyPreview: dbg.bodyPreview,
-			DurationMs:  ms,
+			OK:              dbg.ok,
+			StatusCode:      dbg.statusCode,
+			FinalURL:        dbg.finalURL,
+			Body:            dbg.body,
+			ResponseHeaders: dbg.responseHeaders,
+			NodeName:        nodeName,
+			DurationMs:      ms,
 		}, nil
 	}
 
@@ -265,9 +310,42 @@ func TestRule(ctx context.Context, p *TestRuleParams) (*TestRuleResult, error) {
 	ok, err := runRule(ctx, httpClient, rule)
 	ms := time.Since(start).Milliseconds()
 	if err != nil {
-		return &TestRuleResult{OK: false, Error: err.Error(), DurationMs: ms}, nil
+		return &TestRuleResult{OK: false, Error: err.Error(), DurationMs: ms, NodeName: nodeName}, nil
 	}
-	return &TestRuleResult{OK: ok, DurationMs: ms}, nil
+	return &TestRuleResult{OK: ok, DurationMs: ms, NodeName: nodeName}, nil
+}
+
+// ListTestNodes returns all proxy nodes available to the current user, for the test node picker.
+//
+//encore:api auth method=GET path=/platform-rules/test-nodes
+func ListTestNodes(ctx context.Context) (*ListTestNodesResponse, error) {
+	claims := encauth.Data().(*authsvc.UserClaims)
+
+	rows, err := db.Query(ctx, `
+		SELECT DISTINCT ON (n.name) n.id, n.name, COALESCE(n.type, '')
+		FROM nodes n
+		WHERE n.subscription_id IN (
+		    SELECT DISTINCT subscription_id FROM check_jobs WHERE user_id = $1
+		)
+		ORDER BY n.name
+		LIMIT 500
+	`, claims.UserID)
+	if err != nil {
+		return &ListTestNodesResponse{Nodes: []*NodeSummary{}}, nil
+	}
+	defer rows.Close()
+
+	var nodes []*NodeSummary
+	for rows.Next() {
+		var n NodeSummary
+		if err := rows.Scan(&n.ID, &n.Name, &n.Type); err == nil {
+			nodes = append(nodes, &n)
+		}
+	}
+	if nodes == nil {
+		nodes = []*NodeSummary{}
+	}
+	return &ListTestNodesResponse{Nodes: nodes}, nil
 }
 
 // loadUserRules fetches all platform rules for a user ordered by sort_order.

@@ -291,11 +291,13 @@ func TriggerCheckInternal(ctx context.Context, subscriptionID string, p *Trigger
 		return nil, errs.B().Code(errs.FailedPrecondition).Msg("a check is already running").Err()
 	}
 
-	// Fetch user's configured speed test URL for scheduled runs
-	speedCfg, _ := settingssvc.GetSpeedTestURLForUser(ctx, p.UserID)
+	// Fetch user's configured test URLs for scheduled runs
+	userCfg, _ := settingssvc.GetSpeedTestURLForUser(ctx, p.UserID)
 	speedTestURL := ""
-	if speedCfg != nil {
-		speedTestURL = speedCfg.SpeedTestURL
+	latencyTestURL := ""
+	if userCfg != nil {
+		speedTestURL = userCfg.SpeedTestURL
+		latencyTestURL = userCfg.LatencyTestURL
 	}
 
 	applyOptionDefaults(&p.Options)
@@ -303,9 +305,9 @@ func TriggerCheckInternal(ctx context.Context, subscriptionID string, p *Trigger
 
 	jobID := uuid.New().String()
 	if _, err := db.Exec(ctx, `
-		INSERT INTO check_jobs (id, subscription_id, user_id, sub_url, speed_test_url, options_json, status, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, 'queued', $7)
-	`, jobID, subscriptionID, p.UserID, p.SubURL, speedTestURL, optsJSON, time.Now()); err != nil {
+		INSERT INTO check_jobs (id, subscription_id, user_id, sub_url, speed_test_url, latency_test_url, options_json, status, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, 'queued', $8)
+	`, jobID, subscriptionID, p.UserID, p.SubURL, speedTestURL, latencyTestURL, optsJSON, time.Now()); err != nil {
 		return nil, errs.B().Code(errs.Internal).Msg("failed to create job").Err()
 	}
 
@@ -337,11 +339,13 @@ func TriggerCheck(ctx context.Context, subscriptionID string, p *TriggerParams) 
 		return nil, errs.B().Code(errs.FailedPrecondition).Msg("a check is already running for this subscription").Err()
 	}
 
-	// Fetch user's configured speed test URL (empty = use default)
-	speedCfg, _ := settingssvc.GetSpeedTestURLForUser(ctx, claims.UserID)
+	// Fetch user's configured test URLs (empty = use defaults)
+	userCfg, _ := settingssvc.GetSpeedTestURLForUser(ctx, claims.UserID)
 	speedTestURL := ""
-	if speedCfg != nil {
-		speedTestURL = speedCfg.SpeedTestURL
+	latencyTestURL := ""
+	if userCfg != nil {
+		speedTestURL = userCfg.SpeedTestURL
+		latencyTestURL = userCfg.LatencyTestURL
 	}
 
 	opts := defaultCheckOptions()
@@ -357,9 +361,9 @@ func TriggerCheck(ctx context.Context, subscriptionID string, p *TriggerParams) 
 
 	jobID := uuid.New().String()
 	if _, err := db.Exec(ctx, `
-		INSERT INTO check_jobs (id, subscription_id, user_id, sub_url, speed_test_url, options_json, status, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, 'queued', $7)
-	`, jobID, subscriptionID, claims.UserID, sub.URL, speedTestURL, optsJSON, time.Now()); err != nil {
+		INSERT INTO check_jobs (id, subscription_id, user_id, sub_url, speed_test_url, latency_test_url, options_json, status, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, 'queued', $8)
+	`, jobID, subscriptionID, claims.UserID, sub.URL, speedTestURL, latencyTestURL, optsJSON, time.Now()); err != nil {
 		return nil, errs.B().Code(errs.Internal).Msg("failed to create job").Err()
 	}
 
@@ -659,12 +663,12 @@ func runJob(parentCtx context.Context, jobID, subscriptionID, userID string) {
 	// Mark as running
 	db.Exec(context.Background(), `UPDATE check_jobs SET status='running' WHERE id=$1`, jobID)
 
-	// Get subscription URL, speed test URL, and options from job row
-	var subURL, speedTestURL string
+	// Get subscription URL, test URLs, and options from job row
+	var subURL, speedTestURL, latencyTestURL string
 	var optsJSON []byte
 	if err := db.QueryRow(context.Background(),
-		`SELECT sub_url, COALESCE(speed_test_url, ''), COALESCE(options_json, '{}') FROM check_jobs WHERE id=$1`,
-		jobID).Scan(&subURL, &speedTestURL, &optsJSON); err != nil || subURL == "" {
+		`SELECT sub_url, COALESCE(speed_test_url, ''), COALESCE(latency_test_url, ''), COALESCE(options_json, '{}') FROM check_jobs WHERE id=$1`,
+		jobID).Scan(&subURL, &speedTestURL, &latencyTestURL, &optsJSON); err != nil || subURL == "" {
 		markFailed()
 		return
 	}
@@ -727,7 +731,7 @@ func runJob(parentCtx context.Context, jobID, subscriptionID, userID string) {
 			defer func() { recover() }() // prevent a mihomo panic from killing the worker
 			for t := range taskCh {
 				nodeCtx, cancel := context.WithTimeout(ctx, nodeTimeout)
-				res := checkNode(nodeCtx, t.nodeID, t.proxy, speedTestURL, opts, userRules)
+				res := checkNode(nodeCtx, t.nodeID, t.proxy, speedTestURL, latencyTestURL, opts, userRules)
 				cancel()
 
 				nodeName := res.NodeName

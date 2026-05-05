@@ -1,3 +1,4 @@
+import { Icon as IconifyIcon } from "@iconify/react";
 import {
 	SiAnthropic,
 	SiGooglegemini,
@@ -6,6 +7,7 @@ import {
 	SiTiktok,
 	SiYoutube,
 } from "react-icons/si";
+import { usePlatformRules } from "./platform-rules-context";
 
 type PlatformKey =
 	| "netflix"
@@ -73,6 +75,34 @@ const PLATFORM_META: Record<PlatformKey, PlatformMeta> = {
 	tiktok: { icon: SiTiktok, color: "#00F2EA", label: "TikTok" },
 };
 
+// Returns true for Iconify IDs like "simple-icons:netflix" or "mdi:home"
+export function isIconifyId(icon: string): boolean {
+	const parts = icon.split(":");
+	return (
+		parts.length === 2 &&
+		/^[a-z][\w-]*$/i.test(parts[0]) &&
+		/^[a-z][\w-]*$/i.test(parts[1])
+	);
+}
+
+function renderCustomIcon(icon: string, label: string, size: number): React.ReactNode {
+	if (isIconifyId(icon)) {
+		return <IconifyIcon icon={icon} width={size} height={size} />;
+	}
+	if (icon.startsWith("http") || icon.startsWith("data:")) {
+		return (
+			<img
+				src={icon}
+				alt={label}
+				width={size}
+				height={size}
+				className="rounded object-contain"
+			/>
+		);
+	}
+	return <span style={{ fontSize: size, lineHeight: 1 }}>{icon}</span>;
+}
+
 export function PlatformIcon({
 	platform,
 	size = 14,
@@ -82,18 +112,22 @@ export function PlatformIcon({
 	size?: number;
 	showLabel?: boolean;
 }) {
+	const rules = usePlatformRules();
 	const meta = PLATFORM_META[platform];
 	if (!meta) return null;
-	const Icon = meta.icon;
+
+	const customIcon = rules.get(platform)?.icon || undefined;
 	const isPremium = platform === "youtube_premium";
+	const Icon = meta.icon;
 
 	return (
-		<span
-			className="inline-flex items-center gap-1"
-			title={meta.label}
-		>
+		<span className="inline-flex items-center gap-1" title={meta.label}>
 			<span className="relative inline-flex shrink-0">
-				<Icon size={size} color={meta.color} />
+				{customIcon ? (
+					renderCustomIcon(customIcon, meta.label, size)
+				) : (
+					<Icon size={size} color={meta.color} />
+				)}
 				{isPremium && (
 					<span
 						className="-right-1 -top-1 absolute flex h-2.5 w-2.5 items-center justify-center rounded-full text-[7px] font-bold text-white"
@@ -110,7 +144,7 @@ export function PlatformIcon({
 	);
 }
 
-// PlatformIconAny renders any platform key — brand icon for built-ins, emoji/URL for custom keys.
+// PlatformIconAny renders any platform key — brand icon for built-ins, Iconify/emoji/URL for custom keys.
 export function PlatformIconAny({
 	platformKey,
 	icon,
@@ -126,18 +160,21 @@ export function PlatformIconAny({
 }) {
 	const builtin = PLATFORM_META[platformKey as PlatformKey];
 	if (builtin) {
-		return <PlatformIcon platform={platformKey as PlatformKey} size={size} showLabel={showLabel} />;
+		return (
+			<PlatformIcon
+				platform={platformKey as PlatformKey}
+				size={size}
+				showLabel={showLabel}
+			/>
+		);
 	}
 
 	const displayLabel = label ?? platformKey;
-	const isUrl = icon && (icon.startsWith("http://") || icon.startsWith("https://") || icon.startsWith("data:"));
 
 	return (
 		<span className="inline-flex items-center gap-1" title={displayLabel}>
-			{isUrl ? (
-				<img src={icon} alt={displayLabel} width={size} height={size} className="rounded object-contain" />
-			) : icon ? (
-				<span style={{ fontSize: size, lineHeight: 1 }}>{icon}</span>
+			{icon ? (
+				renderCustomIcon(icon, displayLabel, size)
 			) : (
 				<span
 					className="inline-flex items-center justify-center rounded bg-secondary font-medium text-muted-foreground"

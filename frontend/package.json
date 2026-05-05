@@ -29,6 +29,7 @@
 	},
 	"dependencies": {
 		"@frontend/env": "workspace:*",
+		"@iconify/react": "^6.0.2",
 		"@tanstack/react-query": "^5.90.21",
 		"dotenv": "catalog:",
 		"react-hook-form": "^7.71.2",

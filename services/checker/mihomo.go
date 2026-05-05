@@ -111,8 +111,12 @@ func get(ctx context.Context, client *http.Client, url string) (*http.Response, 
 }
 
 // isAlive returns true if the proxy can reach the connectivity test URL.
-func isAlive(ctx context.Context, client *http.Client) bool {
-	resp, err := get(ctx, client, aliveTestURL)
+func isAlive(ctx context.Context, client *http.Client, testURL string) bool {
+	url := testURL
+	if url == "" {
+		url = aliveTestURL
+	}
+	resp, err := get(ctx, client, url)
 	if err != nil {
 		return false
 	}
@@ -145,9 +149,13 @@ func getProxyInfo(ctx context.Context, client *http.Client) (ip, country string)
 }
 
 // measureLatency measures round-trip latency in milliseconds.
-func measureLatency(ctx context.Context, client *http.Client) int {
+func measureLatency(ctx context.Context, client *http.Client, testURL string) int {
+	url := testURL
+	if url == "" {
+		url = aliveTestURL
+	}
 	start := time.Now()
-	resp, err := get(ctx, client, aliveTestURL)
+	resp, err := get(ctx, client, url)
 	if err != nil {
 		return 0
 	}
@@ -210,7 +218,7 @@ type nodeCheckResult struct {
 // checkNode runs all checks for a single proxy mapping and returns the result.
 // User rules override the corresponding built-in checks; rules with non-builtin
 // keys are stored in ExtraPlatforms.
-func checkNode(ctx context.Context, nodeID string, mapping map[string]any, speedTestURL string, opts CheckOptions, rules []*PlatformRule) nodeCheckResult {
+func checkNode(ctx context.Context, nodeID string, mapping map[string]any, speedTestURL string, latencyTestURL string, opts CheckOptions, rules []*PlatformRule) nodeCheckResult {
 	name, _ := mapping["name"].(string)
 	result := nodeCheckResult{NodeID: nodeID, NodeName: name}
 
@@ -220,11 +228,11 @@ func checkNode(ctx context.Context, nodeID string, mapping map[string]any, speed
 	}
 	defer pc.close()
 
-	if !isAlive(ctx, pc.Client) {
+	if !isAlive(ctx, pc.Client, latencyTestURL) {
 		return result
 	}
 	result.Alive = true
-	result.LatencyMs = measureLatency(ctx, pc.Client)
+	result.LatencyMs = measureLatency(ctx, pc.Client, latencyTestURL)
 	if opts.SpeedTest {
 		result.SpeedKbps = measureSpeed(ctx, pc.Client.Transport, speedTestURL)
 	}

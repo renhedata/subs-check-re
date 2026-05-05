@@ -1,19 +1,25 @@
+import { Icon as IconifyIcon } from "@iconify/react";
 import Editor, { useMonaco } from "@monaco-editor/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import {
 	BookOpen,
+	Check,
 	ChevronDown,
+	ChevronRight,
 	ChevronUp,
 	Clock,
+	Copy,
 	Loader2,
 	Play,
 	Plus,
+	Search,
 	Trash2,
 	X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { isIconifyId } from "@/components/platform-icons";
 import { client } from "@/lib/client";
 import type { checker } from "@/lib/client.gen";
 import { useTheme } from "@/lib/theme";
@@ -22,6 +28,7 @@ type PlatformRule = checker.PlatformRule;
 type CreateRuleParams = checker.CreateRuleParams;
 type UpdateRuleParams = checker.UpdateRuleParams;
 type TestRuleResult = checker.TestRuleResult;
+type NodeSummary = checker.NodeSummary;
 
 export const Route = createFileRoute("/settings/platforms")({
 	component: PlatformsPage,
@@ -300,14 +307,23 @@ function IconDisplay({
 	name,
 	size = "md",
 }: { icon: string; name: string; size?: "sm" | "md" }) {
-	const dim = size === "sm" ? "h-5 w-5 text-sm" : "h-7 w-7 text-base";
+	const px = size === "sm" ? 16 : 20;
+	const dim = size === "sm" ? "h-5 w-5" : "h-7 w-7";
 
 	if (!icon) {
 		return (
 			<span
-				className={`flex flex-shrink-0 items-center justify-center rounded bg-secondary font-medium text-muted-foreground ${dim}`}
+				className={`flex flex-shrink-0 items-center justify-center rounded bg-secondary font-medium text-muted-foreground ${dim} text-sm`}
 			>
 				{name.charAt(0).toUpperCase()}
+			</span>
+		);
+	}
+
+	if (isIconifyId(icon)) {
+		return (
+			<span className={`flex flex-shrink-0 items-center justify-center ${dim}`}>
+				<IconifyIcon icon={icon} width={px} height={px} />
 			</span>
 		);
 	}
@@ -325,7 +341,7 @@ function IconDisplay({
 	}
 
 	return (
-		<span className={`flex flex-shrink-0 items-center justify-center ${dim}`} aria-hidden>
+		<span className={`flex flex-shrink-0 items-center justify-center ${dim} text-base`} aria-hidden>
 			{icon}
 		</span>
 	);
@@ -382,7 +398,7 @@ function RuleCard({
 			>
 				<span
 					className={[
-						"absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform",
+						"absolute left-0 top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform",
 						rule.enabled ? "translate-x-[18px]" : "translate-x-0.5",
 					].join(" ")}
 				/>
@@ -435,6 +451,126 @@ function RuleCard({
 	);
 }
 
+// ─── Icon picker ──────────────────────────────────────────────────────────────
+
+function IconPickerInput({
+	value,
+	onChange,
+	name,
+}: { value: string; onChange: (v: string) => void; name: string }) {
+	const [open, setOpen] = useState(false);
+	const [query, setQuery] = useState("");
+	const [results, setResults] = useState<string[]>([]);
+	const [searching, setSearching] = useState(false);
+	const containerRef = useRef<HTMLDivElement>(null);
+
+	useEffect(() => {
+		function onDown(e: MouseEvent) {
+			if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+				setOpen(false);
+			}
+		}
+		document.addEventListener("mousedown", onDown);
+		return () => document.removeEventListener("mousedown", onDown);
+	}, []);
+
+	useEffect(() => {
+		if (!query.trim()) {
+			setResults([]);
+			return;
+		}
+		const id = setTimeout(async () => {
+			setSearching(true);
+			try {
+				const res = await fetch(
+					`https://api.iconify.design/search?query=${encodeURIComponent(query)}&limit=30`,
+				);
+				const data = (await res.json()) as { icons?: string[] };
+				setResults(data.icons ?? []);
+			} catch {
+				setResults([]);
+			} finally {
+				setSearching(false);
+			}
+		}, 400);
+		return () => clearTimeout(id);
+	}, [query]);
+
+	return (
+		<div className="relative" ref={containerRef}>
+			<div className="flex items-center gap-1">
+				<IconDisplay icon={value} name={name || "?"} size="sm" />
+				<input
+					value={value}
+					onChange={(e) => onChange(e.target.value)}
+					placeholder="emoji, URL, or icon:name"
+					className="h-7 w-36 rounded border border-border bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+				/>
+				<button
+					type="button"
+					onClick={() => setOpen((o) => !o)}
+					className="flex h-7 w-7 items-center justify-center rounded border border-border text-muted-foreground hover:bg-secondary"
+					title="Search Iconify"
+				>
+					<Search size={11} />
+				</button>
+			</div>
+
+			{open && (
+				<div className="absolute left-0 top-9 z-50 w-80 rounded-lg border border-border bg-card p-3 shadow-xl">
+					<input
+						value={query}
+						onChange={(e) => setQuery(e.target.value)}
+						placeholder="Search icons (e.g. netflix, youtube…)"
+						className="mb-2 h-7 w-full rounded border border-border bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+						// biome-ignore lint/a11y/noAutofocus: intentional — picker opens on button click
+						autoFocus
+					/>
+
+					{searching && (
+						<div className="flex justify-center py-3">
+							<Loader2 size={14} className="animate-spin text-muted-foreground" />
+						</div>
+					)}
+
+					{!searching && results.length > 0 && (
+						<div className="grid max-h-48 grid-cols-6 gap-1 overflow-y-auto">
+							{results.map((iconId) => (
+								<button
+									key={iconId}
+									type="button"
+									onClick={() => {
+										onChange(iconId);
+										setOpen(false);
+									}}
+									title={iconId}
+									className="flex h-9 w-full items-center justify-center rounded hover:bg-secondary"
+								>
+									<IconifyIcon icon={iconId} width={20} height={20} />
+								</button>
+							))}
+						</div>
+					)}
+
+					{!searching && results.length === 0 && query && (
+						<p className="py-3 text-center text-muted-foreground text-xs">No results</p>
+					)}
+
+					{!query && (
+						<p className="text-muted-foreground text-xs leading-relaxed">
+							Powered by Iconify · 200k+ icons
+							<br />
+							<span className="text-foreground/50">
+								Try: simple-icons:netflix · logos:youtube
+							</span>
+						</p>
+					)}
+				</div>
+			)}
+		</div>
+	);
+}
+
 // ─── IDE Editor Dialog ────────────────────────────────────────────────────────
 
 function RuleEditorDialog({
@@ -461,7 +597,15 @@ function RuleEditorDialog({
 	const [activeTab, setActiveTab] = useState<"prelude" | "code">("code");
 	const [testResult, setTestResult] = useState<TestRuleResult | null>(null);
 	const [testing, setTesting] = useState(false);
+	const [testNodeId, setTestNodeId] = useState("");
 	const consoleRef = useRef<HTMLDivElement>(null);
+
+	const nodesQuery = useQuery({
+		queryKey: ["test-nodes"],
+		queryFn: () => client.checker.ListTestNodes(),
+		staleTime: 30_000,
+	});
+	const testNodes: NodeSummary[] = nodesQuery.data?.nodes ?? [];
 
 	function handleTypeChange(t: RuleType) {
 		setRuleType(t);
@@ -476,11 +620,12 @@ function RuleEditorDialog({
 			const res = await client.checker.TestRule({
 				rule_type: ruleType,
 				definition: def as never,
+				node_id: testNodeId || "",
 			});
 			setTestResult(res);
 			setTimeout(() => consoleRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
 		} catch {
-			setTestResult({ ok: false, error: "Request failed", duration_ms: 0, status_code: 0, final_url: "", body_preview: "" });
+			setTestResult({ ok: false, error: "Request failed", duration_ms: 0, status_code: 0, final_url: "", body: "", response_headers: {}, node_name: "" });
 		} finally {
 			setTesting(false);
 		}
@@ -548,16 +693,7 @@ function RuleEditorDialog({
 							{rule?.key}
 						</span>
 					)}
-					{/* Icon field: emoji or image URL */}
-					<div className="flex items-center gap-1">
-						{icon && <IconDisplay icon={icon} name={name} size="sm" />}
-						<input
-							value={icon}
-							onChange={(e) => setIcon(e.target.value)}
-							placeholder="🎬 or https://…"
-							className="h-7 w-32 rounded border border-border bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-						/>
-					</div>
+					<IconPickerInput value={icon} onChange={setIcon} name={name} />
 					<select
 						value={ruleType}
 						onChange={(e) => handleTypeChange(e.target.value as RuleType)}
@@ -584,6 +720,20 @@ function RuleEditorDialog({
 					>
 						<BookOpen size={11} /> Docs
 					</button>
+
+					<select
+						value={testNodeId}
+						onChange={(e) => setTestNodeId(e.target.value)}
+						className="h-7 max-w-[160px] rounded border border-border bg-background px-2 text-xs text-muted-foreground focus:outline-none"
+						title="Node to test through"
+					>
+						<option value="">Direct (no proxy)</option>
+						{testNodes.map((n) => (
+							<option key={n.id} value={n.id}>
+								{n.name}
+							</option>
+						))}
+					</select>
 
 					<button
 						type="button"
@@ -641,7 +791,11 @@ function RuleEditorDialog({
 						{/* Console */}
 						<div ref={consoleRef}>
 							{(testResult || testing) && (
-								<ConsolePanel result={testResult} loading={testing} />
+								<ConsolePanel
+									result={testResult}
+									loading={testing}
+									nodeLabel={testResult?.node_name ?? (testNodeId ? (testNodes.find((n) => n.id === testNodeId)?.name ?? "") : "")}
+								/>
 							)}
 						</div>
 					</div>
@@ -749,70 +903,136 @@ function ScriptEditorArea({
 
 // ─── Console panel ────────────────────────────────────────────────────────────
 
+function CopyButton({ text }: { text: string }) {
+	const [copied, setCopied] = useState(false);
+	return (
+		<button
+			type="button"
+			onClick={() => {
+				navigator.clipboard.writeText(text);
+				setCopied(true);
+				setTimeout(() => setCopied(false), 1500);
+			}}
+			className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[#858585] hover:bg-white/10 hover:text-[#d4d4d4]"
+		>
+			{copied ? <Check size={10} /> : <Copy size={10} />}
+			{copied ? "Copied" : "Copy"}
+		</button>
+	);
+}
+
 function ConsolePanel({
 	result,
 	loading,
-}: { result: TestRuleResult | null; loading: boolean }) {
+	nodeLabel,
+}: { result: TestRuleResult | null; loading: boolean; nodeLabel: string }) {
+	const [headersOpen, setHeadersOpen] = useState(false);
+
+	const headerEntries = result?.response_headers
+		? Object.entries(result.response_headers).sort(([a], [b]) => a.localeCompare(b))
+		: [];
+
 	return (
 		<div className="border-t border-border bg-[#1e1e1e] font-mono text-xs">
-			<div className="flex items-center gap-2 border-b border-border/50 px-3 py-1.5">
+			{/* Title bar */}
+			<div className="flex items-center gap-2 border-b border-white/5 px-3 py-1.5">
 				<span className="text-[#858585]">Console</span>
 				{loading && <Loader2 size={10} className="animate-spin text-[#858585]" />}
+				{!loading && result && (
+					<span className={result.ok ? "text-[#4ec9b0]" : "text-[#f14c4c]"}>
+						{result.ok ? "✓ PASS" : "✗ FAIL"}
+					</span>
+				)}
+				<span className="flex-1" />
+				{nodeLabel && (
+					<span className="rounded bg-white/5 px-1.5 py-0.5 text-[#858585] text-[10px]">
+						via {nodeLabel}
+					</span>
+				)}
 			</div>
 
-			<div className="space-y-0.5 px-3 py-2">
+			<div className="space-y-2 px-3 py-2.5">
 				{loading && (
-					<div className="text-[#858585]">
-						<span className="text-[#569cd6]">&gt;</span> Running test… (direct HTTP, no proxy)
-					</div>
+					<p className="text-[#858585]">
+						<span className="text-[#569cd6]">&gt;</span>{" "}
+						Running{nodeLabel ? ` through ${nodeLabel}` : " direct"}…
+					</p>
 				)}
 
 				{result && (
 					<>
-						<div className="flex items-center gap-3">
-							{result.ok ? (
-								<span className="text-[#4ec9b0]">✓ PASS</span>
-							) : (
-								<span className="text-[#f14c4c]">✗ FAIL</span>
-							)}
+						{/* Status row */}
+						<div className="flex flex-wrap items-center gap-3">
 							{result.duration_ms != null && result.duration_ms > 0 && (
 								<span className="flex items-center gap-1 text-[#858585]">
-									<Clock size={9} />
-									{result.duration_ms}ms
+									<Clock size={9} /> {result.duration_ms}ms
 								</span>
 							)}
 							{result.status_code != null && result.status_code > 0 && (
-								<span
-									className={
-										result.status_code < 400 ? "text-[#4ec9b0]" : "text-[#f14c4c]"
-									}
-								>
+								<span className={result.status_code < 400 ? "text-[#4ec9b0]" : "text-[#f14c4c]"}>
 									HTTP {result.status_code}
+								</span>
+							)}
+							{result.final_url && (
+								<span className="text-[#858585]">
+									<span className="text-[#569cd6]">→</span>{" "}
+									<span className="text-[#9cdcfe]">{result.final_url}</span>
 								</span>
 							)}
 						</div>
 
-						{result.final_url && (
-							<div className="text-[#858585]">
-								<span className="text-[#569cd6]">→</span>{" "}
-								<span className="text-[#9cdcfe]">{result.final_url}</span>
-							</div>
-						)}
-
+						{/* Error */}
 						{result.error && (
-							<div className="text-[#f14c4c]">
+							<p className="text-[#f14c4c]">
 								<span className="text-[#569cd6]">!</span> {result.error}
+							</p>
+						)}
+
+						{/* Response headers */}
+						{headerEntries.length > 0 && (
+							<div className="rounded border border-white/5">
+								<button
+									type="button"
+									onClick={() => setHeadersOpen((o) => !o)}
+									className="flex w-full items-center gap-1.5 px-2 py-1 text-left text-[#858585] hover:text-[#d4d4d4]"
+								>
+									<ChevronRight
+										size={10}
+										className={headersOpen ? "rotate-90 transition-transform" : "transition-transform"}
+									/>
+									<span>Response Headers</span>
+									<span className="ml-1 text-[#569cd6]">{headerEntries.length}</span>
+								</button>
+								{headersOpen && (
+									<div className="border-t border-white/5 px-2 pb-1.5">
+										{headerEntries.map(([k, v]) => (
+											<div key={k} className="flex gap-2 py-0.5">
+												<span className="shrink-0 text-[#9cdcfe]">{k}:</span>
+												<span className="break-all text-[#ce9178]">{v}</span>
+											</div>
+										))}
+									</div>
+								)}
 							</div>
 						)}
 
-						{result.body_preview && (
-							<div className="mt-1">
-								<div className="text-[#858585]">Body preview:</div>
+						{/* Body */}
+						{result.body && (
+							<div className="rounded border border-white/5">
+								<div className="flex items-center justify-between border-b border-white/5 px-2 py-1">
+									<span className="text-[#858585]">
+										Body{" "}
+										<span className="text-[#569cd6]">
+											{result.body.length.toLocaleString()} chars
+										</span>
+									</span>
+									<CopyButton text={result.body} />
+								</div>
 								<pre
-									className="mt-0.5 max-h-28 overflow-auto whitespace-pre-wrap rounded bg-black/30 p-2 text-[#d4d4d4] text-xs leading-relaxed"
-									style={{ wordBreak: "break-all" }}
+									className="max-h-72 overflow-auto whitespace-pre-wrap break-all p-2 text-[#d4d4d4] leading-relaxed"
+									style={{ fontSize: 11 }}
 								>
-									{result.body_preview}
+									{result.body}
 								</pre>
 							</div>
 						)}

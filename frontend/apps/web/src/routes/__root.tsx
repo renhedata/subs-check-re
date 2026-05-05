@@ -14,6 +14,7 @@ import {
 } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 
+import { PlatformRulesProvider } from "@/components/platform-rules-context";
 import { Sidebar } from "@/components/sidebar";
 import { isAuthenticated } from "@/lib/auth";
 import { handleUnauthorized, isApiError } from "@/lib/client";
@@ -72,14 +73,16 @@ function RootComponent() {
 		<QueryClientProvider client={queryClient}>
 			<HeadContent />
 			{authed ? (
-				<div className="flex h-screen overflow-hidden">
-					<Sidebar />
-					<main className="flex-1 overflow-y-auto px-6 py-6">
-						<div className="mx-auto max-w-5xl">
-							<Outlet />
-						</div>
-					</main>
-				</div>
+				<PlatformRulesProvider>
+					<div className="flex h-screen overflow-hidden">
+						<Sidebar />
+						<main className="flex-1 overflow-y-auto px-6 py-6">
+							<div className="mx-auto max-w-5xl">
+								<Outlet />
+							</div>
+						</main>
+					</div>
+				</PlatformRulesProvider>
 			) : (
 				<div className="flex min-h-screen items-center justify-center">
 					<Outlet />
