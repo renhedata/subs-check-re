@@ -305,6 +305,7 @@ export namespace checker {
         grok: boolean
         disney: boolean
         tiktok: boolean
+        "extra_platforms": { [key: string]: boolean }
         "traffic_bytes": number
     }
 

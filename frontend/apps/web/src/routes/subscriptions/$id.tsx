@@ -94,6 +94,12 @@ function SubscriptionDetailPage() {
 		staleTime: 5_000,
 	});
 
+	const rulesQuery = useQuery({
+		queryKey: ["platform-rules"],
+		queryFn: () => client.checker.ListRules(),
+		staleTime: 60_000,
+	});
+
 	const resultsQuery = useQuery({
 		queryKey: ["results", id, selectedJobId],
 		queryFn: () =>
@@ -381,7 +387,7 @@ function SubscriptionDetailPage() {
 				</div>
 			)}
 
-			<NodeTable results={results} />
+			<NodeTable results={results} rules={rulesQuery.data?.rules} />
 
 			<ExportLinksSection subscriptionId={id} />
 

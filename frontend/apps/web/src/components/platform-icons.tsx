@@ -110,5 +110,48 @@ export function PlatformIcon({
 	);
 }
 
+// PlatformIconAny renders any platform key — brand icon for built-ins, emoji/URL for custom keys.
+export function PlatformIconAny({
+	platformKey,
+	icon,
+	label,
+	size = 14,
+	showLabel = false,
+}: {
+	platformKey: string;
+	icon?: string;
+	label?: string;
+	size?: number;
+	showLabel?: boolean;
+}) {
+	const builtin = PLATFORM_META[platformKey as PlatformKey];
+	if (builtin) {
+		return <PlatformIcon platform={platformKey as PlatformKey} size={size} showLabel={showLabel} />;
+	}
+
+	const displayLabel = label ?? platformKey;
+	const isUrl = icon && (icon.startsWith("http://") || icon.startsWith("https://") || icon.startsWith("data:"));
+
+	return (
+		<span className="inline-flex items-center gap-1" title={displayLabel}>
+			{isUrl ? (
+				<img src={icon} alt={displayLabel} width={size} height={size} className="rounded object-contain" />
+			) : icon ? (
+				<span style={{ fontSize: size, lineHeight: 1 }}>{icon}</span>
+			) : (
+				<span
+					className="inline-flex items-center justify-center rounded bg-secondary font-medium text-muted-foreground"
+					style={{ width: size, height: size, fontSize: Math.round(size * 0.6) }}
+				>
+					{displayLabel.charAt(0).toUpperCase()}
+				</span>
+			)}
+			{showLabel && (
+				<span className="text-[10px] text-muted-foreground">{displayLabel}</span>
+			)}
+		</span>
+	);
+}
+
 export { PLATFORM_META };
 export type { PlatformKey };

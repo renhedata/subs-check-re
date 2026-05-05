@@ -1,12 +1,14 @@
 import type { checker } from "@/lib/client.gen";
 import { formatBytes } from "@/lib/format";
 
-import { PlatformIcon } from "./platform-icons";
+import { PlatformIcon, PlatformIconAny } from "./platform-icons";
 
 type NodeResult = checker.NodeResult;
+type PlatformRule = checker.PlatformRule;
 
 interface Props {
 	results: NodeResult[];
+	rules?: PlatformRule[];
 }
 
 function latencyColor(ms: number): string {
@@ -47,7 +49,8 @@ function StatusBadge({ alive }: { alive: boolean }) {
 	);
 }
 
-export function NodeTable({ results }: Props) {
+export function NodeTable({ results, rules = [] }: Props) {
+	const ruleByKey = Object.fromEntries(rules.map((r) => [r.key, r]));
 	const alive = results.filter((r) => r.alive);
 	const dead = results.filter((r) => !r.alive);
 	const sorted = [...alive, ...dead];
@@ -145,6 +148,19 @@ export function NodeTable({ results }: Props) {
 									{r.grok && <PlatformIcon platform="grok" />}
 									{r.disney && <PlatformIcon platform="disney" />}
 									{r.tiktok && <PlatformIcon platform="tiktok" />}
+									{r.extra_platforms && Object.entries(r.extra_platforms)
+										.filter(([, v]) => v)
+										.map(([key]) => {
+											const rule = ruleByKey[key];
+											return (
+												<PlatformIconAny
+													key={key}
+													platformKey={key}
+													icon={rule?.icon}
+													label={rule?.name ?? key}
+												/>
+											);
+										})}
 								</div>
 							</td>
 						</tr>

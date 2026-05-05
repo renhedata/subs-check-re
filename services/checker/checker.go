@@ -84,16 +84,17 @@ type NodeResult struct {
 	SpeedKbps int    `json:"speed_kbps"`
 	Country   string `json:"country"`
 	IP        string `json:"ip"`
-	Netflix        bool   `json:"netflix"`
-	YouTube        bool   `json:"youtube"`
-	YouTubePremium bool   `json:"youtube_premium"`
-	OpenAI         bool   `json:"openai"`
-	Claude    bool   `json:"claude"`
-	Gemini    bool   `json:"gemini"`
-	Grok      bool   `json:"grok"`
-	Disney    bool   `json:"disney"`
-	TikTok       bool  `json:"tiktok"`
-	TrafficBytes int64 `json:"traffic_bytes"`
+	Netflix        bool            `json:"netflix"`
+	YouTube        bool            `json:"youtube"`
+	YouTubePremium bool            `json:"youtube_premium"`
+	OpenAI         bool            `json:"openai"`
+	Claude         bool            `json:"claude"`
+	Gemini         bool            `json:"gemini"`
+	Grok           bool            `json:"grok"`
+	Disney         bool            `json:"disney"`
+	TikTok         bool            `json:"tiktok"`
+	ExtraPlatforms map[string]bool `json:"extra_platforms"`
+	TrafficBytes   int64           `json:"traffic_bytes"`
 }
 
 // ResultsResponse is returned by GET /check/:subscriptionID/results.
@@ -562,7 +563,7 @@ func GetResults(ctx context.Context, subscriptionID string, p *GetResultsParams)
 			       END AS speed_kbps,
 			       cr.country, cr.ip,
 			       cr.netflix, cr.youtube, cr.youtube_premium, cr.openai, cr.claude, cr.gemini, cr.grok, cr.disney, cr.tiktok,
-			       cr.traffic_bytes
+			       cr.extra_platforms, cr.traffic_bytes
 			FROM check_results cr
 			LEFT JOIN nodes n ON n.id = cr.node_id
 			WHERE cr.job_id = $1
@@ -578,13 +579,17 @@ func GetResults(ctx context.Context, subscriptionID string, p *GetResultsParams)
 	var results []NodeResult
 	for rows.Next() {
 		var r NodeResult
+		var extraJSON []byte
 		if err := rows.Scan(
 			&r.NodeID, &r.NodeName, &r.NodeType,
 			&r.Alive, &r.LatencyMs, &r.SpeedKbps, &r.Country, &r.IP,
 			&r.Netflix, &r.YouTube, &r.YouTubePremium, &r.OpenAI, &r.Claude, &r.Gemini, &r.Grok, &r.Disney, &r.TikTok,
-			&r.TrafficBytes,
+			&extraJSON, &r.TrafficBytes,
 		); err != nil {
 			return nil, errs.B().Code(errs.Internal).Msg("scan failed").Err()
+		}
+		if len(extraJSON) > 0 {
+			_ = json.Unmarshal(extraJSON, &r.ExtraPlatforms)
 		}
 		results = append(results, r)
 	}
