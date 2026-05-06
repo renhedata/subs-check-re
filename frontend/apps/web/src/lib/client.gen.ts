@@ -175,6 +175,7 @@ export namespace checker {
      */
     export interface CheckOptions {
         "speed_test": boolean
+        "upload_speed_test": boolean
         "media_apps": string[]
     }
 
@@ -294,13 +295,19 @@ export namespace checker {
     /**
      * NodeResult represents a single node's check result for the API response.
      */
+    export interface SetNodeEnabledParams {
+        enabled: boolean
+    }
+
     export interface NodeResult {
         "node_id": string
         "node_name": string
         "node_type": string
+        enabled: boolean
         alive: boolean
         "latency_ms": number
         "speed_kbps": number
+        "upload_speed_kbps": number
         country: string
         ip: string
         netflix: boolean
@@ -379,6 +386,7 @@ export namespace checker {
      */
     export interface TriggerParams {
         "speed_test": boolean
+        "upload_speed_test": boolean
         "media_apps": string[]
     }
 
@@ -418,6 +426,7 @@ export namespace checker {
             this.ListRules = this.ListRules.bind(this)
             this.ListTestNodes = this.ListTestNodes.bind(this)
             this.TestRule = this.TestRule.bind(this)
+            this.SetNodeEnabled = this.SetNodeEnabled.bind(this)
             this.TriggerCheck = this.TriggerCheck.bind(this)
             this.UpdateRule = this.UpdateRule.bind(this)
         }
@@ -493,6 +502,13 @@ export namespace checker {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("GET", `/check/${encodeURIComponent(subscriptionID)}/results`, undefined, {query})
             return await resp.json() as ResultsResponse
+        }
+
+        /**
+         * SetNodeEnabled enables or disables a single node.
+         */
+        public async SetNodeEnabled(nodeID: string, params: SetNodeEnabledParams): Promise<void> {
+            await this.baseClient.callTypedAPI("PATCH", `/nodes/${encodeURIComponent(nodeID)}`, JSON.stringify(params))
         }
 
         /**
@@ -792,6 +808,7 @@ export namespace settings {
      */
     export interface UserSettings {
         "speed_test_url": string
+        "upload_test_url": string
         "latency_test_url": string
         "email_config": EmailConfig
     }

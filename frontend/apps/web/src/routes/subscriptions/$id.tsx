@@ -32,6 +32,7 @@ interface SSEProgress {
 	alive?: boolean;
 	latency_ms?: number;
 	speed_kbps?: number;
+	upload_speed_kbps?: number;
 	done?: boolean;
 	status?: string;
 }
@@ -140,6 +141,16 @@ function SubscriptionDetailPage() {
 			toast.success("Check cancelled");
 		},
 		onError: (e) => toast.error(isApiError(e) ? e.message : "Cancel failed"),
+	});
+
+	const toggleEnabledMut = useMutation({
+		mutationFn: ({ nodeId, enabled }: { nodeId: string; enabled: boolean }) =>
+			client.checker.SetNodeEnabled(nodeId, { enabled }),
+		onSuccess: (_, { enabled }) => {
+			qc.invalidateQueries({ queryKey: ["results", id] });
+			toast.success(enabled ? "Node enabled" : "Node disabled");
+		},
+		onError: (e) => toast.error(isApiError(e) ? e.message : "Failed to update node"),
 	});
 
 	// Clear log when a new job starts
@@ -345,6 +356,16 @@ function SubscriptionDetailPage() {
 												: `${entry.speed_kbps}KB/s`}
 										</span>
 									) : null}
+									{entry.alive && entry.upload_speed_kbps ? (
+										<span
+											className="flex-shrink-0"
+											style={{ color: "var(--color-warning)" }}
+										>
+											↑{entry.upload_speed_kbps >= 1024
+												? `${(entry.upload_speed_kbps / 1024).toFixed(1)}MB/s`
+												: `${entry.upload_speed_kbps}KB/s`}
+										</span>
+									) : null}
 								</div>
 							))}
 						</div>
@@ -387,7 +408,13 @@ function SubscriptionDetailPage() {
 				</div>
 			)}
 
-			<NodeTable results={results} rules={rulesQuery.data?.rules} />
+			<NodeTable
+								results={results}
+								rules={rulesQuery.data?.rules}
+								onToggleEnabled={(nodeId, enabled) =>
+									toggleEnabledMut.mutate({ nodeId, enabled })
+								}
+							/>
 
 			<ExportLinksSection subscriptionId={id} />
 

@@ -188,7 +188,7 @@ func exportAllSubscriptions(w http.ResponseWriter, req *http.Request, ctx contex
 				       cr.latency_ms
 				FROM check_results cr
 				LEFT JOIN nodes n ON n.id = cr.node_id
-				WHERE cr.job_id = $1 AND cr.alive = true
+				WHERE cr.job_id = $1 AND cr.alive = true AND COALESCE(n.enabled, true) = true
 			`, js.jobID, js.subscriptionID)
 			if err != nil {
 				return
@@ -291,7 +291,7 @@ func exportSingleSubscription(w http.ResponseWriter, req *http.Request, ctx cont
 			       cr.latency_ms
 			FROM check_results cr
 			LEFT JOIN nodes n ON n.id = cr.node_id
-			WHERE cr.job_id = $1 AND cr.alive = true
+			WHERE cr.job_id = $1 AND cr.alive = true AND COALESCE(n.enabled, true) = true
 		)
 		SELECT config, node_name, netflix, youtube, youtube_premium, openai, claude, gemini, grok, disney, tiktok,
 		       speed_kbps, latency_ms
@@ -382,7 +382,7 @@ func queryNodeServers(ctx context.Context, subscriptionID, userID string) (serve
 			INNER JOIN (
 				SELECT DISTINCT subscription_id FROM check_jobs WHERE user_id = $1
 			) owned ON owned.subscription_id = n.subscription_id
-			WHERE n.server != ''
+			WHERE n.server != '' AND n.enabled = true
 			ORDER BY n.server
 		`, userID)
 		if qErr != nil {
@@ -408,7 +408,7 @@ func queryNodeServers(ctx context.Context, subscriptionID, userID string) (serve
 
 	rows, qErr := db.Query(ctx, `
 		SELECT DISTINCT server FROM nodes
-		WHERE subscription_id = $1 AND server != ''
+		WHERE subscription_id = $1 AND server != '' AND enabled = true
 		ORDER BY server
 	`, subscriptionID)
 	if qErr != nil {

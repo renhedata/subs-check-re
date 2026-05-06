@@ -76,13 +76,31 @@ function SubscriptionsPage() {
 		onError: (e) => toast.error(isApiError(e) ? e.message : "Update failed"),
 	});
 
+	const toggleEnabledMut = useMutation({
+		mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) => {
+			const current = subs.find((s) => s.id === id);
+			return client.subscription.Update(id, {
+				name: current?.name ?? "",
+				url: current?.url ?? "",
+				enabled,
+				cron_expr: current?.cron_expr ?? "",
+				clear_cron_expr: false,
+			});
+		},
+		onSuccess: (_, { enabled }) => {
+			qc.invalidateQueries({ queryKey: ["subscriptions"] });
+			toast.success(enabled ? "Subscription enabled" : "Subscription disabled");
+		},
+		onError: (e) => toast.error(isApiError(e) ? e.message : "Failed to update"),
+	});
+
 	const triggerMut = useMutation({
 		mutationFn: ({
 			id,
 			opts,
 		}: {
 			id: string;
-			opts: { speed_test: boolean; media_apps: string[] };
+			opts: { speed_test: boolean; upload_speed_test: boolean; media_apps: string[] };
 		}) => client.checker.TriggerCheck(id, opts),
 		onSuccess: (resp, { id }) => {
 			toast.success("Check started");
@@ -192,6 +210,7 @@ function SubscriptionsPage() {
 								deleteMut={deleteMut}
 								updateMut={updateMut}
 								triggerMut={triggerMut}
+								toggleEnabledMut={toggleEnabledMut}
 							/>
 						))}
 
@@ -210,6 +229,7 @@ function SubRow({
 	deleteMut,
 	updateMut,
 	triggerMut,
+	toggleEnabledMut,
 }: {
 	sub: Subscription;
 	deleteMut: { mutate: (id: string) => void; isPending: boolean };
@@ -223,8 +243,12 @@ function SubRow({
 	triggerMut: {
 		mutate: (args: {
 			id: string;
-			opts: { speed_test: boolean; media_apps: string[] };
+			opts: { speed_test: boolean; upload_speed_test: boolean; media_apps: string[] };
 		}) => void;
+		isPending: boolean;
+	};
+	toggleEnabledMut: {
+		mutate: (args: { id: string; enabled: boolean }) => void;
 		isPending: boolean;
 	};
 }) {
@@ -245,6 +269,7 @@ function SubRow({
 	}
 
 	const [speedTest, setSpeedTest] = useState(true);
+	const [uploadSpeedTest, setUploadSpeedTest] = useState(false);
 	const [mediaApps, setMediaApps] = useState<string[]>([...MEDIA_APPS]);
 
 	function toggleApp(app: string) {
@@ -256,13 +281,16 @@ function SubRow({
 	function handleCheck() {
 		triggerMut.mutate({
 			id: sub.id,
-			opts: { speed_test: speedTest, media_apps: mediaApps },
+			opts: { speed_test: speedTest, upload_speed_test: uploadSpeedTest, media_apps: mediaApps },
 		});
 		setShowOpts(false);
 	}
 
 	return (
-		<div className="rounded-lg border border-border bg-card">
+		<div
+			className="rounded-lg border border-border bg-card transition-opacity"
+			style={{ opacity: sub.enabled ? 1 : 0.5 }}
+		>
 			<div className="flex items-center gap-3 px-4 py-3">
 				{/* Info — entire left section navigates to detail */}
 				<Link
@@ -306,6 +334,19 @@ function SubRow({
 				<div className="flex flex-shrink-0 items-center gap-2">
 					<button
 						type="button"
+						onClick={() => toggleEnabledMut.mutate({ id: sub.id, enabled: !sub.enabled })}
+						disabled={toggleEnabledMut.isPending}
+						title={sub.enabled ? "Disable subscription" : "Enable subscription"}
+						className="rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors disabled:opacity-50"
+						style={{
+							background: sub.enabled ? "var(--color-badge-success-bg)" : "var(--color-badge-danger-bg)",
+							color: sub.enabled ? "var(--color-badge-success)" : "var(--color-badge-danger)",
+						}}
+					>
+						{sub.enabled ? "on" : "off"}
+					</button>
+					<button
+						type="button"
 						onClick={() => setShowOpts(!showOpts)}
 						className="flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-white/5"
 					>
@@ -339,13 +380,22 @@ function SubRow({
 
 			{showOpts && (
 				<div className="space-y-3 border-t border-border px-4 py-3">
-					<label className="flex cursor-pointer select-none items-center gap-2">
-						<Checkbox
-							checked={speedTest}
-							onCheckedChange={(v) => setSpeedTest(v === true)}
-						/>
-						<span className="text-xs text-muted-foreground">Speed test</span>
-					</label>
+					<div className="flex flex-wrap gap-4">
+						<label className="flex cursor-pointer select-none items-center gap-2">
+							<Checkbox
+								checked={speedTest}
+								onCheckedChange={(v) => setSpeedTest(v === true)}
+							/>
+							<span className="text-xs text-muted-foreground">↓ Speed test</span>
+						</label>
+						<label className="flex cursor-pointer select-none items-center gap-2">
+							<Checkbox
+								checked={uploadSpeedTest}
+								onCheckedChange={(v) => setUploadSpeedTest(v === true)}
+							/>
+							<span className="text-xs text-muted-foreground">↑ Upload test</span>
+						</label>
+					</div>
 					<div className="flex flex-wrap gap-2">
 						{MEDIA_APPS.map((app) => (
 							<label

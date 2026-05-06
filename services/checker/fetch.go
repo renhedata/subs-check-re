@@ -14,11 +14,13 @@ import (
 
 // fetchProxies fetches a subscription URL and returns parsed proxy maps.
 // Supports Clash YAML format and V2Ray/base64 format.
+// Respects HTTP_PROXY/HTTPS_PROXY env vars so region-restricted URLs work via a local proxy.
 func fetchProxies(url string) ([]map[string]any, error) {
 	client := &http.Client{
 		Timeout: 30 * time.Second,
 		Transport: &http.Transport{
 			TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
+			Proxy:                 http.ProxyFromEnvironment,
 			ForceAttemptHTTP2:     true,
 			MaxIdleConns:          10,
 			IdleConnTimeout:       30 * time.Second,

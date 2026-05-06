@@ -9,6 +9,7 @@ type PlatformRule = checker.PlatformRule;
 interface Props {
 	results: NodeResult[];
 	rules?: PlatformRule[];
+	onToggleEnabled?: (nodeId: string, enabled: boolean) => void;
 }
 
 function latencyColor(ms: number): string {
@@ -49,7 +50,7 @@ function StatusBadge({ alive }: { alive: boolean }) {
 	);
 }
 
-export function NodeTable({ results, rules = [] }: Props) {
+export function NodeTable({ results, rules = [], onToggleEnabled }: Props) {
 	const ruleByKey = Object.fromEntries(rules.map((r) => [r.key, r]));
 	const alive = results.filter((r) => r.alive);
 	const dead = results.filter((r) => !r.alive);
@@ -67,10 +68,12 @@ export function NodeTable({ results, rules = [] }: Props) {
 				<thead>
 					<tr style={{ borderBottom: "1px solid var(--border)" }}>
 						{[
+							"",
 							"Node",
 							"Status",
 							"Latency",
-							"Speed",
+							"↓ Speed",
+							"↑ Upload",
 							"Traffic",
 							"Country",
 							"Unlocks",
@@ -91,10 +94,29 @@ export function NodeTable({ results, rules = [] }: Props) {
 							className="transition-colors hover:bg-white/[0.02]"
 							style={{ borderBottom: "1px solid var(--secondary)" }}
 						>
+							<td className="px-2 py-2">
+								{onToggleEnabled && (
+									<button
+										type="button"
+										onClick={() => onToggleEnabled(r.node_id, !r.enabled)}
+										title={r.enabled ? "Disable node" : "Enable node"}
+										className="rounded px-1.5 py-0.5 text-[10px] transition-colors"
+										style={{
+											background: r.enabled ? "var(--color-badge-success-bg)" : "var(--color-badge-danger-bg)",
+											color: r.enabled ? "var(--color-badge-success)" : "var(--color-badge-danger)",
+										}}
+									>
+										{r.enabled ? "on" : "off"}
+									</button>
+								)}
+							</td>
 							<td
 								className="max-w-[180px] truncate px-3 py-2 font-mono text-[11px]"
 								style={{
-									color: r.alive ? "var(--foreground)" : "var(--color-dimmed)",
+									color: r.enabled
+										? r.alive ? "var(--foreground)" : "var(--color-dimmed)"
+										: "var(--color-dimmed)",
+									opacity: r.enabled ? 1 : 0.5,
 								}}
 							>
 								{r.node_name}
@@ -117,6 +139,17 @@ export function NodeTable({ results, rules = [] }: Props) {
 										{r.speed_kbps >= 1024
 											? `${(r.speed_kbps / 1024).toFixed(1)} MB/s`
 											: `${r.speed_kbps} KB/s`}
+									</span>
+								) : (
+									<span style={{ color: "var(--color-dimmed)" }}>—</span>
+								)}
+							</td>
+							<td className="px-3 py-2 text-xs">
+								{r.alive && r.upload_speed_kbps ? (
+									<span style={{ color: "var(--color-warning)" }}>
+										{r.upload_speed_kbps >= 1024
+											? `${(r.upload_speed_kbps / 1024).toFixed(1)} MB/s`
+											: `${r.upload_speed_kbps} KB/s`}
 									</span>
 								) : (
 									<span style={{ color: "var(--color-dimmed)" }}>—</span>

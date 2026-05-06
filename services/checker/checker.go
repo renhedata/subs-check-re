@@ -76,14 +76,16 @@ type Job struct {
 
 // NodeResult represents a single node's check result for the API response.
 type NodeResult struct {
-	NodeID    string `json:"node_id"`
-	NodeName  string `json:"node_name"`
-	NodeType  string `json:"node_type"`
-	Alive     bool   `json:"alive"`
-	LatencyMs int    `json:"latency_ms"`
-	SpeedKbps int    `json:"speed_kbps"`
-	Country   string `json:"country"`
-	IP        string `json:"ip"`
+	NodeID          string `json:"node_id"`
+	NodeName        string `json:"node_name"`
+	NodeType        string `json:"node_type"`
+	Enabled         bool   `json:"enabled"`
+	Alive           bool   `json:"alive"`
+	LatencyMs       int    `json:"latency_ms"`
+	SpeedKbps       int    `json:"speed_kbps"`
+	UploadSpeedKbps int    `json:"upload_speed_kbps"`
+	Country         string `json:"country"`
+	IP              string `json:"ip"`
 	Netflix        bool            `json:"netflix"`
 	YouTube        bool            `json:"youtube"`
 	YouTubePremium bool            `json:"youtube_premium"`
@@ -148,8 +150,9 @@ type GetResultsParams struct {
 
 // CheckOptions controls which tests are run per node.
 type CheckOptions struct {
-	SpeedTest bool     `json:"speed_test"`
-	MediaApps []string `json:"media_apps"`
+	SpeedTest       bool     `json:"speed_test"`
+	UploadSpeedTest bool     `json:"upload_speed_test"`
+	MediaApps       []string `json:"media_apps"`
 }
 
 func defaultCheckOptions() CheckOptions {
@@ -180,19 +183,21 @@ func hasApp(opts CheckOptions, app string) bool {
 
 // TriggerParams is the optional request body for POST /check/:subscriptionID.
 type TriggerParams struct {
-	SpeedTest *bool    `json:"speed_test"`
-	MediaApps []string `json:"media_apps"`
+	SpeedTest       *bool    `json:"speed_test"`
+	UploadSpeedTest *bool    `json:"upload_speed_test"`
+	MediaApps       []string `json:"media_apps"`
 }
 
 // --- In-process SSE channels ---
 
 type progressUpdate struct {
-	Progress  int    `json:"progress"`
-	Total     int    `json:"total"`
-	NodeName  string `json:"node_name,omitempty"`
-	Alive     bool   `json:"alive"`
-	LatencyMs int    `json:"latency_ms,omitempty"`
-	SpeedKbps int    `json:"speed_kbps,omitempty"`
+	Progress        int    `json:"progress"`
+	Total           int    `json:"total"`
+	NodeName        string `json:"node_name,omitempty"`
+	Alive           bool   `json:"alive"`
+	LatencyMs       int    `json:"latency_ms,omitempty"`
+	SpeedKbps       int    `json:"speed_kbps,omitempty"`
+	UploadSpeedKbps int    `json:"upload_speed_kbps,omitempty"`
 }
 
 var (
@@ -352,6 +357,9 @@ func TriggerCheck(ctx context.Context, subscriptionID string, p *TriggerParams) 
 	if p != nil {
 		if p.SpeedTest != nil {
 			opts.SpeedTest = *p.SpeedTest
+		}
+		if p.UploadSpeedTest != nil {
+			opts.UploadSpeedTest = *p.UploadSpeedTest
 		}
 		if p.MediaApps != nil {
 			opts.MediaApps = p.MediaApps
@@ -546,12 +554,13 @@ func GetResults(ctx context.Context, subscriptionID string, p *GetResultsParams)
 		}
 	}
 
-	// speed_kbps falls back to the most recent historical speed if this job skipped speed testing.
+	// speed_kbps / upload_speed_kbps fall back to the most recent historical value if this job skipped speed testing.
 	rows, err := db.Query(ctx, `
 		WITH r AS (
 			SELECT cr.node_id,
 			       COALESCE(n.name, cr.node_name) AS node_name,
 			       COALESCE(n.type, cr.node_type) AS node_type,
+			       COALESCE(n.enabled, true) AS enabled,
 			       cr.alive, cr.latency_ms,
 			       CASE WHEN cr.speed_kbps > 0 THEN cr.speed_kbps
 			            ELSE COALESCE((
@@ -565,6 +574,18 @@ func GetResults(ctx context.Context, subscriptionID string, p *GetResultsParams)
 			                LIMIT 1
 			            ), 0)
 			       END AS speed_kbps,
+			       CASE WHEN cr.upload_speed_kbps > 0 THEN cr.upload_speed_kbps
+			            ELSE COALESCE((
+			                SELECT cr2.upload_speed_kbps
+			                FROM check_results cr2
+			                JOIN check_jobs cj2 ON cj2.id = cr2.job_id
+			                WHERE cr2.node_name = cr.node_name
+			                  AND cj2.subscription_id = $2
+			                  AND cr2.upload_speed_kbps > 0
+			                ORDER BY cr2.checked_at DESC
+			                LIMIT 1
+			            ), 0)
+			       END AS upload_speed_kbps,
 			       cr.country, cr.ip,
 			       cr.netflix, cr.youtube, cr.youtube_premium, cr.openai, cr.claude, cr.gemini, cr.grok, cr.disney, cr.tiktok,
 			       cr.extra_platforms, cr.traffic_bytes
@@ -585,8 +606,8 @@ func GetResults(ctx context.Context, subscriptionID string, p *GetResultsParams)
 		var r NodeResult
 		var extraJSON []byte
 		if err := rows.Scan(
-			&r.NodeID, &r.NodeName, &r.NodeType,
-			&r.Alive, &r.LatencyMs, &r.SpeedKbps, &r.Country, &r.IP,
+			&r.NodeID, &r.NodeName, &r.NodeType, &r.Enabled,
+			&r.Alive, &r.LatencyMs, &r.SpeedKbps, &r.UploadSpeedKbps, &r.Country, &r.IP,
 			&r.Netflix, &r.YouTube, &r.YouTubePremium, &r.OpenAI, &r.Claude, &r.Gemini, &r.Grok, &r.Disney, &r.TikTok,
 			&extraJSON, &r.TrafficBytes,
 		); err != nil {
@@ -690,6 +711,19 @@ func runJob(parentCtx context.Context, jobID, subscriptionID, userID string) {
 	total := len(proxies)
 	db.Exec(context.Background(), `UPDATE check_jobs SET total=$2 WHERE id=$1`, jobID, total)
 
+	// Capture disabled node names before replacement so they can be restored.
+	disabledNames := map[string]bool{}
+	if drows, err := db.Query(context.Background(),
+		`SELECT name FROM nodes WHERE subscription_id=$1 AND enabled=false`, subscriptionID); err == nil {
+		for drows.Next() {
+			var n string
+			if drows.Scan(&n) == nil {
+				disabledNames[n] = true
+			}
+		}
+		drows.Close()
+	}
+
 	// Replace nodes for this subscription
 	db.Exec(context.Background(), `DELETE FROM nodes WHERE subscription_id=$1`, subscriptionID)
 	nodeIDs := make([]string, len(proxies))
@@ -710,8 +744,21 @@ func runJob(parentCtx context.Context, jobID, subscriptionID, userID string) {
 		`, id, subscriptionID, name, ptype, server, port, configJSON)
 	}
 
+	// Restore disabled state for nodes that carried over by name.
+	for name := range disabledNames {
+		db.Exec(context.Background(),
+			`UPDATE nodes SET enabled=false WHERE subscription_id=$1 AND name=$2`,
+			subscriptionID, name)
+	}
+
 	// Load user-defined platform rules (best-effort; falls back to built-ins on error).
 	userRules, _ := loadUserRules(ctx, userID)
+
+	// Load upload test URL from user settings (empty string → derive from speedTestURL).
+	uploadTestURL := ""
+	if userCfg, err := settingssvc.GetSpeedTestURLForUser(ctx, userID); err == nil {
+		uploadTestURL = userCfg.UploadTestURL
+	}
 
 	// Run concurrent checks
 	type task struct {
@@ -731,7 +778,7 @@ func runJob(parentCtx context.Context, jobID, subscriptionID, userID string) {
 			defer func() { recover() }() // prevent a mihomo panic from killing the worker
 			for t := range taskCh {
 				nodeCtx, cancel := context.WithTimeout(ctx, nodeTimeout)
-				res := checkNode(nodeCtx, t.nodeID, t.proxy, speedTestURL, latencyTestURL, opts, userRules)
+				res := checkNode(nodeCtx, t.nodeID, t.proxy, speedTestURL, uploadTestURL, latencyTestURL, opts, userRules)
 				cancel()
 
 				nodeName := res.NodeName
@@ -741,11 +788,11 @@ func runJob(parentCtx context.Context, jobID, subscriptionID, userID string) {
 				extraJSON, _ := json.Marshal(res.ExtraPlatforms)
 				db.Exec(context.Background(), `
 					INSERT INTO check_results
-					  (id, job_id, node_id, node_name, node_type, node_config, checked_at, alive, latency_ms, speed_kbps, country, ip,
+					  (id, job_id, node_id, node_name, node_type, node_config, checked_at, alive, latency_ms, speed_kbps, upload_speed_kbps, country, ip,
 					   netflix, youtube, youtube_premium, openai, claude, gemini, grok, disney, tiktok, traffic_bytes, extra_platforms)
-					VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
+					VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)
 				`, resultID, jobID, t.nodeID, nodeName, nodeType, nodeConfigJSON, time.Now(),
-					res.Alive, res.LatencyMs, res.SpeedKbps, res.Country, res.IP,
+					res.Alive, res.LatencyMs, res.SpeedKbps, res.UploadSpeedKbps, res.Country, res.IP,
 					res.Netflix, res.YouTube, res.YouTubePremium, res.OpenAI,
 					res.Claude, res.Gemini, res.Grok, res.Disney, res.TikTok,
 					res.TrafficBytes, extraJSON,
@@ -755,12 +802,13 @@ func runJob(parentCtx context.Context, jobID, subscriptionID, userID string) {
 				n := processedCount.Add(1)
 				db.Exec(context.Background(), `UPDATE check_jobs SET progress=$2 WHERE id=$1`, jobID, n)
 				broadcastProgress(jobID, progressUpdate{
-					Progress:  int(n),
-					Total:     total,
-					NodeName:  res.NodeName,
-					Alive:     res.Alive,
-					LatencyMs: res.LatencyMs,
-					SpeedKbps: res.SpeedKbps,
+					Progress:        int(n),
+					Total:           total,
+					NodeName:        res.NodeName,
+					Alive:           res.Alive,
+					LatencyMs:       res.LatencyMs,
+					SpeedKbps:       res.SpeedKbps,
+					UploadSpeedKbps: res.UploadSpeedKbps,
 				})
 			}
 		}()

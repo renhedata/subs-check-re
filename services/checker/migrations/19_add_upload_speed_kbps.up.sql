@@ -1,0 +1,1 @@
+ALTER TABLE check_results ADD COLUMN IF NOT EXISTS upload_speed_kbps INT NOT NULL DEFAULT 0;

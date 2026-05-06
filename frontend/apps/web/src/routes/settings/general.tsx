@@ -30,6 +30,7 @@ function GeneralSettingsPage() {
 	const { register, handleSubmit, reset } = useForm<UserSettings>({
 		defaultValues: {
 			speed_test_url: "",
+			upload_test_url: "",
 			latency_test_url: "",
 			email_config: { smtp_host: "", smtp_port: 587, smtp_user: "", smtp_pass: "", from: "", to: "" },
 		},
@@ -80,19 +81,35 @@ function GeneralSettingsPage() {
 				{/* Speed test */}
 				<div className="rounded-lg border border-border bg-card p-5">
 					<p className="mb-3 font-medium text-foreground text-sm">Speed Test</p>
-					<div className="space-y-1.5">
-						<Label htmlFor="speed_test_url" className="text-muted-foreground text-xs">
-							Speed Test URL
-						</Label>
-						<Input
-							id="speed_test_url"
-							placeholder={DEFAULT_SPEED_TEST_URL}
-							{...register("speed_test_url")}
-							className="h-8 font-mono text-sm"
-						/>
-						<p className="text-xs" style={{ color: "var(--color-dimmed)" }}>
-							URL used to measure download speed. Leave blank to use default.
-						</p>
+					<div className="space-y-3">
+						<div className="space-y-1.5">
+							<Label htmlFor="speed_test_url" className="text-muted-foreground text-xs">
+								↓ Download URL
+							</Label>
+							<Input
+								id="speed_test_url"
+								placeholder={DEFAULT_SPEED_TEST_URL}
+								{...register("speed_test_url")}
+								className="h-8 font-mono text-sm"
+							/>
+							<p className="text-xs" style={{ color: "var(--color-dimmed)" }}>
+								Leave blank to use default ({DEFAULT_SPEED_TEST_URL}).
+							</p>
+						</div>
+						<div className="space-y-1.5">
+							<Label htmlFor="upload_test_url" className="text-muted-foreground text-xs">
+								↑ Upload URL
+							</Label>
+							<Input
+								id="upload_test_url"
+								placeholder="https://speed.cloudflare.com/__up"
+								{...register("upload_test_url")}
+								className="h-8 font-mono text-sm"
+							/>
+							<p className="text-xs" style={{ color: "var(--color-dimmed)" }}>
+								POST endpoint that accepts an upload payload. Leave blank to auto-derive from the download URL (replaces path with /__up).
+							</p>
+						</div>
 					</div>
 				</div>
 

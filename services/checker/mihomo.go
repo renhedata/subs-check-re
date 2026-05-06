@@ -2,11 +2,13 @@
 package checker
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"sync/atomic"
 	"time"
@@ -193,32 +195,91 @@ func measureSpeedWithTimeout(ctx context.Context, transport http.RoundTripper, s
 	return int(float64(n) / 1024 / elapsed)
 }
 
+const uploadTestSize = 1 * 1024 * 1024 // 1 MB
+
+// uploadURLFrom derives an upload endpoint from the configured speed-test URL.
+// For Cloudflare /__down URLs it returns the /__up sibling on the same host.
+// For anything else it falls back to the Cloudflare default.
+func uploadURLFrom(speedTestURL string) string {
+	u, err := url.Parse(speedTestURL)
+	if err == nil && u.Host != "" {
+		u.RawQuery = ""
+		u.Path = "/__up"
+		return u.String()
+	}
+	return "https://speed.cloudflare.com/__up"
+}
+
+// measureUploadSpeed sends a fixed-size payload through the proxy and returns
+// throughput in KB/s. It measures only the body-send window to avoid counting
+// TCP/TLS setup time. uploadTestURL overrides the derived URL when non-empty.
+func measureUploadSpeed(ctx context.Context, transport http.RoundTripper, speedTestURL, uploadTestURL string) int {
+	uploadURL := uploadTestURL
+	if uploadURL == "" {
+		uploadURL = uploadURLFrom(speedTestURL)
+	}
+	payload := make([]byte, uploadTestSize)
+
+	// pr/pw pipe lets us start the timer exactly when body bytes start flowing,
+	// not when the TCP connection is being established.
+	pr, pw := io.Pipe()
+	var start time.Time
+	var sent int64
+
+	go func() {
+		start = time.Now()
+		n, _ := io.Copy(pw, bytes.NewReader(payload))
+		sent = n
+		pw.Close()
+	}()
+
+	client := &http.Client{Timeout: speedTestTimeout, Transport: transport}
+	req, err := http.NewRequestWithContext(ctx, "POST", uploadURL, pr)
+	if err != nil {
+		pr.CloseWithError(err)
+		return 0
+	}
+	req.ContentLength = int64(len(payload))
+	req.Header.Set("Content-Type", "application/octet-stream")
+
+	resp, err := client.Do(req)
+	elapsed := time.Since(start).Seconds()
+	if err != nil || elapsed == 0 || sent == 0 {
+		return 0
+	}
+	defer resp.Body.Close()
+	io.Copy(io.Discard, resp.Body)
+
+	return int(float64(sent) / 1024 / elapsed)
+}
+
 // nodeCheckResult holds the outcome of checking a single node.
 type nodeCheckResult struct {
-	NodeID         string
-	NodeName       string
-	Alive          bool
-	LatencyMs      int
-	SpeedKbps      int
-	IP             string
-	Country        string
-	Netflix        bool
-	YouTube        bool
-	YouTubePremium bool
-	OpenAI         bool
-	Claude         bool
-	Gemini         bool
-	Grok           bool
-	Disney         bool
-	TikTok         bool
-	TrafficBytes   int64
-	ExtraPlatforms map[string]bool
+	NodeID          string
+	NodeName        string
+	Alive           bool
+	LatencyMs       int
+	SpeedKbps       int
+	UploadSpeedKbps int
+	IP              string
+	Country         string
+	Netflix         bool
+	YouTube         bool
+	YouTubePremium  bool
+	OpenAI          bool
+	Claude          bool
+	Gemini          bool
+	Grok            bool
+	Disney          bool
+	TikTok          bool
+	TrafficBytes    int64
+	ExtraPlatforms  map[string]bool
 }
 
 // checkNode runs all checks for a single proxy mapping and returns the result.
 // User rules override the corresponding built-in checks; rules with non-builtin
 // keys are stored in ExtraPlatforms.
-func checkNode(ctx context.Context, nodeID string, mapping map[string]any, speedTestURL string, latencyTestURL string, opts CheckOptions, rules []*PlatformRule) nodeCheckResult {
+func checkNode(ctx context.Context, nodeID string, mapping map[string]any, speedTestURL, uploadTestURL, latencyTestURL string, opts CheckOptions, rules []*PlatformRule) nodeCheckResult {
 	name, _ := mapping["name"].(string)
 	result := nodeCheckResult{NodeID: nodeID, NodeName: name}
 
@@ -235,6 +296,9 @@ func checkNode(ctx context.Context, nodeID string, mapping map[string]any, speed
 	result.LatencyMs = measureLatency(ctx, pc.Client, latencyTestURL)
 	if opts.SpeedTest {
 		result.SpeedKbps = measureSpeed(ctx, pc.Client.Transport, speedTestURL)
+	}
+	if opts.UploadSpeedTest {
+		result.UploadSpeedKbps = measureUploadSpeed(ctx, pc.Client.Transport, speedTestURL, uploadTestURL)
 	}
 
 	if len(opts.MediaApps) > 0 {

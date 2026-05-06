@@ -96,6 +96,7 @@ function SchedulerPage() {
 				cron_expr: params.cron_expr,
 				options: {
 					speed_test: params.speed_test,
+					upload_speed_test: false,
 					media_apps: params.media_apps,
 				},
 			}),
