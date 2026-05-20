@@ -99,14 +99,15 @@ type TestRuleParams struct {
 
 // TestRuleResult is returned by POST /platform-rules/test.
 type TestRuleResult struct {
-	OK              bool              `json:"ok"`
-	Error           string            `json:"error,omitempty"`
-	StatusCode      int               `json:"status_code,omitempty"`
-	FinalURL        string            `json:"final_url,omitempty"`
-	Body            string            `json:"body,omitempty"`
+	OK              bool        `json:"ok"`
+	Error           string      `json:"error,omitempty"`
+	StatusCode      int         `json:"status_code,omitempty"`
+	FinalURL        string      `json:"final_url,omitempty"`
+	Body            string      `json:"body,omitempty"`
 	ResponseHeaders map[string]string `json:"response_headers,omitempty"`
-	NodeName        string            `json:"node_name,omitempty"`
-	DurationMs      int64             `json:"duration_ms,omitempty"`
+	NodeName        string      `json:"node_name,omitempty"`
+	DurationMs      int64       `json:"duration_ms,omitempty"`
+	Trace           *DebugTrace `json:"trace,omitempty"`
 }
 
 // NodeSummary is a minimal proxy node entry for the test node picker.
@@ -122,11 +123,12 @@ type ListTestNodesResponse struct {
 }
 
 var validRuleTypes = map[string]bool{
-	"condition": true,
-	"js":        true,
-	"ts":        true,
-	"tengo":     true,
-	"lua":       true,
+	"condition":  true,
+	"js":         true,
+	"ts":         true,
+	"tengo":      true,
+	"lua":        true,
+	"playwright": true,
 }
 
 // ListRules returns all platform rules for the current user.
@@ -288,31 +290,76 @@ func TestRule(ctx context.Context, p *TestRuleParams) (*TestRuleResult, error) {
 	}
 
 	start := time.Now()
+	dr := &DebugRecorder{}
 
 	if p.RuleType == "condition" {
-		dbg, err := testConditionVerbose(ctx, httpClient, p.Definition)
+		ok, err := runConditionRule(ctx, httpClient, p.Definition, dr)
 		ms := time.Since(start).Milliseconds()
 		if err != nil {
-			return &TestRuleResult{OK: false, Error: err.Error(), DurationMs: ms, NodeName: nodeName}, nil
+			return &TestRuleResult{OK: false, Error: err.Error(), DurationMs: ms, NodeName: nodeName, Trace: &DebugTrace{Platform: p.RuleType, Result: false, Steps: dr.Steps}}, nil
+		}
+		// Extract the last HTTP response details from debug steps for backward compatibility
+		var statusCode int
+		var finalURL, body string
+		var respHeaders map[string]string
+		for _, step := range dr.Steps {
+			if step.Type == "http_response" && len(step.Details) > 0 {
+				var details map[string]any
+				if json.Unmarshal(step.Details, &details) == nil {
+					if v, ok := details["status_code"]; ok {
+						if code, ok := v.(float64); ok {
+							statusCode = int(code)
+						}
+					}
+					if v, ok := details["body_snippet"]; ok {
+						if s, ok := v.(string); ok {
+							body = s
+						}
+					}
+					if v, ok := details["headers"]; ok {
+						if h, ok := v.(map[string]any); ok {
+							respHeaders = make(map[string]string, len(h))
+							for k, val := range h {
+								if sv, ok := val.(string); ok {
+									respHeaders[k] = sv
+								}
+							}
+						}
+					}
+				}
+			}
+			if step.Type == "variable" && len(step.Details) > 0 {
+				var details map[string]any
+				if json.Unmarshal(step.Details, &details) == nil {
+					if v, ok := details["name"]; ok && v == "final_url" {
+						if s, ok := details["value"]; ok {
+							if sv, ok := s.(string); ok {
+								finalURL = sv
+							}
+						}
+					}
+				}
+			}
 		}
 		return &TestRuleResult{
-			OK:              dbg.ok,
-			StatusCode:      dbg.statusCode,
-			FinalURL:        dbg.finalURL,
-			Body:            dbg.body,
-			ResponseHeaders: dbg.responseHeaders,
+			OK:              ok,
+			StatusCode:      statusCode,
+			FinalURL:        finalURL,
+			Body:            body,
+			ResponseHeaders: respHeaders,
 			NodeName:        nodeName,
 			DurationMs:      ms,
+			Trace:           &DebugTrace{Platform: p.RuleType, Result: ok, Steps: dr.Steps},
 		}, nil
 	}
 
 	rule := &PlatformRule{RuleType: p.RuleType, Definition: p.Definition}
-	ok, err := runRule(ctx, httpClient, rule, nil)
+	ok, err := runRule(ctx, httpClient, rule, dr)
 	ms := time.Since(start).Milliseconds()
 	if err != nil {
-		return &TestRuleResult{OK: false, Error: err.Error(), DurationMs: ms, NodeName: nodeName}, nil
+		return &TestRuleResult{OK: false, Error: err.Error(), DurationMs: ms, NodeName: nodeName, Trace: &DebugTrace{Platform: p.RuleType, Result: false, Steps: dr.Steps}}, nil
 	}
-	return &TestRuleResult{OK: ok, DurationMs: ms, NodeName: nodeName}, nil
+	return &TestRuleResult{OK: ok, DurationMs: ms, NodeName: nodeName, Trace: &DebugTrace{Platform: p.RuleType, Result: ok, Steps: dr.Steps}}, nil
 }
 
 // ListTestNodes returns all proxy nodes available to the current user, for the test node picker.
