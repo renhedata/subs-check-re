@@ -294,7 +294,7 @@ func checkNode(ctx context.Context, nodeID string, mapping map[string]any, speed
 			result.Debug.Traces = append(result.Debug.Traces, DebugTrace{
 				Platform: "connectivity",
 				Result:   false,
-				Steps:    []DebugStep{{Type: "error", Description: "failed to create proxy client", Details: map[string]any{"error": "invalid proxy config"}}},
+				Steps:    []DebugStep{{Type: "error", Description: "failed to create proxy client", Details: toRawMessage(map[string]any{"error": "invalid proxy config"})}},
 			})
 		}
 		return result
@@ -306,7 +306,7 @@ func checkNode(ctx context.Context, nodeID string, mapping map[string]any, speed
 			result.Debug.Traces = append(result.Debug.Traces, DebugTrace{
 				Platform: "connectivity",
 				Result:   false,
-				Steps:    []DebugStep{{Type: "variable", Description: "alive = false", Details: map[string]any{"name": "alive", "value": false}}},
+				Steps:    []DebugStep{{Type: "variable", Description: "alive = false", Details: toRawMessage(map[string]any{"name": "alive", "value": false})}},
 			})
 		}
 		return result
@@ -318,8 +318,8 @@ func checkNode(ctx context.Context, nodeID string, mapping map[string]any, speed
 			Platform: "connectivity",
 			Result:   true,
 			Steps: []DebugStep{
-				{Type: "variable", Description: "alive = true", Details: map[string]any{"name": "alive", "value": true}},
-				{Type: "variable", Description: "latency_ms", Details: map[string]any{"name": "latency_ms", "value": result.LatencyMs}},
+				{Type: "variable", Description: "alive = true", Details: toRawMessage(map[string]any{"name": "alive", "value": true})},
+				{Type: "variable", Description: "latency_ms", Details: toRawMessage(map[string]any{"name": "latency_ms", "value": result.LatencyMs})},
 			},
 		})
 	}
