@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import type { DebugStep, DebugTrace } from "@/components/debug-panel";
 import { isIconifyId } from "@/components/platform-icons";
 import { client } from "@/lib/client";
 import type { checker } from "@/lib/client.gen";
@@ -34,7 +35,7 @@ export const Route = createFileRoute("/settings/platforms")({
 	component: PlatformsPage,
 });
 
-const RULE_TYPES = ["condition", "js", "ts", "tengo", "lua"] as const;
+const RULE_TYPES = ["condition", "js", "ts", "tengo", "lua", "playwright"] as const;
 type RuleType = (typeof RULE_TYPES)[number];
 
 const RULE_TYPE_LABELS: Record<RuleType, string> = {
@@ -43,6 +44,7 @@ const RULE_TYPE_LABELS: Record<RuleType, string> = {
 	ts: "TypeScript",
 	tengo: "Tengo",
 	lua: "Lua",
+	playwright: "Playwright",
 };
 
 const MONACO_LANG: Record<RuleType, string> = {
@@ -51,6 +53,7 @@ const MONACO_LANG: Record<RuleType, string> = {
 	ts: "typescript",
 	tengo: "go",
 	lua: "lua",
+	playwright: "typescript",
 };
 
 const TYPE_COLORS: Record<RuleType, string> = {
@@ -59,6 +62,7 @@ const TYPE_COLORS: Record<RuleType, string> = {
 	ts: "bg-blue-600/10 text-blue-300 border-blue-600/30",
 	tengo: "bg-cyan-500/10 text-cyan-400 border-cyan-500/30",
 	lua: "bg-purple-500/10 text-purple-400 border-purple-500/30",
+	playwright: "bg-green-500/10 text-green-400 border-green-500/30",
 };
 
 // ─── Engine docs ──────────────────────────────────────────────────────────────
@@ -180,6 +184,44 @@ os      os.time, os.date`,
 				h: "Return",
 				body: `return r.status == 200 and
        r.body:find("currentMember") ~= nil`,
+			},
+		],
+	},
+	playwright: {
+		sections: [
+			{
+				h: "Script Template",
+				body: `async function check(page, context) {
+  // context.proxy: { server, username?, password? }
+  // context.url: string
+
+  await page.goto('https://example.com', {
+    waitUntil: 'networkidle'
+  });
+
+  const text = await page.textContent('body');
+  return text.includes('success');
+}`,
+			},
+			{
+				h: "Page API",
+				body: `page.goto(url, opts)     // 导航
+page.waitForSelector(sel)  // 等待元素
+page.waitForTimeout(ms)    // 等待时间
+page.textContent(sel)      // 获取文本
+page.innerText(sel)        // 获取内部文本
+page.innerHTML(sel)        // 获取 HTML
+page.getAttribute(sel, name) // 获取属性
+page.evaluate(fn, arg)     // 执行 JS
+page.screenshot(opts)      // 截图
+page.url()                 // 当前 URL
+page.title()               // 页面标题
+page.click(sel)            // 点击
+page.fill(sel, value)      // 填充输入`,
+			},
+			{
+				h: "Return",
+				body: "return true  // unlocked\nreturn false // blocked",
 			},
 		],
 	},
@@ -675,6 +717,9 @@ function RuleEditorDialog({
 				body: "",
 				response_headers: {},
 				node_name: "",
+				trace: { platform: "", result: false, steps: [] },
+				screenshot: "",
+				logs: [],
 			});
 		} finally {
 			setTesting(false);
@@ -990,12 +1035,17 @@ function ConsolePanel({
 	nodeLabel: string;
 }) {
 	const [headersOpen, setHeadersOpen] = useState(false);
+	const [traceOpen, setTraceOpen] = useState(true);
+	const [selectedStep, setSelectedStep] = useState<number>(-1);
 
 	const headerEntries = result?.response_headers
 		? Object.entries(result.response_headers).sort(([a], [b]) =>
 				a.localeCompare(b),
 			)
 		: [];
+
+	const trace: DebugTrace | undefined = result?.trace as DebugTrace | undefined;
+	const steps = trace?.steps ?? [];
 
 	return (
 		<div className="border-border border-t bg-[#1e1e1e] font-mono text-xs">
@@ -1061,6 +1111,142 @@ function ConsolePanel({
 							</p>
 						)}
 
+						{/* Debug Trace — Debugger UI */}
+						{trace && steps.length > 0 && (
+							<div className="rounded border border-white/5">
+								<button
+									type="button"
+									onClick={() => setTraceOpen((o) => !o)}
+									className="flex w-full items-center gap-1.5 px-2 py-1 text-left text-[#858585] hover:text-[#d4d4d4]"
+								>
+									<ChevronRight
+										size={10}
+										className={
+											traceOpen
+												? "rotate-90 transition-transform"
+												: "transition-transform"
+										}
+									/>
+									<span>Debug Trace</span>
+									<span className="ml-1 text-[#569cd6]">{steps.length}</span>
+									<span
+										className="ml-2 rounded px-1.5 py-0.5 text-[10px]"
+										style={{
+											background: trace.result
+												? "rgba(78, 201, 176, 0.15)"
+												: "rgba(241, 76, 76, 0.15)",
+											color: trace.result ? "#4ec9b0" : "#f14c4c",
+										}}
+									>
+										{trace.result ? "UNLOCKED" : "BLOCKED"}
+									</span>
+								</button>
+								{traceOpen && (
+									<div className="border-white/5 border-t">
+										<div className="flex max-h-80">
+											{/* Step list */}
+											<div className="w-1/2 overflow-y-auto border-white/5 border-r">
+												{steps.map((step, i) => (
+													<button
+														key={i}
+														type="button"
+														onClick={() => setSelectedStep(i)}
+														className={[
+															"flex w-full items-center gap-2 px-2 py-1 text-left text-[11px] transition-colors hover:bg-white/5",
+															selectedStep === i ? "bg-white/10" : "",
+														].join(" ")}
+													>
+														<span
+															className="rounded px-1 py-0.5 font-medium text-[9px] uppercase"
+															style={{
+																background:
+																	step.type === "error"
+																		? "rgba(241, 76, 76, 0.2)"
+																		: step.type === "http_request" ||
+																				step.type === "http_response"
+																		? "rgba(86, 156, 214, 0.2)"
+																		: step.type === "variable"
+																			? "rgba(78, 201, 176, 0.2)"
+																		: step.type === "condition"
+																			? "rgba(220, 220, 170, 0.2)"
+																		: "transparent",
+																color:
+																	step.type === "error"
+																		? "#f14c4c"
+																		: step.type === "http_request" ||
+																				step.type === "http_response"
+																		? "#569cd6"
+																		: step.type === "variable"
+																			? "#4ec9b0"
+																		: step.type === "condition"
+																			? "#dcdcaa"
+																		: "#858585",
+															}}
+														>
+															{step.type === "http_request"
+																? "REQ"
+																: step.type === "http_response"
+																	? "RES"
+																	: step.type === "variable"
+																		? "VAR"
+																		: step.type === "condition"
+																			? "IF"
+																			: step.type === "log"
+																				? "LOG"
+																				: step.type === "error"
+																					? "ERR"
+																					: step.type}
+														</span>
+														<span className="truncate text-[#d4d4d4]">
+															{step.description}
+														</span>
+													</button>
+												))}
+											</div>
+											{/* Variable panel */}
+											<div className="w-1/2 overflow-y-auto p-2">
+												{selectedStep >= 0 && selectedStep < steps.length ? (
+													<StepVariablePanel step={steps[selectedStep]} />
+												) : (
+													<p className="text-[#858585] text-[11px]">
+														Click a step to inspect variables
+													</p>
+												)}
+											</div>
+										</div>
+									</div>
+								)}
+							</div>
+						)}
+
+						{/* Playwright screenshot */}
+						{result.screenshot && (
+							<div className="rounded border border-white/5">
+								<div className="flex items-center justify-between border-white/5 border-b px-2 py-1">
+									<span className="text-[#858585]">Screenshot</span>
+								</div>
+								<img
+									src={`data:image/png;base64,${result.screenshot}`}
+									alt="Playwright screenshot"
+									className="max-h-64 w-full object-contain"
+								/>
+							</div>
+						)}
+
+						{/* Playwright logs */}
+						{result.logs && result.logs.length > 0 && (
+							<div className="rounded border border-white/5">
+								<div className="border-white/5 border-b px-2 py-1 text-[#858585]">
+									Logs <span className="text-[#569cd6]">{result.logs.length}</span>
+								</div>
+								<div className="max-h-32 overflow-auto px-2 py-1">
+									{result.logs.map((log, i) => (
+										<div key={i} className="text-[#858585] text-[10px]">{log}</div>
+									))}
+								</div>
+							</div>
+						)}
+
 						{/* Response headers */}
 						{headerEntries.length > 0 && (
 							<div className="rounded border border-white/5">
@@ -1118,6 +1304,48 @@ function ConsolePanel({
 					</>
 				)}
 			</div>
+		</div>
+	);
+}
+
+function StepVariablePanel({ step }: { step: DebugStep }) {
+	const details = step.details as Record<string, unknown>;
+	const keys = Object.keys(details);
+
+	return (
+		<div className="space-y-1.5">
+			<p className="mb-1.5 text-[#858585] text-[10px] uppercase tracking-wider">
+				Variables
+			</p>
+			{keys.length === 0 && (
+				<p className="text-[#858585] text-[11px]">No variables captured</p>
+			)}
+			{keys.map((k) => {
+				const v = details[k];
+				const isString = typeof v === "string";
+				const display = isString ? v : JSON.stringify(v, null, 2);
+				const isLong = typeof display === "string" && display.length > 200;
+				return (
+					<div key={k} className="rounded bg-white/[0.03] px-2 py-1">
+						<div className="flex items-center gap-1.5">
+							<span className="text-[#9cdcfe] text-[11px]">{k}</span>
+							<span className="text-[#858585] text-[10px]">
+								{Array.isArray(v)
+									? `array[${v.length}]`
+									: v === null
+										? "null"
+										: typeof v}
+							</span>
+						</div>
+						<pre
+							className="mt-0.5 overflow-auto whitespace-pre-wrap break-all text-[#ce9178] text-[11px] leading-relaxed"
+							style={{ maxHeight: isLong ? 120 : undefined }}
+						>
+							{display}
+						</pre>
+					</div>
+				);
+			})}
 		</div>
 	);
 }

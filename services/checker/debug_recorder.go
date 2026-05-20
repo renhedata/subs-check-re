@@ -86,10 +86,10 @@ func (d *DebugRecorder) PlaywrightScript(description string) {
 	})
 }
 
-func (d *DebugRecorder) PlaywrightResult(result bool, logs []string) {
+func (d *DebugRecorder) PlaywrightResult(result bool, logs []string, screenshot string) {
 	d.Add(DebugStep{
 		Type:        "playwright_result",
 		Description: fmt.Sprintf("playwright result = %v", result),
-		Details:     toRawMessage(map[string]any{"result": result, "logs": logs}),
+		Details:     toRawMessage(map[string]any{"result": result, "logs": logs, "screenshot": screenshot}),
 	})
 }

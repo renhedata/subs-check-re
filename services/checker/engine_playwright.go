@@ -127,7 +127,7 @@ func runPlaywrightRule(ctx context.Context, client *http.Client, rule *PlatformR
 	}
 
 	if dr != nil {
-		dr.PlaywrightResult(result.Result, result.Logs)
+		dr.PlaywrightResult(result.Result, result.Logs, result.Screenshot)
 		if result.FinalURL != "" {
 			dr.Variable("final_url", result.FinalURL)
 		}

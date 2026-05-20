@@ -108,6 +108,8 @@ type TestRuleResult struct {
 	NodeName        string      `json:"node_name,omitempty"`
 	DurationMs      int64       `json:"duration_ms,omitempty"`
 	Trace           *DebugTrace `json:"trace,omitempty"`
+	Screenshot      string      `json:"screenshot,omitempty"`
+	Logs            []string    `json:"logs,omitempty"`
 }
 
 // NodeSummary is a minimal proxy node entry for the test node picker.
@@ -356,10 +358,39 @@ func TestRule(ctx context.Context, p *TestRuleParams) (*TestRuleResult, error) {
 	rule := &PlatformRule{RuleType: p.RuleType, Definition: p.Definition}
 	ok, err := runRule(ctx, httpClient, rule, dr)
 	ms := time.Since(start).Milliseconds()
-	if err != nil {
-		return &TestRuleResult{OK: false, Error: err.Error(), DurationMs: ms, NodeName: nodeName, Trace: &DebugTrace{Platform: p.RuleType, Result: false, Steps: dr.Steps}}, nil
+
+	// Extract playwright-specific fields from debug steps
+	var screenshot string
+	var logs []string
+	if p.RuleType == "playwright" {
+		for _, step := range dr.Steps {
+			if step.Type == "playwright_result" && len(step.Details) > 0 {
+				var details map[string]any
+				if json.Unmarshal(step.Details, &details) == nil {
+					if v, ok := details["logs"]; ok {
+						if logArr, ok := v.([]any); ok {
+							logs = make([]string, 0, len(logArr))
+							for _, log := range logArr {
+								if s, ok := log.(string); ok {
+									logs = append(logs, s)
+								}
+							}
+						}
+					}
+					if v, ok := details["screenshot"]; ok {
+						if s, ok := v.(string); ok {
+							screenshot = s
+						}
+					}
+				}
+			}
+		}
 	}
-	return &TestRuleResult{OK: ok, DurationMs: ms, NodeName: nodeName, Trace: &DebugTrace{Platform: p.RuleType, Result: ok, Steps: dr.Steps}}, nil
+
+	if err != nil {
+		return &TestRuleResult{OK: false, Error: err.Error(), DurationMs: ms, NodeName: nodeName, Trace: &DebugTrace{Platform: p.RuleType, Result: false, Steps: dr.Steps}, Screenshot: screenshot, Logs: logs}, nil
+	}
+	return &TestRuleResult{OK: ok, DurationMs: ms, NodeName: nodeName, Trace: &DebugTrace{Platform: p.RuleType, Result: ok, Steps: dr.Steps}, Screenshot: screenshot, Logs: logs}, nil
 }
 
 // ListTestNodes returns all proxy nodes available to the current user, for the test node picker.

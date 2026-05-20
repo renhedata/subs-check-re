@@ -194,6 +194,35 @@ export namespace checker {
     }
 
     /**
+     * DebugStep captures one step in a platform check trace.
+     */
+    export interface DebugStep {
+        /**
+         * "http_request" | "http_response" | "variable" | "condition" | "log" | "error" | "playwright_script" | "playwright_result"
+         */
+        type: string
+
+        /**
+         * human-readable summary
+         */
+        description: string
+
+        /**
+         * free-form key-value pairs as JSON
+         */
+        details: JSONValue
+    }
+
+    /**
+     * DebugTrace is the full trace for one platform check on one node.
+     */
+    export interface DebugTrace {
+        platform: string
+        result: boolean
+        steps: DebugStep[]
+    }
+
+    /**
      * ExportLog is one export request record.
      */
     export interface ExportLog {
@@ -383,6 +412,9 @@ export namespace checker {
         "response_headers": { [key: string]: string }
         "node_name": string
         "duration_ms": number
+        trace: DebugTrace
+        screenshot: string
+        logs: string[]
     }
 
     /**
