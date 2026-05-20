@@ -57,9 +57,7 @@ export function NodeTable({ results, rules = [], onToggleEnabled }: Props) {
 	const sorted = [...alive, ...dead];
 
 	if (sorted.length === 0) {
-		return (
-			<p className="text-sm text-muted-foreground">No results yet.</p>
-		);
+		return <p className="text-muted-foreground text-sm">No results yet.</p>;
 	}
 
 	return (
@@ -80,7 +78,7 @@ export function NodeTable({ results, rules = [], onToggleEnabled }: Props) {
 						].map((h) => (
 							<th
 								key={h}
-								className="px-3 py-2 text-left font-medium text-[11px] uppercase tracking-[0.4px] text-muted-foreground"
+								className="px-3 py-2 text-left font-medium text-[11px] text-muted-foreground uppercase tracking-[0.4px]"
 							>
 								{h}
 							</th>
@@ -102,8 +100,12 @@ export function NodeTable({ results, rules = [], onToggleEnabled }: Props) {
 										title={r.enabled ? "Disable node" : "Enable node"}
 										className="rounded px-1.5 py-0.5 text-[10px] transition-colors"
 										style={{
-											background: r.enabled ? "var(--color-badge-success-bg)" : "var(--color-badge-danger-bg)",
-											color: r.enabled ? "var(--color-badge-success)" : "var(--color-badge-danger)",
+											background: r.enabled
+												? "var(--color-badge-success-bg)"
+												: "var(--color-badge-danger-bg)",
+											color: r.enabled
+												? "var(--color-badge-success)"
+												: "var(--color-badge-danger)",
 										}}
 									>
 										{r.enabled ? "on" : "off"}
@@ -114,7 +116,9 @@ export function NodeTable({ results, rules = [], onToggleEnabled }: Props) {
 								className="max-w-[180px] truncate px-3 py-2 font-mono text-[11px]"
 								style={{
 									color: r.enabled
-										? r.alive ? "var(--foreground)" : "var(--color-dimmed)"
+										? r.alive
+											? "var(--foreground)"
+											: "var(--color-dimmed)"
 										: "var(--color-dimmed)",
 									opacity: r.enabled ? 1 : 0.5,
 								}}
@@ -155,7 +159,7 @@ export function NodeTable({ results, rules = [], onToggleEnabled }: Props) {
 									<span style={{ color: "var(--color-dimmed)" }}>—</span>
 								)}
 							</td>
-							<td className="px-3 py-2 text-xs text-muted-foreground">
+							<td className="px-3 py-2 text-muted-foreground text-xs">
 								{formatBytes(r.traffic_bytes)}
 							</td>
 							<td
@@ -181,19 +185,20 @@ export function NodeTable({ results, rules = [], onToggleEnabled }: Props) {
 									{r.grok && <PlatformIcon platform="grok" />}
 									{r.disney && <PlatformIcon platform="disney" />}
 									{r.tiktok && <PlatformIcon platform="tiktok" />}
-									{r.extra_platforms && Object.entries(r.extra_platforms)
-										.filter(([, v]) => v)
-										.map(([key]) => {
-											const rule = ruleByKey[key];
-											return (
-												<PlatformIconAny
-													key={key}
-													platformKey={key}
-													icon={rule?.icon}
-													label={rule?.name ?? key}
-												/>
-											);
-										})}
+									{r.extra_platforms &&
+										Object.entries(r.extra_platforms)
+											.filter(([, v]) => v)
+											.map(([key]) => {
+												const rule = ruleByKey[key];
+												return (
+													<PlatformIconAny
+														key={key}
+														platformKey={key}
+														icon={rule?.icon}
+														label={rule?.name ?? key}
+													/>
+												);
+											})}
 								</div>
 							</td>
 						</tr>

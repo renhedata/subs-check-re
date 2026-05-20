@@ -32,7 +32,14 @@ function GeneralSettingsPage() {
 			speed_test_url: "",
 			upload_test_url: "",
 			latency_test_url: "",
-			email_config: { smtp_host: "", smtp_port: 587, smtp_user: "", smtp_pass: "", from: "", to: "" },
+			email_config: {
+				smtp_host: "",
+				smtp_port: 587,
+				smtp_user: "",
+				smtp_pass: "",
+				from: "",
+				to: "",
+			},
 		},
 	});
 
@@ -61,9 +68,14 @@ function GeneralSettingsPage() {
 			>
 				{/* Latency test */}
 				<div className="rounded-lg border border-border bg-card p-5">
-					<p className="mb-3 font-medium text-foreground text-sm">Latency Test</p>
+					<p className="mb-3 font-medium text-foreground text-sm">
+						Latency Test
+					</p>
 					<div className="space-y-1.5">
-						<Label htmlFor="latency_test_url" className="text-muted-foreground text-xs">
+						<Label
+							htmlFor="latency_test_url"
+							className="text-muted-foreground text-xs"
+						>
 							Latency Test URL
 						</Label>
 						<Input
@@ -73,7 +85,8 @@ function GeneralSettingsPage() {
 							className="h-8 font-mono text-sm"
 						/>
 						<p className="text-xs" style={{ color: "var(--color-dimmed)" }}>
-							URL used to measure round-trip latency and check if a node is alive. Leave blank to use default ({DEFAULT_LATENCY_TEST_URL}).
+							URL used to measure round-trip latency and check if a node is
+							alive. Leave blank to use default ({DEFAULT_LATENCY_TEST_URL}).
 						</p>
 					</div>
 				</div>
@@ -83,7 +96,10 @@ function GeneralSettingsPage() {
 					<p className="mb-3 font-medium text-foreground text-sm">Speed Test</p>
 					<div className="space-y-3">
 						<div className="space-y-1.5">
-							<Label htmlFor="speed_test_url" className="text-muted-foreground text-xs">
+							<Label
+								htmlFor="speed_test_url"
+								className="text-muted-foreground text-xs"
+							>
 								↓ Download URL
 							</Label>
 							<Input
@@ -97,7 +113,10 @@ function GeneralSettingsPage() {
 							</p>
 						</div>
 						<div className="space-y-1.5">
-							<Label htmlFor="upload_test_url" className="text-muted-foreground text-xs">
+							<Label
+								htmlFor="upload_test_url"
+								className="text-muted-foreground text-xs"
+							>
 								↑ Upload URL
 							</Label>
 							<Input
@@ -107,7 +126,8 @@ function GeneralSettingsPage() {
 								className="h-8 font-mono text-sm"
 							/>
 							<p className="text-xs" style={{ color: "var(--color-dimmed)" }}>
-								POST endpoint that accepts an upload payload. Leave blank to auto-derive from the download URL (replaces path with /__up).
+								POST endpoint that accepts an upload payload. Leave blank to
+								auto-derive from the download URL (replaces path with /__up).
 							</p>
 						</div>
 					</div>
@@ -116,7 +136,11 @@ function GeneralSettingsPage() {
 				{/* Email / SMTP */}
 				<div className="rounded-lg border border-border bg-card p-5">
 					<div className="mb-3 flex items-center gap-1.5">
-						<Mail size={13} strokeWidth={1.5} className="text-muted-foreground" />
+						<Mail
+							size={13}
+							strokeWidth={1.5}
+							className="text-muted-foreground"
+						/>
 						<p className="font-medium text-foreground text-sm">
 							Email Notifications (SMTP)
 						</p>
@@ -124,7 +148,9 @@ function GeneralSettingsPage() {
 					<div className="space-y-3">
 						<div className="grid grid-cols-3 gap-3">
 							<div className="col-span-2 space-y-1.5">
-								<Label className="text-muted-foreground text-xs">SMTP Host</Label>
+								<Label className="text-muted-foreground text-xs">
+									SMTP Host
+								</Label>
 								<Input
 									placeholder="smtp.gmail.com"
 									{...register("email_config.smtp_host")}
@@ -136,14 +162,18 @@ function GeneralSettingsPage() {
 								<Input
 									placeholder="587"
 									type="number"
-									{...register("email_config.smtp_port", { valueAsNumber: true })}
+									{...register("email_config.smtp_port", {
+										valueAsNumber: true,
+									})}
 									className="h-8 font-mono text-sm"
 								/>
 							</div>
 						</div>
 						<div className="grid grid-cols-2 gap-3">
 							<div className="space-y-1.5">
-								<Label className="text-muted-foreground text-xs">Username</Label>
+								<Label className="text-muted-foreground text-xs">
+									Username
+								</Label>
 								<Input
 									placeholder="user@example.com"
 									{...register("email_config.smtp_user")}
@@ -151,7 +181,9 @@ function GeneralSettingsPage() {
 								/>
 							</div>
 							<div className="space-y-1.5">
-								<Label className="text-muted-foreground text-xs">Password</Label>
+								<Label className="text-muted-foreground text-xs">
+									Password
+								</Label>
 								<Input
 									type="password"
 									placeholder="••••••••"
@@ -161,7 +193,9 @@ function GeneralSettingsPage() {
 							</div>
 						</div>
 						<div className="space-y-1.5">
-							<Label className="text-muted-foreground text-xs">From address</Label>
+							<Label className="text-muted-foreground text-xs">
+								From address
+							</Label>
 							<Input
 								placeholder="alerts@example.com"
 								{...register("email_config.from")}

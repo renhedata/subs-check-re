@@ -13,9 +13,12 @@ import (
 // runLuaRule runs a Lua script rule using gopher-lua.
 // Scripts have access to http_get(url, opts?) and must return a boolean value.
 // Example: return http_get("https://example.com").status == 200
-func runLuaRule(ctx context.Context, client *http.Client, defRaw json.RawMessage) (bool, error) {
+func runLuaRule(ctx context.Context, client *http.Client, defRaw json.RawMessage, dr *DebugRecorder) (bool, error) {
 	var def ScriptDef
 	if err := json.Unmarshal(defRaw, &def); err != nil {
+		if dr != nil {
+			dr.Error(err)
+		}
 		return false, err
 	}
 
@@ -48,6 +51,10 @@ func runLuaRule(ctx context.Context, client *http.Client, defRaw json.RawMessage
 			return 1
 		}
 
+		if dr != nil {
+			dr.HTTPReq(url, "GET", headers)
+		}
+
 		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 		if err != nil {
 			return pushError(err.Error())
@@ -63,6 +70,10 @@ func runLuaRule(ctx context.Context, client *http.Client, defRaw json.RawMessage
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 256*1024))
 		resp.Body.Close()
 
+		if dr != nil {
+			dr.HTTPResp(resp.StatusCode, nil, string(body))
+		}
+
 		t := L.NewTable()
 		L.SetField(t, "status", lua.LNumber(resp.StatusCode))
 		L.SetField(t, "body", lua.LString(string(body)))
@@ -72,21 +83,54 @@ func runLuaRule(ctx context.Context, client *http.Client, defRaw json.RawMessage
 		return 1
 	}))
 
+	// Inject print function for debug logging
+	if dr != nil {
+		L.SetGlobal("print", L.NewFunction(func(L *lua.LState) int {
+			var msg string
+			top := L.GetTop()
+			for i := 1; i <= top; i++ {
+				if i > 1 {
+					msg += "\t"
+				}
+				msg += L.Get(i).String()
+			}
+			dr.Log(msg)
+			return 0
+		}))
+	}
+
 	if def.Prelude != "" {
 		if err := L.DoString(def.Prelude); err != nil {
+			if dr != nil {
+				dr.Error(err)
+			}
 			return false, fmt.Errorf("lua prelude error: %w", err)
 		}
 	}
 	if err := L.DoString(def.Code); err != nil {
+		if dr != nil {
+			dr.Error(err)
+		}
 		return false, fmt.Errorf("lua error: %w", err)
 	}
 
 	ret := L.Get(-1)
 	if b, ok := ret.(lua.LBool); ok {
-		return bool(b), nil
+		result := bool(b)
+		if dr != nil {
+			dr.Variable("return_value", result)
+		}
+		return result, nil
 	}
 	if ret == lua.LNil {
+		if dr != nil {
+			dr.Variable("return_value", false)
+		}
 		return false, nil
 	}
-	return false, fmt.Errorf("lua script must return a boolean, got %s", ret.Type())
+	err := fmt.Errorf("lua script must return a boolean, got %s", ret.Type())
+	if dr != nil {
+		dr.Error(err)
+	}
+	return false, err
 }

@@ -12,6 +12,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
+import { DebugPanel, type NodeDebug } from "@/components/debug-panel";
 import { NodeTable } from "@/components/node-table";
 import { client, isApiError } from "@/lib/client";
 import { formatBytes } from "@/lib/format";
@@ -35,6 +36,7 @@ interface SSEProgress {
 	upload_speed_kbps?: number;
 	done?: boolean;
 	status?: string;
+	debug?: NodeDebug;
 }
 
 function latencyColor(ms: number): string {
@@ -84,6 +86,7 @@ function SubscriptionDetailPage() {
 	const [jobId, setJobId] = useState<string | null>(jobIdFromSearch ?? null);
 	const [progress, setProgress] = useState<SSEProgress | null>(null);
 	const [logEntries, setLogEntries] = useState<SSEProgress[]>([]);
+	const [debugData, setDebugData] = useState<NodeDebug[]>([]);
 	const logContainerRef = useRef<HTMLDivElement | null>(null);
 	const esRef = useRef<EventSource | null>(null);
 	const qc = useQueryClient();
@@ -150,7 +153,8 @@ function SubscriptionDetailPage() {
 			qc.invalidateQueries({ queryKey: ["results", id] });
 			toast.success(enabled ? "Node enabled" : "Node disabled");
 		},
-		onError: (e) => toast.error(isApiError(e) ? e.message : "Failed to update node"),
+		onError: (e) =>
+			toast.error(isApiError(e) ? e.message : "Failed to update node"),
 	});
 
 	// Clear log when a new job starts
@@ -158,6 +162,7 @@ function SubscriptionDetailPage() {
 	useEffect(() => {
 		setLogEntries([]);
 		setProgress(null);
+		setDebugData([]);
 	}, [jobId]);
 
 	useEffect(() => {
@@ -169,6 +174,9 @@ function SubscriptionDetailPage() {
 		es.onmessage = (e) => {
 			const data: SSEProgress = JSON.parse(e.data);
 			setProgress(data);
+			if (data.debug) {
+				setDebugData((prev) => [...prev, data.debug as NodeDebug]);
+			}
 			if (data.node_name) {
 				setLogEntries((prev) => [...prev, data]);
 			}
@@ -267,7 +275,7 @@ function SubscriptionDetailPage() {
 				<div className="space-y-2 rounded-lg border border-border bg-background p-3">
 					{/* Header row */}
 					<div className="flex items-center justify-between">
-						<div className="flex items-center gap-1.5 text-sm text-foreground">
+						<div className="flex items-center gap-1.5 text-foreground text-sm">
 							<RefreshCw
 								size={13}
 								strokeWidth={1.5}
@@ -277,9 +285,7 @@ function SubscriptionDetailPage() {
 							Checking nodes…
 						</div>
 						<div className="flex items-center gap-2">
-							<span
-								className="font-mono text-xs text-muted-foreground"
-							>
+							<span className="font-mono text-muted-foreground text-xs">
 								{progress.progress ?? 0} / {progress.total ?? "?"}
 							</span>
 							{jobId && (
@@ -298,9 +304,7 @@ function SubscriptionDetailPage() {
 					</div>
 
 					{/* Progress bar */}
-					<div
-						className="h-[3px] w-full overflow-hidden rounded-full bg-secondary"
-					>
+					<div className="h-[3px] w-full overflow-hidden rounded-full bg-secondary">
 						<div
 							className="h-full rounded-full transition-[width] duration-300 ease-out"
 							style={{
@@ -361,7 +365,8 @@ function SubscriptionDetailPage() {
 											className="flex-shrink-0"
 											style={{ color: "var(--color-warning)" }}
 										>
-											↑{entry.upload_speed_kbps >= 1024
+											↑
+											{entry.upload_speed_kbps >= 1024
 												? `${(entry.upload_speed_kbps / 1024).toFixed(1)}MB/s`
 												: `${entry.upload_speed_kbps}KB/s`}
 										</span>
@@ -372,6 +377,8 @@ function SubscriptionDetailPage() {
 					)}
 				</div>
 			)}
+
+			{debugData.length > 0 && <DebugPanel data={debugData} />}
 
 			{/* Job summary */}
 			{job && (
@@ -397,11 +404,11 @@ function SubscriptionDetailPage() {
 			)}
 
 			{resultsQuery.isLoading && (
-				<p className="text-sm text-muted-foreground">Loading results…</p>
+				<p className="text-muted-foreground text-sm">Loading results…</p>
 			)}
 			{resultsQuery.isError && !resultsQuery.isLoading && (
 				<div className="py-12 text-center">
-					<p className="text-sm text-muted-foreground">No checks run yet.</p>
+					<p className="text-muted-foreground text-sm">No checks run yet.</p>
 					<p className="mt-1 text-xs" style={{ color: "var(--color-dimmed)" }}>
 						Click Check on the subscriptions page to start a check.
 					</p>
@@ -409,12 +416,12 @@ function SubscriptionDetailPage() {
 			)}
 
 			<NodeTable
-								results={results}
-								rules={rulesQuery.data?.rules}
-								onToggleEnabled={(nodeId, enabled) =>
-									toggleEnabledMut.mutate({ nodeId, enabled })
-								}
-							/>
+				results={results}
+				rules={rulesQuery.data?.rules}
+				onToggleEnabled={(nodeId, enabled) =>
+					toggleEnabledMut.mutate({ nodeId, enabled })
+				}
+			/>
 
 			<ExportLinksSection subscriptionId={id} />
 
@@ -457,7 +464,10 @@ function ExportLinksSection({ subscriptionId }: { subscriptionId: string }) {
 	const links = [
 		{ label: "Clash", url: `${base}?token=${apiKey}&target=clash` },
 		{ label: "Base64", url: `${base}?token=${apiKey}&target=base64` },
-		{ label: "RouterOS (.rsc)", url: `${base}?token=${apiKey}&target=routeros` },
+		{
+			label: "RouterOS (.rsc)",
+			url: `${base}?token=${apiKey}&target=routeros`,
+		},
 	];
 
 	return (
@@ -467,36 +477,49 @@ function ExportLinksSection({ subscriptionId }: { subscriptionId: string }) {
 				onClick={() => setOpen(!open)}
 				className="flex w-full items-center justify-between px-4 py-3"
 			>
-				<div className="flex items-center gap-2 text-sm text-muted-foreground">
+				<div className="flex items-center gap-2 text-muted-foreground text-sm">
 					<Download size={13} strokeWidth={1.5} />
 					Export links
 				</div>
 				{open ? (
-					<ChevronDown size={13} strokeWidth={1.5} style={{ color: "var(--color-dimmed)" }} />
+					<ChevronDown
+						size={13}
+						strokeWidth={1.5}
+						style={{ color: "var(--color-dimmed)" }}
+					/>
 				) : (
-					<ChevronRight size={13} strokeWidth={1.5} style={{ color: "var(--color-dimmed)" }} />
+					<ChevronRight
+						size={13}
+						strokeWidth={1.5}
+						style={{ color: "var(--color-dimmed)" }}
+					/>
 				)}
 			</button>
 
 			{open && (
-				<div className="space-y-2 border-t border-border px-4 py-3">
+				<div className="space-y-2 border-border border-t px-4 py-3">
 					{apiKeyQuery.isLoading && (
-						<p className="text-xs" style={{ color: "var(--color-dimmed)" }}>Loading…</p>
+						<p className="text-xs" style={{ color: "var(--color-dimmed)" }}>
+							Loading…
+						</p>
 					)}
-					{!apiKeyQuery.isLoading && links.map(({ label, url }) => (
-						<div key={label}>
-							<p className="mb-1 text-[11px] font-medium text-muted-foreground">{label}</p>
-							<div className="flex items-center gap-1.5 rounded-md border border-border bg-background px-2.5 py-1.5">
-								<span
-									className="min-w-0 flex-1 truncate font-mono text-[11px]"
-									style={{ color: "var(--color-code)" }}
-								>
-									{url}
-								</span>
-								<CopyButton text={url} />
+					{!apiKeyQuery.isLoading &&
+						links.map(({ label, url }) => (
+							<div key={label}>
+								<p className="mb-1 font-medium text-[11px] text-muted-foreground">
+									{label}
+								</p>
+								<div className="flex items-center gap-1.5 rounded-md border border-border bg-background px-2.5 py-1.5">
+									<span
+										className="min-w-0 flex-1 truncate font-mono text-[11px]"
+										style={{ color: "var(--color-code)" }}
+									>
+										{url}
+									</span>
+									<CopyButton text={url} />
+								</div>
 							</div>
-						</div>
-					))}
+						))}
 				</div>
 			)}
 		</div>
@@ -522,7 +545,7 @@ function ExportLogsSection({ subscriptionId }: { subscriptionId: string }) {
 				onClick={() => setOpen(!open)}
 				className="flex w-full items-center justify-between px-4 py-3"
 			>
-				<div className="flex items-center gap-2 text-sm text-muted-foreground">
+				<div className="flex items-center gap-2 text-muted-foreground text-sm">
 					<Download size={13} strokeWidth={1.5} />
 					Export requests
 				</div>
@@ -542,7 +565,7 @@ function ExportLogsSection({ subscriptionId }: { subscriptionId: string }) {
 			</button>
 
 			{open && (
-				<div className="border-t border-border px-4 py-3">
+				<div className="border-border border-t px-4 py-3">
 					{logsQuery.isLoading && (
 						<p className="text-xs" style={{ color: "var(--color-dimmed)" }}>
 							Loading…

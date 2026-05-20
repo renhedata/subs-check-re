@@ -63,7 +63,10 @@ const TYPE_COLORS: Record<RuleType, string> = {
 
 // ─── Engine docs ──────────────────────────────────────────────────────────────
 
-const ENGINE_DOCS: Record<RuleType, { sections: { h: string; body: string }[] }> = {
+const ENGINE_DOCS: Record<
+	RuleType,
+	{ sections: { h: string; body: string }[] }
+> = {
 	condition: {
 		sections: [
 			{
@@ -102,7 +105,7 @@ return r.status === 200 && r.body.includes("OK")`,
 			},
 			{
 				h: "Not available",
-				body: `import / require · fetch · async/await · Node.js`,
+				body: "import / require · fetch · async/await · Node.js",
 			},
 		],
 	},
@@ -127,7 +130,7 @@ const / let · destructuring · spread`,
 			},
 			{
 				h: "Not available",
-				body: `import / export · npm packages · async/await`,
+				body: "import / export · npm packages · async/await",
 			},
 		],
 	},
@@ -245,7 +248,9 @@ function PlatformsPage() {
 	return (
 		<div className="max-w-2xl space-y-5">
 			<div className="flex items-center justify-between">
-				<h1 className="font-semibold text-foreground text-lg">Platform Detection Rules</h1>
+				<h1 className="font-semibold text-foreground text-lg">
+					Platform Detection Rules
+				</h1>
 				<button
 					type="button"
 					onClick={() => setAddOpen(true)}
@@ -257,9 +262,12 @@ function PlatformsPage() {
 			</div>
 
 			<p className="text-muted-foreground text-xs">
-				Rules run during each proxy check. Built-in rules are seeded on first visit.
-				Custom keys store results in{" "}
-				<code className="rounded bg-secondary px-1 font-mono">extra_platforms</code>.
+				Rules run during each proxy check. Built-in rules are seeded on first
+				visit. Custom keys store results in{" "}
+				<code className="rounded bg-secondary px-1 font-mono">
+					extra_platforms
+				</code>
+				.
 			</p>
 
 			{isLoading ? (
@@ -277,16 +285,15 @@ function PlatformsPage() {
 						/>
 					))}
 					{rules.length === 0 && (
-						<p className="py-6 text-center text-muted-foreground text-sm">No rules yet.</p>
+						<p className="py-6 text-center text-muted-foreground text-sm">
+							No rules yet.
+						</p>
 					)}
 				</div>
 			)}
 
 			{addOpen && (
-				<RuleEditorDialog
-					qc={qc}
-					onClose={() => setAddOpen(false)}
-				/>
+				<RuleEditorDialog qc={qc} onClose={() => setAddOpen(false)} />
 			)}
 
 			{editingRule && (
@@ -306,7 +313,11 @@ function IconDisplay({
 	icon,
 	name,
 	size = "md",
-}: { icon: string; name: string; size?: "sm" | "md" }) {
+}: {
+	icon: string;
+	name: string;
+	size?: "sm" | "md";
+}) {
 	const px = size === "sm" ? 16 : 20;
 	const dim = size === "sm" ? "h-5 w-5" : "h-7 w-7";
 
@@ -328,20 +339,28 @@ function IconDisplay({
 		);
 	}
 
-	const isUrl = icon.startsWith("http://") || icon.startsWith("https://") || icon.startsWith("data:");
+	const isUrl =
+		icon.startsWith("http://") ||
+		icon.startsWith("https://") ||
+		icon.startsWith("data:");
 	if (isUrl) {
 		return (
 			<img
 				src={icon}
 				alt={name}
 				className={`flex-shrink-0 rounded object-contain ${dim}`}
-				onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+				onError={(e) => {
+					(e.currentTarget as HTMLImageElement).style.display = "none";
+				}}
 			/>
 		);
 	}
 
 	return (
-		<span className={`flex flex-shrink-0 items-center justify-center ${dim} text-base`} aria-hidden>
+		<span
+			className={`flex flex-shrink-0 items-center justify-center ${dim} text-base`}
+			aria-hidden
+		>
 			{icon}
 		</span>
 	);
@@ -398,7 +417,7 @@ function RuleCard({
 			>
 				<span
 					className={[
-						"absolute left-0 top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform",
+						"absolute top-0.5 left-0 h-4 w-4 rounded-full bg-white shadow transition-transform",
 						rule.enabled ? "translate-x-[18px]" : "translate-x-0.5",
 					].join(" ")}
 				/>
@@ -408,20 +427,25 @@ function RuleCard({
 
 			<div className="min-w-0 flex-1">
 				<div className="flex flex-wrap items-center gap-2">
-					<span className="font-medium text-foreground text-sm">{rule.name}</span>
+					<span className="font-medium text-foreground text-sm">
+						{rule.name}
+					</span>
 					<span className="rounded bg-secondary px-1.5 py-0.5 font-mono text-muted-foreground text-xs">
 						{rule.key}
 					</span>
 					<span
 						className={[
 							"rounded border px-1.5 py-0.5 text-xs",
-							TYPE_COLORS[ruleType] ?? "bg-secondary text-muted-foreground border-border",
+							TYPE_COLORS[ruleType] ??
+								"border-border bg-secondary text-muted-foreground",
 						].join(" ")}
 					>
 						{RULE_TYPE_LABELS[ruleType] ?? rule.rule_type}
 					</span>
 					{rule.is_default && (
-						<span className="text-muted-foreground text-xs opacity-50">default</span>
+						<span className="text-muted-foreground text-xs opacity-50">
+							default
+						</span>
 					)}
 				</div>
 			</div>
@@ -457,7 +481,11 @@ function IconPickerInput({
 	value,
 	onChange,
 	name,
-}: { value: string; onChange: (v: string) => void; name: string }) {
+}: {
+	value: string;
+	onChange: (v: string) => void;
+	name: string;
+}) {
 	const [open, setOpen] = useState(false);
 	const [query, setQuery] = useState("");
 	const [results, setResults] = useState<string[]>([]);
@@ -466,7 +494,10 @@ function IconPickerInput({
 
 	useEffect(() => {
 		function onDown(e: MouseEvent) {
-			if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+			if (
+				containerRef.current &&
+				!containerRef.current.contains(e.target as Node)
+			) {
 				setOpen(false);
 			}
 		}
@@ -517,7 +548,7 @@ function IconPickerInput({
 			</div>
 
 			{open && (
-				<div className="absolute left-0 top-9 z-50 w-80 rounded-lg border border-border bg-card p-3 shadow-xl">
+				<div className="absolute top-9 left-0 z-50 w-80 rounded-lg border border-border bg-card p-3 shadow-xl">
 					<input
 						value={query}
 						onChange={(e) => setQuery(e.target.value)}
@@ -529,7 +560,10 @@ function IconPickerInput({
 
 					{searching && (
 						<div className="flex justify-center py-3">
-							<Loader2 size={14} className="animate-spin text-muted-foreground" />
+							<Loader2
+								size={14}
+								className="animate-spin text-muted-foreground"
+							/>
 						</div>
 					)}
 
@@ -553,7 +587,9 @@ function IconPickerInput({
 					)}
 
 					{!searching && results.length === 0 && query && (
-						<p className="py-3 text-center text-muted-foreground text-xs">No results</p>
+						<p className="py-3 text-center text-muted-foreground text-xs">
+							No results
+						</p>
 					)}
 
 					{!query && (
@@ -589,7 +625,9 @@ function RuleEditorDialog({
 	const [name, setName] = useState(rule?.name ?? "");
 	const [key, setKey] = useState(rule?.key ?? "");
 	const [icon, setIcon] = useState(rule?.icon ?? "");
-	const [ruleType, setRuleType] = useState<RuleType>((rule?.rule_type as RuleType) ?? "js");
+	const [ruleType, setRuleType] = useState<RuleType>(
+		(rule?.rule_type as RuleType) ?? "js",
+	);
 	const [def, setDef] = useState<Record<string, unknown>>(
 		(rule?.definition as Record<string, unknown>) ?? defaultDef("js"),
 	);
@@ -623,9 +661,21 @@ function RuleEditorDialog({
 				node_id: testNodeId || "",
 			});
 			setTestResult(res);
-			setTimeout(() => consoleRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+			setTimeout(
+				() => consoleRef.current?.scrollIntoView({ behavior: "smooth" }),
+				100,
+			);
 		} catch {
-			setTestResult({ ok: false, error: "Request failed", duration_ms: 0, status_code: 0, final_url: "", body: "", response_headers: {}, node_name: "" });
+			setTestResult({
+				ok: false,
+				error: "Request failed",
+				duration_ms: 0,
+				status_code: 0,
+				final_url: "",
+				body: "",
+				response_headers: {},
+				node_name: "",
+			});
 		} finally {
 			setTesting(false);
 		}
@@ -672,7 +722,7 @@ function RuleEditorDialog({
 				style={{ maxHeight: "94vh" }}
 			>
 				{/* ── Toolbar ── */}
-				<div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2.5">
+				<div className="flex flex-wrap items-center gap-2 border-border border-b px-4 py-2.5">
 					<input
 						value={name}
 						onChange={(e) => setName(e.target.value)}
@@ -683,7 +733,9 @@ function RuleEditorDialog({
 					{!isEdit && (
 						<input
 							value={key}
-							onChange={(e) => setKey(e.target.value.toLowerCase().replace(/\s+/g, "_"))}
+							onChange={(e) =>
+								setKey(e.target.value.toLowerCase().replace(/\s+/g, "_"))
+							}
 							placeholder="key"
 							className="h-7 w-28 rounded border border-border bg-background px-2 font-mono text-sm focus:outline-none focus:ring-1 focus:ring-ring"
 						/>
@@ -724,7 +776,7 @@ function RuleEditorDialog({
 					<select
 						value={testNodeId}
 						onChange={(e) => setTestNodeId(e.target.value)}
-						className="h-7 max-w-[160px] rounded border border-border bg-background px-2 text-xs text-muted-foreground focus:outline-none"
+						className="h-7 max-w-[160px] rounded border border-border bg-background px-2 text-muted-foreground text-xs focus:outline-none"
 						title="Node to test through"
 					>
 						<option value="">Direct (no proxy)</option>
@@ -756,7 +808,9 @@ function RuleEditorDialog({
 						className="flex h-7 items-center gap-1.5 rounded px-3 text-sm text-white disabled:opacity-50"
 						style={{ background: "var(--color-btn-success)" }}
 					>
-						{saveMut.isPending && <Loader2 size={11} className="animate-spin" />}
+						{saveMut.isPending && (
+							<Loader2 size={11} className="animate-spin" />
+						)}
 						{isEdit ? "Save" : "Create"}
 					</button>
 
@@ -794,7 +848,12 @@ function RuleEditorDialog({
 								<ConsolePanel
 									result={testResult}
 									loading={testing}
-									nodeLabel={testResult?.node_name ?? (testNodeId ? (testNodes.find((n) => n.id === testNodeId)?.name ?? "") : "")}
+									nodeLabel={
+										testResult?.node_name ??
+										(testNodeId
+											? (testNodes.find((n) => n.id === testNodeId)?.name ?? "")
+											: "")
+									}
 								/>
 							)}
 						</div>
@@ -802,7 +861,7 @@ function RuleEditorDialog({
 
 					{/* Docs sidebar */}
 					{showDocs && (
-						<div className="w-72 flex-shrink-0 overflow-y-auto border-l border-border bg-background/50">
+						<div className="w-72 flex-shrink-0 overflow-y-auto border-border border-l bg-background/50">
 							<DocsPanel ruleType={ruleType} />
 						</div>
 					)}
@@ -849,7 +908,7 @@ function ScriptEditorArea({
 	return (
 		<div className="flex min-h-0 flex-1 flex-col">
 			{/* Tabs */}
-			<div className="flex items-center gap-0 border-b border-border bg-secondary/30 px-3 pt-1">
+			<div className="flex items-center gap-0 border-border border-b bg-secondary/30 px-3 pt-1">
 				{(["prelude", "code"] as const).map((tab) => (
 					<button
 						key={tab}
@@ -863,8 +922,8 @@ function ScriptEditorArea({
 						].join(" ")}
 					>
 						{tab === "prelude" ? "Prelude" : "Code"}
-						{tab === "prelude" && !!(def?.prelude) && (
-							<span className="ml-1.5 h-1.5 w-1.5 rounded-full bg-blue-400 inline-block" />
+						{tab === "prelude" && !!def?.prelude && (
+							<span className="ml-1.5 inline-block h-1.5 w-1.5 rounded-full bg-blue-400" />
 						)}
 					</button>
 				))}
@@ -925,19 +984,27 @@ function ConsolePanel({
 	result,
 	loading,
 	nodeLabel,
-}: { result: TestRuleResult | null; loading: boolean; nodeLabel: string }) {
+}: {
+	result: TestRuleResult | null;
+	loading: boolean;
+	nodeLabel: string;
+}) {
 	const [headersOpen, setHeadersOpen] = useState(false);
 
 	const headerEntries = result?.response_headers
-		? Object.entries(result.response_headers).sort(([a], [b]) => a.localeCompare(b))
+		? Object.entries(result.response_headers).sort(([a], [b]) =>
+				a.localeCompare(b),
+			)
 		: [];
 
 	return (
-		<div className="border-t border-border bg-[#1e1e1e] font-mono text-xs">
+		<div className="border-border border-t bg-[#1e1e1e] font-mono text-xs">
 			{/* Title bar */}
-			<div className="flex items-center gap-2 border-b border-white/5 px-3 py-1.5">
+			<div className="flex items-center gap-2 border-white/5 border-b px-3 py-1.5">
 				<span className="text-[#858585]">Console</span>
-				{loading && <Loader2 size={10} className="animate-spin text-[#858585]" />}
+				{loading && (
+					<Loader2 size={10} className="animate-spin text-[#858585]" />
+				)}
 				{!loading && result && (
 					<span className={result.ok ? "text-[#4ec9b0]" : "text-[#f14c4c]"}>
 						{result.ok ? "✓ PASS" : "✗ FAIL"}
@@ -954,8 +1021,8 @@ function ConsolePanel({
 			<div className="space-y-2 px-3 py-2.5">
 				{loading && (
 					<p className="text-[#858585]">
-						<span className="text-[#569cd6]">&gt;</span>{" "}
-						Running{nodeLabel ? ` through ${nodeLabel}` : " direct"}…
+						<span className="text-[#569cd6]">&gt;</span> Running
+						{nodeLabel ? ` through ${nodeLabel}` : " direct"}…
 					</p>
 				)}
 
@@ -969,7 +1036,13 @@ function ConsolePanel({
 								</span>
 							)}
 							{result.status_code != null && result.status_code > 0 && (
-								<span className={result.status_code < 400 ? "text-[#4ec9b0]" : "text-[#f14c4c]"}>
+								<span
+									className={
+										result.status_code < 400
+											? "text-[#4ec9b0]"
+											: "text-[#f14c4c]"
+									}
+								>
 									HTTP {result.status_code}
 								</span>
 							)}
@@ -998,13 +1071,19 @@ function ConsolePanel({
 								>
 									<ChevronRight
 										size={10}
-										className={headersOpen ? "rotate-90 transition-transform" : "transition-transform"}
+										className={
+											headersOpen
+												? "rotate-90 transition-transform"
+												: "transition-transform"
+										}
 									/>
 									<span>Response Headers</span>
-									<span className="ml-1 text-[#569cd6]">{headerEntries.length}</span>
+									<span className="ml-1 text-[#569cd6]">
+										{headerEntries.length}
+									</span>
 								</button>
 								{headersOpen && (
-									<div className="border-t border-white/5 px-2 pb-1.5">
+									<div className="border-white/5 border-t px-2 pb-1.5">
 										{headerEntries.map(([k, v]) => (
 											<div key={k} className="flex gap-2 py-0.5">
 												<span className="shrink-0 text-[#9cdcfe]">{k}:</span>
@@ -1019,7 +1098,7 @@ function ConsolePanel({
 						{/* Body */}
 						{result.body && (
 							<div className="rounded border border-white/5">
-								<div className="flex items-center justify-between border-b border-white/5 px-2 py-1">
+								<div className="flex items-center justify-between border-white/5 border-b px-2 py-1">
 									<span className="text-[#858585]">
 										Body{" "}
 										<span className="text-[#569cd6]">
@@ -1051,12 +1130,12 @@ function DocsPanel({ ruleType }: { ruleType: RuleType }) {
 	const toggle = (h: string) => setOpen((p) => ({ ...p, [h]: !p[h] }));
 
 	return (
-		<div className="p-3 space-y-1">
+		<div className="space-y-1 p-3">
 			<p className="mb-2 font-semibold text-foreground text-xs">
 				{RULE_TYPE_LABELS[ruleType]} — API Reference
 			</p>
 			{docs.sections.map((s) => (
-				<div key={s.h} className="rounded border border-border overflow-hidden">
+				<div key={s.h} className="overflow-hidden rounded border border-border">
 					<button
 						type="button"
 						onClick={() => toggle(s.h)}
@@ -1066,7 +1145,7 @@ function DocsPanel({ ruleType }: { ruleType: RuleType }) {
 						{open[s.h] ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
 					</button>
 					{open[s.h] && (
-						<pre className="border-t border-border bg-secondary/30 px-2.5 py-2 font-mono text-xs leading-relaxed text-muted-foreground whitespace-pre-wrap">
+						<pre className="whitespace-pre-wrap border-border border-t bg-secondary/30 px-2.5 py-2 font-mono text-muted-foreground text-xs leading-relaxed">
 							{s.body}
 						</pre>
 					)}
@@ -1086,13 +1165,18 @@ function ConditionEditor({
 	onChange: (d: Record<string, unknown>) => void;
 }) {
 	const set = (k: string, v: unknown) => onChange({ ...def, [k]: v });
-	const listVal = (v: unknown) => (Array.isArray(v) ? (v as string[]).join(", ") : "");
-	const parseList = (s: string) => s.split(",").map((x) => x.trim()).filter(Boolean);
+	const listVal = (v: unknown) =>
+		Array.isArray(v) ? (v as string[]).join(", ") : "";
+	const parseList = (s: string) =>
+		s
+			.split(",")
+			.map((x) => x.trim())
+			.filter(Boolean);
 	const inp =
 		"h-7 w-full rounded border border-border bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring";
 
 	return (
-		<div className="space-y-3 max-w-lg">
+		<div className="max-w-lg space-y-3">
 			<FL label="URL (required)">
 				<input
 					value={(def?.url as string) ?? ""}

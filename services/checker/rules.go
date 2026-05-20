@@ -307,7 +307,7 @@ func TestRule(ctx context.Context, p *TestRuleParams) (*TestRuleResult, error) {
 	}
 
 	rule := &PlatformRule{RuleType: p.RuleType, Definition: p.Definition}
-	ok, err := runRule(ctx, httpClient, rule)
+	ok, err := runRule(ctx, httpClient, rule, nil)
 	ms := time.Since(start).Milliseconds()
 	if err != nil {
 		return &TestRuleResult{OK: false, Error: err.Error(), DurationMs: ms, NodeName: nodeName}, nil

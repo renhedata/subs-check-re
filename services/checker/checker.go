@@ -153,6 +153,7 @@ type CheckOptions struct {
 	SpeedTest       bool     `json:"speed_test"`
 	UploadSpeedTest bool     `json:"upload_speed_test"`
 	MediaApps       []string `json:"media_apps"`
+	Debug           bool     `json:"debug"`
 }
 
 func defaultCheckOptions() CheckOptions {
@@ -186,18 +187,20 @@ type TriggerParams struct {
 	SpeedTest       *bool    `json:"speed_test"`
 	UploadSpeedTest *bool    `json:"upload_speed_test"`
 	MediaApps       []string `json:"media_apps"`
+	Debug           *bool    `json:"debug"`
 }
 
 // --- In-process SSE channels ---
 
 type progressUpdate struct {
-	Progress        int    `json:"progress"`
-	Total           int    `json:"total"`
-	NodeName        string `json:"node_name,omitempty"`
-	Alive           bool   `json:"alive"`
-	LatencyMs       int    `json:"latency_ms,omitempty"`
-	SpeedKbps       int    `json:"speed_kbps,omitempty"`
-	UploadSpeedKbps int    `json:"upload_speed_kbps,omitempty"`
+	Progress        int        `json:"progress"`
+	Total           int        `json:"total"`
+	NodeName        string     `json:"node_name,omitempty"`
+	Alive           bool       `json:"alive"`
+	LatencyMs       int        `json:"latency_ms,omitempty"`
+	SpeedKbps       int        `json:"speed_kbps,omitempty"`
+	UploadSpeedKbps int        `json:"upload_speed_kbps,omitempty"`
+	Debug           *NodeDebug `json:"debug,omitempty"`
 }
 
 var (
@@ -363,6 +366,9 @@ func TriggerCheck(ctx context.Context, subscriptionID string, p *TriggerParams) 
 		}
 		if p.MediaApps != nil {
 			opts.MediaApps = p.MediaApps
+		}
+		if p.Debug != nil {
+			opts.Debug = *p.Debug
 		}
 	}
 	optsJSON, _ := json.Marshal(opts)
@@ -801,7 +807,7 @@ func runJob(parentCtx context.Context, jobID, subscriptionID, userID string) {
 				totalTrafficBytes.Add(res.TrafficBytes)
 				n := processedCount.Add(1)
 				db.Exec(context.Background(), `UPDATE check_jobs SET progress=$2 WHERE id=$1`, jobID, n)
-				broadcastProgress(jobID, progressUpdate{
+				pu := progressUpdate{
 					Progress:        int(n),
 					Total:           total,
 					NodeName:        res.NodeName,
@@ -809,7 +815,11 @@ func runJob(parentCtx context.Context, jobID, subscriptionID, userID string) {
 					LatencyMs:       res.LatencyMs,
 					SpeedKbps:       res.SpeedKbps,
 					UploadSpeedKbps: res.UploadSpeedKbps,
-				})
+				}
+				if opts.Debug && res.Debug != nil {
+					pu.Debug = res.Debug
+				}
+				broadcastProgress(jobID, pu)
 			}
 		}()
 	}

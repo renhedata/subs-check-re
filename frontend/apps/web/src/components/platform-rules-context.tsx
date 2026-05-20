@@ -5,9 +5,15 @@ import type { checker } from "@/lib/client.gen";
 
 type PlatformRule = checker.PlatformRule;
 
-const PlatformRulesContext = createContext<Map<string, PlatformRule>>(new Map());
+const PlatformRulesContext = createContext<Map<string, PlatformRule>>(
+	new Map(),
+);
 
-export function PlatformRulesProvider({ children }: { children: React.ReactNode }) {
+export function PlatformRulesProvider({
+	children,
+}: {
+	children: React.ReactNode;
+}) {
 	const { data } = useQuery({
 		queryKey: ["platform-rules"],
 		queryFn: () => client.checker.ListRules(),
@@ -15,7 +21,8 @@ export function PlatformRulesProvider({ children }: { children: React.ReactNode 
 	});
 
 	const ruleMap = useMemo(
-		() => new Map<string, PlatformRule>((data?.rules ?? []).map((r) => [r.key, r])),
+		() =>
+			new Map<string, PlatformRule>((data?.rules ?? []).map((r) => [r.key, r])),
 		[data],
 	);
 

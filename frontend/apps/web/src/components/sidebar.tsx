@@ -82,9 +82,9 @@ export function Sidebar() {
 	}
 
 	return (
-		<aside className="flex h-screen w-[220px] flex-shrink-0 flex-col border-r bg-card border-border">
+		<aside className="flex h-screen w-[220px] flex-shrink-0 flex-col border-border border-r bg-card">
 			{/* Logo */}
-			<div className="flex items-center gap-2.5 border-b border-border px-4 py-3">
+			<div className="flex items-center gap-2.5 border-border border-b px-4 py-3">
 				<div
 					className="flex h-6 w-6 items-center justify-center rounded-md font-bold text-xs"
 					style={{
@@ -107,7 +107,7 @@ export function Sidebar() {
 			</nav>
 
 			{/* Bottom nav */}
-			<div className="flex flex-col gap-0.5 border-t border-border p-2">
+			<div className="flex flex-col gap-0.5 border-border border-t p-2">
 				{BOTTOM_ITEMS.map((item) => (
 					<NavItem key={item.to} {...item} />
 				))}
@@ -117,7 +117,9 @@ export function Sidebar() {
 					type="button"
 					onClick={toggle}
 					className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-muted-foreground text-sm transition-colors hover:bg-white/5 hover:text-foreground"
-					title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+					title={
+						theme === "dark" ? "Switch to light mode" : "Switch to dark mode"
+					}
 				>
 					{theme === "dark" ? (
 						<Sun size={14} strokeWidth={1.5} />
@@ -132,9 +134,7 @@ export function Sidebar() {
 					onClick={logout}
 					className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-muted-foreground text-sm transition-colors hover:bg-white/5 hover:text-foreground"
 				>
-					<div
-						className="flex h-5 w-5 items-center justify-center rounded-full bg-secondary"
-					>
+					<div className="flex h-5 w-5 items-center justify-center rounded-full bg-secondary">
 						<User size={10} strokeWidth={1.5} />
 					</div>
 					<span className="flex-1 truncate text-left">{username}</span>

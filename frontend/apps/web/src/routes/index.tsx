@@ -3,14 +3,22 @@
 import { Skeleton } from "@frontend/ui/components/skeleton";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { Check, CheckCircle, ChevronDown, ChevronRight, Clock, Copy, FileText, RefreshCw } from "lucide-react";
+import {
+	Check,
+	CheckCircle,
+	ChevronDown,
+	ChevronRight,
+	Clock,
+	Copy,
+	FileText,
+	RefreshCw,
+} from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-
+import type { PlatformKey } from "@/components/platform-icons";
+import { PlatformIcon } from "@/components/platform-icons";
 import { client } from "@/lib/client";
 import type { checker } from "@/lib/client.gen";
-import { PlatformIcon } from "@/components/platform-icons";
-import type { PlatformKey } from "@/components/platform-icons";
 
 type LocalUnlockResult = checker.LocalUnlockResult;
 
@@ -37,7 +45,7 @@ function StatCard({
 		<div className="rounded-lg border border-border bg-card p-4">
 			<div className="mb-2 flex items-center gap-1.5">
 				<Icon size={13} strokeWidth={1.5} className="text-muted-foreground" />
-				<span className="font-medium text-[11px] uppercase tracking-[0.4px] text-muted-foreground">
+				<span className="font-medium text-[11px] text-muted-foreground uppercase tracking-[0.4px]">
 					{label}
 				</span>
 			</div>
@@ -91,7 +99,7 @@ function DashboardPage() {
 		<div className="space-y-6">
 			<div>
 				<h1 className="font-semibold text-foreground text-lg">Dashboard</h1>
-				<p className="mt-0.5 text-sm text-muted-foreground">
+				<p className="mt-0.5 text-muted-foreground text-sm">
 					Overview of your proxy subscriptions
 				</p>
 			</div>
@@ -126,14 +134,14 @@ function DashboardPage() {
 			<div className="space-y-4">
 				<div>
 					<h2 className="font-semibold text-foreground text-sm">Export API</h2>
-					<p className="mt-0.5 text-xs text-muted-foreground">
+					<p className="mt-0.5 text-muted-foreground text-xs">
 						Use these URLs as subscription links directly in your proxy client.
 					</p>
 				</div>
 
 				{/* API Key */}
 				<div className="space-y-2 rounded-lg border border-border bg-card p-4">
-					<p className="font-medium text-xs text-muted-foreground">API Key</p>
+					<p className="font-medium text-muted-foreground text-xs">API Key</p>
 					<div className="flex items-center gap-2">
 						<code className="flex-1 truncate rounded bg-background px-3 py-1.5 font-mono text-foreground text-xs">
 							{apiKey || "—"}
@@ -144,7 +152,7 @@ function DashboardPage() {
 								navigator.clipboard.writeText(apiKey);
 								toast.success("Copied");
 							}}
-							className="rounded-md border border-border px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-white/5"
+							className="rounded-md border border-border px-2.5 py-1.5 text-muted-foreground text-xs transition-colors hover:bg-white/5"
 						>
 							Copy
 						</button>
@@ -152,7 +160,7 @@ function DashboardPage() {
 							type="button"
 							onClick={() => regenerateMut.mutate()}
 							disabled={regenerateMut.isPending}
-							className="rounded-md border border-border px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-white/5 disabled:opacity-50"
+							className="rounded-md border border-border px-2.5 py-1.5 text-muted-foreground text-xs transition-colors hover:bg-white/5 disabled:opacity-50"
 						>
 							Regenerate
 						</button>
@@ -170,7 +178,7 @@ function DashboardPage() {
 								const url = `${origin}/api/export/all?token=${apiKey}&target=${t}`;
 								return (
 									<div key={t} className="flex items-center gap-2">
-										<code className="flex-1 truncate rounded bg-background px-2 py-1 font-mono text-muted-foreground text-[11px]">
+										<code className="flex-1 truncate rounded bg-background px-2 py-1 font-mono text-[11px] text-muted-foreground">
 											{url}
 										</code>
 										<button
@@ -206,10 +214,10 @@ function DashboardPage() {
 
 				{/* Parameter reference */}
 				<div className="rounded-lg border border-border bg-card p-4">
-					<p className="mb-2 font-medium text-xs text-muted-foreground">
+					<p className="mb-2 font-medium text-muted-foreground text-xs">
 						Parameters
 					</p>
-					<table className="w-full text-xs text-muted-foreground">
+					<table className="w-full text-muted-foreground text-xs">
 						<tbody>
 							<tr>
 								<td className="py-0.5 pr-4 font-mono text-primary">token</td>
@@ -223,10 +231,11 @@ function DashboardPage() {
 									<code>routeros</code> — RouterOS .rsc firewall script
 								</td>
 							</tr>
-						<tr>
+							<tr>
 								<td className="py-0.5 pr-4 font-mono text-primary">list</td>
 								<td>
-									RouterOS address-list name (default: <code>clash_servers</code>)
+									RouterOS address-list name (default:{" "}
+									<code>clash_servers</code>)
 								</td>
 							</tr>
 						</tbody>
@@ -274,25 +283,34 @@ function SubExportRow({
 				onClick={() => setOpen(!open)}
 				className="flex w-full items-center justify-between px-4 py-2.5"
 			>
-				<span className="truncate text-left text-sm text-muted-foreground">
+				<span className="truncate text-left text-muted-foreground text-sm">
 					{sub.name || sub.url}
 				</span>
 				{open ? (
-					<ChevronDown size={13} strokeWidth={1.5} style={{ color: "var(--color-dimmed)" }} />
+					<ChevronDown
+						size={13}
+						strokeWidth={1.5}
+						style={{ color: "var(--color-dimmed)" }}
+					/>
 				) : (
-					<ChevronRight size={13} strokeWidth={1.5} style={{ color: "var(--color-dimmed)" }} />
+					<ChevronRight
+						size={13}
+						strokeWidth={1.5}
+						style={{ color: "var(--color-dimmed)" }}
+					/>
 				)}
 			</button>
 			{open && (
-				<div className="flex flex-col gap-1.5 border-t border-border px-4 py-3">
+				<div className="flex flex-col gap-1.5 border-border border-t px-4 py-3">
 					{(["clash", "base64", "routeros"] as const).map((t) => (
 						<div key={t} className="flex items-center gap-2">
-							<span
-								className="w-16 flex-shrink-0 text-[11px] text-muted-foreground"
-							>
+							<span className="w-16 flex-shrink-0 text-[11px] text-muted-foreground">
 								{t}
 							</span>
-							<code className="flex-1 truncate rounded bg-background px-2 py-1 font-mono text-[11px]" style={{ color: "var(--color-code)" }}>
+							<code
+								className="flex-1 truncate rounded bg-background px-2 py-1 font-mono text-[11px]"
+								style={{ color: "var(--color-code)" }}
+							>
 								{base}&target={t}
 							</code>
 							<CopyIconButton text={`${base}&target=${t}`} />
@@ -305,9 +323,15 @@ function SubExportRow({
 }
 
 const PLATFORM_KEYS: (keyof LocalUnlockResult)[] = [
-	"openai", "claude", "gemini", "grok",
-	"netflix", "youtube", "youtube_premium",
-	"disney", "tiktok",
+	"openai",
+	"claude",
+	"gemini",
+	"grok",
+	"netflix",
+	"youtube",
+	"youtube_premium",
+	"disney",
+	"tiktok",
 ];
 
 function NetworkUnlockPanel() {
@@ -325,7 +349,7 @@ function NetworkUnlockPanel() {
 					<h2 className="font-semibold text-foreground text-sm">
 						Server Network Unlock
 					</h2>
-					<p className="mt-0.5 text-xs text-muted-foreground">
+					<p className="mt-0.5 text-muted-foreground text-xs">
 						Platforms accessible from this server's IP
 					</p>
 				</div>
@@ -333,7 +357,7 @@ function NetworkUnlockPanel() {
 					type="button"
 					onClick={() => refetch()}
 					disabled={isFetching}
-					className="flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-white/5 disabled:opacity-50"
+					className="flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-muted-foreground text-xs transition-colors hover:bg-white/5 disabled:opacity-50"
 				>
 					<RefreshCw
 						size={11}
@@ -365,10 +389,16 @@ function NetworkUnlockPanel() {
 										className="inline-flex items-center gap-1.5 rounded-md px-2 py-1"
 										style={{
 											opacity: available ? 1 : 0.3,
-											background: available ? "var(--secondary)" : "transparent",
+											background: available
+												? "var(--secondary)"
+												: "transparent",
 										}}
 									>
-										<PlatformIcon platform={k as PlatformKey} size={16} showLabel />
+										<PlatformIcon
+											platform={k as PlatformKey}
+											size={16}
+											showLabel
+										/>
 										{available ? (
 											<CheckCircle size={10} className="text-green-500" />
 										) : null}
@@ -387,10 +417,7 @@ function NetworkUnlockPanel() {
 						)}
 					</div>
 				) : (
-					<p
-						className="text-xs"
-						style={{ color: "var(--color-dimmed)" }}
-					>
+					<p className="text-xs" style={{ color: "var(--color-dimmed)" }}>
 						Click Refresh to check.
 					</p>
 				)}

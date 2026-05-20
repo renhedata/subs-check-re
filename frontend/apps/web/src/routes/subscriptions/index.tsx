@@ -8,11 +8,10 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { Clock, Loader2, Pencil, Play, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-
+import type { PlatformKey } from "@/components/platform-icons";
+import { PlatformIcon } from "@/components/platform-icons";
 import { client, isApiError } from "@/lib/client";
 import type { subscription } from "@/lib/client.gen";
-import { PlatformIcon } from "@/components/platform-icons";
-import type { PlatformKey } from "@/components/platform-icons";
 
 type Subscription = subscription.Subscription;
 
@@ -100,7 +99,12 @@ function SubscriptionsPage() {
 			opts,
 		}: {
 			id: string;
-			opts: { speed_test: boolean; upload_speed_test: boolean; media_apps: string[] };
+			opts: {
+				speed_test: boolean;
+				upload_speed_test: boolean;
+				media_apps: string[];
+				debug: boolean;
+			};
 		}) => client.checker.TriggerCheck(id, opts),
 		onSuccess: (resp, { id }) => {
 			toast.success("Check started");
@@ -215,7 +219,7 @@ function SubscriptionsPage() {
 						))}
 
 				{!isLoading && subs.length === 0 && (
-					<p className="py-10 text-center text-sm text-muted-foreground">
+					<p className="py-10 text-center text-muted-foreground text-sm">
 						No subscriptions yet. Add one above.
 					</p>
 				)}
@@ -243,7 +247,12 @@ function SubRow({
 	triggerMut: {
 		mutate: (args: {
 			id: string;
-			opts: { speed_test: boolean; upload_speed_test: boolean; media_apps: string[] };
+			opts: {
+				speed_test: boolean;
+				upload_speed_test: boolean;
+				media_apps: string[];
+				debug: boolean;
+			};
 		}) => void;
 		isPending: boolean;
 	};
@@ -271,6 +280,7 @@ function SubRow({
 	const [speedTest, setSpeedTest] = useState(true);
 	const [uploadSpeedTest, setUploadSpeedTest] = useState(false);
 	const [mediaApps, setMediaApps] = useState<string[]>([...MEDIA_APPS]);
+	const [debugMode, setDebugMode] = useState(false);
 
 	function toggleApp(app: string) {
 		setMediaApps((prev) =>
@@ -281,7 +291,12 @@ function SubRow({
 	function handleCheck() {
 		triggerMut.mutate({
 			id: sub.id,
-			opts: { speed_test: speedTest, upload_speed_test: uploadSpeedTest, media_apps: mediaApps },
+			opts: {
+				speed_test: speedTest,
+				upload_speed_test: uploadSpeedTest,
+				media_apps: mediaApps,
+				debug: debugMode,
+			},
 		});
 		setShowOpts(false);
 	}
@@ -315,7 +330,7 @@ function SubRow({
 							{sub.name || sub.url}
 						</p>
 						{sub.name && (
-							<p className="mt-0.5 truncate font-mono text-xs text-muted-foreground">
+							<p className="mt-0.5 truncate font-mono text-muted-foreground text-xs">
 								{sub.url}
 							</p>
 						)}
@@ -334,13 +349,19 @@ function SubRow({
 				<div className="flex flex-shrink-0 items-center gap-2">
 					<button
 						type="button"
-						onClick={() => toggleEnabledMut.mutate({ id: sub.id, enabled: !sub.enabled })}
+						onClick={() =>
+							toggleEnabledMut.mutate({ id: sub.id, enabled: !sub.enabled })
+						}
 						disabled={toggleEnabledMut.isPending}
 						title={sub.enabled ? "Disable subscription" : "Enable subscription"}
-						className="rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors disabled:opacity-50"
+						className="rounded px-1.5 py-0.5 font-medium text-[10px] transition-colors disabled:opacity-50"
 						style={{
-							background: sub.enabled ? "var(--color-badge-success-bg)" : "var(--color-badge-danger-bg)",
-							color: sub.enabled ? "var(--color-badge-success)" : "var(--color-badge-danger)",
+							background: sub.enabled
+								? "var(--color-badge-success-bg)"
+								: "var(--color-badge-danger-bg)",
+							color: sub.enabled
+								? "var(--color-badge-success)"
+								: "var(--color-badge-danger)",
 						}}
 					>
 						{sub.enabled ? "on" : "off"}
@@ -348,7 +369,7 @@ function SubRow({
 					<button
 						type="button"
 						onClick={() => setShowOpts(!showOpts)}
-						className="flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-white/5"
+						className="flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-muted-foreground text-xs transition-colors hover:bg-white/5"
 					>
 						<Play size={11} strokeWidth={1.5} />
 						Check
@@ -379,21 +400,32 @@ function SubRow({
 			</div>
 
 			{showOpts && (
-				<div className="space-y-3 border-t border-border px-4 py-3">
+				<div className="space-y-3 border-border border-t px-4 py-3">
 					<div className="flex flex-wrap gap-4">
 						<label className="flex cursor-pointer select-none items-center gap-2">
 							<Checkbox
 								checked={speedTest}
 								onCheckedChange={(v) => setSpeedTest(v === true)}
 							/>
-							<span className="text-xs text-muted-foreground">↓ Speed test</span>
+							<span className="text-muted-foreground text-xs">
+								↓ Speed test
+							</span>
 						</label>
 						<label className="flex cursor-pointer select-none items-center gap-2">
 							<Checkbox
 								checked={uploadSpeedTest}
 								onCheckedChange={(v) => setUploadSpeedTest(v === true)}
 							/>
-							<span className="text-xs text-muted-foreground">↑ Upload test</span>
+							<span className="text-muted-foreground text-xs">
+								↑ Upload test
+							</span>
+						</label>
+						<label className="flex cursor-pointer select-none items-center gap-2">
+							<Checkbox
+								checked={debugMode}
+								onCheckedChange={(v) => setDebugMode(v === true)}
+							/>
+							<span className="text-muted-foreground text-xs">Debug mode</span>
 						</label>
 					</div>
 					<div className="flex flex-wrap gap-2">
@@ -406,7 +438,11 @@ function SubRow({
 									checked={mediaApps.includes(app)}
 									onCheckedChange={() => toggleApp(app)}
 								/>
-								<PlatformIcon platform={app as PlatformKey} size={13} showLabel />
+								<PlatformIcon
+									platform={app as PlatformKey}
+									size={13}
+									showLabel
+								/>
 							</label>
 						))}
 					</div>
@@ -427,7 +463,7 @@ function SubRow({
 						<button
 							type="button"
 							onClick={() => setShowOpts(false)}
-							className="rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground"
+							className="rounded-md border border-border px-3 py-1.5 text-muted-foreground text-sm"
 						>
 							Cancel
 						</button>
@@ -436,7 +472,7 @@ function SubRow({
 			)}
 
 			{showEdit && (
-				<div className="space-y-3 border-t border-border px-4 py-3">
+				<div className="space-y-3 border-border border-t px-4 py-3">
 					<div className="grid gap-3 sm:grid-cols-2">
 						<div className="space-y-1.5">
 							<Label className="text-muted-foreground text-xs">Name</Label>
@@ -474,7 +510,7 @@ function SubRow({
 						<button
 							type="button"
 							onClick={() => setShowEdit(false)}
-							className="rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground"
+							className="rounded-md border border-border px-3 py-1.5 text-muted-foreground text-sm"
 						>
 							Cancel
 						</button>

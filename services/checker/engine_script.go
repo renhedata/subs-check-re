@@ -13,9 +13,12 @@ import (
 
 // runJSRule runs a JS or TS script rule using goja.
 // Scripts receive an `http_get(url, opts?)` function and must return a bool value.
-func runJSRule(ctx context.Context, client *http.Client, ruleType string, defRaw json.RawMessage) (bool, error) {
+func runJSRule(ctx context.Context, client *http.Client, ruleType string, defRaw json.RawMessage, dr *DebugRecorder) (bool, error) {
 	var def ScriptDef
 	if err := json.Unmarshal(defRaw, &def); err != nil {
+		if dr != nil {
+			dr.Error(err)
+		}
 		return false, err
 	}
 
@@ -24,6 +27,9 @@ func runJSRule(ctx context.Context, client *http.Client, ruleType string, defRaw
 		var err error
 		code, err = transpileTS(code)
 		if err != nil {
+			if dr != nil {
+				dr.Error(err)
+			}
 			return false, fmt.Errorf("typescript transpile error: %w", err)
 		}
 	}
@@ -34,15 +40,41 @@ func runJSRule(ctx context.Context, client *http.Client, ruleType string, defRaw
 	vm := goja.New()
 	vm.SetFieldNameMapper(goja.TagFieldNameMapper("json", true))
 
-	if err := injectHTTPGet(ctx, vm, client); err != nil {
+	if err := injectHTTPGet(ctx, vm, client, dr); err != nil {
+		if dr != nil {
+			dr.Error(err)
+		}
 		return false, err
+	}
+
+	// Inject console.log
+	if dr != nil {
+		_ = vm.Set("console", map[string]any{
+			"log": func(args ...goja.Value) {
+				var msg string
+				for i, a := range args {
+					if i > 0 {
+						msg += " "
+					}
+					msg += a.String()
+				}
+				dr.Log(msg)
+			},
+		})
 	}
 
 	val, err := vm.RunString(wrapped)
 	if err != nil {
+		if dr != nil {
+			dr.Error(err)
+		}
 		return false, fmt.Errorf("script error: %w", err)
 	}
-	return val.ToBoolean(), nil
+	result := val.ToBoolean()
+	if dr != nil {
+		dr.Variable("return_value", result)
+	}
+	return result, nil
 }
 
 // httpGetResult is the object returned to scripts by http_get().
@@ -53,7 +85,7 @@ type httpGetResult struct {
 }
 
 // injectHTTPGet registers the http_get() function in the goja VM.
-func injectHTTPGet(ctx context.Context, vm *goja.Runtime, client *http.Client) error {
+func injectHTTPGet(ctx context.Context, vm *goja.Runtime, client *http.Client, dr *DebugRecorder) error {
 	fn := func(call goja.FunctionCall) goja.Value {
 		if len(call.Arguments) == 0 {
 			panic(vm.ToValue("http_get requires a URL argument"))
@@ -73,6 +105,10 @@ func injectHTTPGet(ctx context.Context, vm *goja.Runtime, client *http.Client) e
 			}
 		}
 
+		if dr != nil {
+			dr.HTTPReq(url, "GET", headers)
+		}
+
 		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 		if err != nil {
 			panic(vm.ToValue(err.Error()))
@@ -87,6 +123,10 @@ func injectHTTPGet(ctx context.Context, vm *goja.Runtime, client *http.Client) e
 		}
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 256*1024))
 		resp.Body.Close()
+
+		if dr != nil {
+			dr.HTTPResp(resp.StatusCode, nil, string(body))
+		}
 
 		return vm.ToValue(httpGetResult{
 			Status:   resp.StatusCode,

@@ -274,6 +274,7 @@ type nodeCheckResult struct {
 	TikTok          bool
 	TrafficBytes    int64
 	ExtraPlatforms  map[string]bool
+	Debug           *NodeDebug
 }
 
 // checkNode runs all checks for a single proxy mapping and returns the result.
@@ -283,17 +284,45 @@ func checkNode(ctx context.Context, nodeID string, mapping map[string]any, speed
 	name, _ := mapping["name"].(string)
 	result := nodeCheckResult{NodeID: nodeID, NodeName: name}
 
+	if opts.Debug {
+		result.Debug = &NodeDebug{NodeID: nodeID, NodeName: name}
+	}
+
 	pc := newProxyClient(mapping)
 	if pc == nil {
+		if opts.Debug && result.Debug != nil {
+			result.Debug.Traces = append(result.Debug.Traces, DebugTrace{
+				Platform: "connectivity",
+				Result:   false,
+				Steps:    []DebugStep{{Type: "error", Description: "failed to create proxy client", Details: map[string]any{"error": "invalid proxy config"}}},
+			})
+		}
 		return result
 	}
 	defer pc.close()
 
 	if !isAlive(ctx, pc.Client, latencyTestURL) {
+		if opts.Debug && result.Debug != nil {
+			result.Debug.Traces = append(result.Debug.Traces, DebugTrace{
+				Platform: "connectivity",
+				Result:   false,
+				Steps:    []DebugStep{{Type: "variable", Description: "alive = false", Details: map[string]any{"name": "alive", "value": false}}},
+			})
+		}
 		return result
 	}
 	result.Alive = true
 	result.LatencyMs = measureLatency(ctx, pc.Client, latencyTestURL)
+	if opts.Debug && result.Debug != nil {
+		result.Debug.Traces = append(result.Debug.Traces, DebugTrace{
+			Platform: "connectivity",
+			Result:   true,
+			Steps: []DebugStep{
+				{Type: "variable", Description: "alive = true", Details: map[string]any{"name": "alive", "value": true}},
+				{Type: "variable", Description: "latency_ms", Details: map[string]any{"name": "latency_ms", "value": result.LatencyMs}},
+			},
+		})
+	}
 	if opts.SpeedTest {
 		result.SpeedKbps = measureSpeed(ctx, pc.Client.Transport, speedTestURL)
 	}
@@ -308,7 +337,11 @@ func checkNode(ctx context.Context, nodeID string, mapping map[string]any, speed
 		}
 		result.IP, result.Country = getProxyInfo(ctx, mediaClient)
 
-		ruleResults := runUserRules(ctx, mediaClient, rules)
+		var ruleRecorders map[string]*DebugRecorder
+		if opts.Debug {
+			ruleRecorders = make(map[string]*DebugRecorder)
+		}
+		ruleResults := runUserRulesWithDebug(ctx, mediaClient, rules, ruleRecorders)
 
 		extra := make(map[string]bool)
 		for k, v := range ruleResults {
@@ -320,39 +353,68 @@ func checkNode(ctx context.Context, nodeID string, mapping map[string]any, speed
 			result.ExtraPlatforms = extra
 		}
 
-		// Use rule result when available, otherwise fall back to built-in function.
-		resolve := func(key string, fallback func(context.Context, *http.Client) (bool, error)) bool {
+		resolve := func(key string, fallback func(*DebugRecorder) bool) bool {
 			if v, ok := ruleResults[key]; ok {
+				if opts.Debug && result.Debug != nil {
+					steps := []DebugStep{}
+					if rd, ok := ruleRecorders[key]; ok {
+						steps = rd.Steps
+					}
+					result.Debug.Traces = append(result.Debug.Traces, DebugTrace{
+						Platform: key, Result: v, Steps: steps,
+					})
+				}
 				return v
 			}
-			v, _ := fallback(ctx, mediaClient)
+			if v, ok := extra[key]; ok {
+				if opts.Debug && result.Debug != nil {
+					steps := []DebugStep{}
+					if rd, ok := ruleRecorders[key]; ok {
+						steps = rd.Steps
+					}
+					result.Debug.Traces = append(result.Debug.Traces, DebugTrace{
+						Platform: key, Result: v, Steps: steps,
+					})
+				}
+				return v
+			}
+			var dr *DebugRecorder
+			if opts.Debug {
+				dr = &DebugRecorder{}
+			}
+			v := fallback(dr)
+			if opts.Debug && result.Debug != nil {
+				result.Debug.Traces = append(result.Debug.Traces, DebugTrace{
+					Platform: key, Result: v, Steps: dr.Steps,
+				})
+			}
 			return v
 		}
 
 		if hasApp(opts, "netflix") {
-			result.Netflix = resolve("netflix", checkNetflix)
+			result.Netflix = resolve("netflix", func(dr *DebugRecorder) bool { return checkNetflix(ctx, mediaClient, dr) })
 		}
 		if hasApp(opts, "youtube") {
-			result.YouTube = resolve("youtube", checkYouTube)
-			result.YouTubePremium = resolve("youtube_premium", checkYouTubePremium)
+			result.YouTube = resolve("youtube", func(dr *DebugRecorder) bool { return checkYouTube(ctx, mediaClient, dr) })
+			result.YouTubePremium = resolve("youtube_premium", func(dr *DebugRecorder) bool { return checkYouTubePremium(ctx, mediaClient, dr) })
 		}
 		if hasApp(opts, "openai") {
-			result.OpenAI = resolve("openai", checkOpenAI)
+			result.OpenAI = resolve("openai", func(dr *DebugRecorder) bool { return checkOpenAI(ctx, mediaClient, dr) })
 		}
 		if hasApp(opts, "claude") {
-			result.Claude = resolve("claude", checkClaude)
+			result.Claude = resolve("claude", func(dr *DebugRecorder) bool { return checkClaude(ctx, mediaClient, dr) })
 		}
 		if hasApp(opts, "gemini") {
-			result.Gemini = resolve("gemini", checkGemini)
+			result.Gemini = resolve("gemini", func(dr *DebugRecorder) bool { return checkGemini(ctx, mediaClient, dr) })
 		}
 		if hasApp(opts, "grok") {
-			result.Grok = resolve("grok", checkGrok)
+			result.Grok = resolve("grok", func(dr *DebugRecorder) bool { return checkGrok(ctx, mediaClient, dr) })
 		}
 		if hasApp(opts, "disney") {
-			result.Disney = resolve("disney", checkDisney)
+			result.Disney = resolve("disney", func(dr *DebugRecorder) bool { return checkDisney(ctx, mediaClient, dr) })
 		}
 		if hasApp(opts, "tiktok") {
-			result.TikTok = resolve("tiktok", checkTikTok)
+			result.TikTok = resolve("tiktok", func(dr *DebugRecorder) bool { return checkTikTok(ctx, mediaClient, dr) })
 		}
 	}
 

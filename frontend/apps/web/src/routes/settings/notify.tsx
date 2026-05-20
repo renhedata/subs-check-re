@@ -24,9 +24,8 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-
-import { PlatformIcon } from "@/components/platform-icons";
 import type { PlatformKey } from "@/components/platform-icons";
+import { PlatformIcon } from "@/components/platform-icons";
 import { client, isApiError } from "@/lib/client";
 import type { JSONValue, notify } from "@/lib/client.gen";
 
@@ -122,8 +121,13 @@ function NotifyPage() {
 	});
 
 	const updateMut = useMutation({
-		mutationFn: ({ id, data }: { id: string; data: notify.UpdateChannelParams }) =>
-			client.notify.UpdateChannel(id, data),
+		mutationFn: ({
+			id,
+			data,
+		}: {
+			id: string;
+			data: notify.UpdateChannelParams;
+		}) => client.notify.UpdateChannel(id, data),
 		onSuccess: () => {
 			qc.invalidateQueries({ queryKey: ["notify-channels"] });
 			toast.success("Updated");
@@ -153,13 +157,17 @@ function NotifyPage() {
 					<h1 className="font-semibold text-foreground text-lg">
 						Notification Channels
 					</h1>
-					<p className="mt-0.5 text-xs text-muted-foreground">
+					<p className="mt-0.5 text-muted-foreground text-xs">
 						Receive webhook, Telegram, or email alerts for check results,
-						scheduled unlock reports, and platform availability changes.
-						{" "}Email SMTP settings are in{" "}
-						<a href="/settings/general" className="underline underline-offset-2 hover:text-foreground">
+						scheduled unlock reports, and platform availability changes. Email
+						SMTP settings are in{" "}
+						<a
+							href="/settings/general"
+							className="underline underline-offset-2 hover:text-foreground"
+						>
 							General Settings
-						</a>.
+						</a>
+						.
 					</p>
 				</div>
 				<button
@@ -188,7 +196,9 @@ function NotifyPage() {
 						<Label className="text-muted-foreground text-xs">Type</Label>
 						<Select
 							value={type}
-							onValueChange={(v) => setType(v as "webhook" | "telegram" | "email")}
+							onValueChange={(v) =>
+								setType(v as "webhook" | "telegram" | "email")
+							}
 						>
 							<SelectTrigger className="h-8 text-sm">
 								<SelectValue />
@@ -215,7 +225,9 @@ function NotifyPage() {
 					{type === "telegram" && (
 						<>
 							<div className="space-y-1.5">
-								<Label className="text-muted-foreground text-xs">Bot Token</Label>
+								<Label className="text-muted-foreground text-xs">
+									Bot Token
+								</Label>
 								<Input
 									placeholder="123456:ABC..."
 									value={botToken}
@@ -235,11 +247,15 @@ function NotifyPage() {
 						</>
 					)}
 					{type === "email" && (
-						<p className="rounded-md bg-secondary/40 px-3 py-2 text-xs text-muted-foreground">
+						<p className="rounded-md bg-secondary/40 px-3 py-2 text-muted-foreground text-xs">
 							Uses SMTP settings from{" "}
-							<a href="/settings/general" className="underline underline-offset-2 hover:text-foreground">
+							<a
+								href="/settings/general"
+								className="underline underline-offset-2 hover:text-foreground"
+							>
 								General Settings
-							</a>.
+							</a>
+							.
 						</p>
 					)}
 
@@ -269,7 +285,7 @@ function NotifyPage() {
 						<button
 							type="button"
 							onClick={() => setAdding(false)}
-							className="rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-white/5"
+							className="rounded-md border border-border px-3 py-1.5 text-muted-foreground text-sm transition-colors hover:bg-white/5"
 						>
 							Cancel
 						</button>
@@ -285,13 +301,15 @@ function NotifyPage() {
 						onSave={(data) => updateMut.mutate({ id: ch.id, data })}
 						onDelete={() => deleteMut.mutate(ch.id)}
 						onTest={(reportType) => testMut.mutate({ id: ch.id, reportType })}
-						savePending={updateMut.isPending && updateMut.variables?.id === ch.id}
+						savePending={
+							updateMut.isPending && updateMut.variables?.id === ch.id
+						}
 						deletePending={deleteMut.isPending}
 						testPending={testMut.isPending && testMut.variables?.id === ch.id}
 					/>
 				))}
 				{!channelsQuery.isLoading && channels.length === 0 && (
-					<p className="py-10 text-center text-sm text-muted-foreground">
+					<p className="py-10 text-center text-muted-foreground text-sm">
 						No channels configured.
 					</p>
 				)}
@@ -311,15 +329,21 @@ function PlatformAlertsSelect({
 }) {
 	function toggle(key: string) {
 		onChange(
-			selected.includes(key) ? selected.filter((k) => k !== key) : [...selected, key],
+			selected.includes(key)
+				? selected.filter((k) => k !== key)
+				: [...selected, key],
 		);
 	}
 
 	return (
 		<div className="space-y-1.5">
 			<div className="flex items-center gap-2">
-				<AlertTriangle size={12} strokeWidth={1.5} className="text-muted-foreground" />
-				<Label className="text-xs text-muted-foreground">
+				<AlertTriangle
+					size={12}
+					strokeWidth={1.5}
+					className="text-muted-foreground"
+				/>
+				<Label className="text-muted-foreground text-xs">
 					Platform unavailability alerts
 				</Label>
 			</div>
@@ -335,7 +359,9 @@ function PlatformAlertsSelect({
 							className="flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] transition-colors"
 							style={{
 								borderColor: active ? "var(--primary)" : "var(--border)",
-								background: active ? "color-mix(in srgb, var(--primary) 12%, transparent)" : "transparent",
+								background: active
+									? "color-mix(in srgb, var(--primary) 12%, transparent)"
+									: "transparent",
 								color: active ? "var(--primary)" : "var(--muted-foreground)",
 								opacity: active ? 1 : 0.6,
 							}}
@@ -377,29 +403,38 @@ function ReportSettings({
 
 			<div className="space-y-1.5">
 				<div className="flex items-center gap-2">
-					<Clock size={12} strokeWidth={1.5} className="text-muted-foreground" />
-					<Label className="text-xs text-muted-foreground">
+					<Clock
+						size={12}
+						strokeWidth={1.5}
+						className="text-muted-foreground"
+					/>
+					<Label className="text-muted-foreground text-xs">
 						Scheduled network unlock report
 					</Label>
 				</div>
 				<Select
 					value={unlockCron || "__disabled__"}
-					onValueChange={(v) => setUnlockCron(!v || v === "__disabled__" ? "" : v)}
+					onValueChange={(v) =>
+						setUnlockCron(!v || v === "__disabled__" ? "" : v)
+					}
 				>
 					<SelectTrigger className="h-7 w-48 text-xs">
 						<SelectValue placeholder="Disabled" />
 					</SelectTrigger>
 					<SelectContent>
 						{CRON_PRESETS.map((p) => (
-							<SelectItem key={p.value || "__disabled__"} value={p.value || "__disabled__"}>
+							<SelectItem
+								key={p.value || "__disabled__"}
+								value={p.value || "__disabled__"}
+							>
 								{p.label}
 							</SelectItem>
 						))}
 					</SelectContent>
 				</Select>
 				<p className="text-[10px] text-muted-foreground/70">
-					Periodically reports which streaming platforms are accessible from this
-					server's network.
+					Periodically reports which streaming platforms are accessible from
+					this server's network.
 				</p>
 			</div>
 
@@ -410,7 +445,7 @@ function ReportSettings({
 						onCheckedChange={(v) => setOnCheckComplete(v === true)}
 					/>
 					<Bell size={12} strokeWidth={1.5} className="text-muted-foreground" />
-					<span className="text-xs text-muted-foreground">
+					<span className="text-muted-foreground text-xs">
 						Notify on check completion
 					</span>
 				</label>
@@ -420,7 +455,10 @@ function ReportSettings({
 				</p>
 			</div>
 
-			<PlatformAlertsSelect selected={platformAlerts} onChange={setPlatformAlerts} />
+			<PlatformAlertsSelect
+				selected={platformAlerts}
+				onChange={setPlatformAlerts}
+			/>
 		</div>
 	);
 }
@@ -498,7 +536,7 @@ function ChannelRow({
 						<p className="font-medium text-foreground text-sm">
 							{ch.name || ch.id}
 						</p>
-						<p className="mt-0.5 text-[11px] tracking-[0.4px] text-muted-foreground">
+						<p className="mt-0.5 text-[11px] text-muted-foreground tracking-[0.4px]">
 							<span className="uppercase">{ch.type}</span>
 							{" · "}
 							{ch.enabled ? "enabled" : "disabled"}
@@ -518,20 +556,34 @@ function ChannelRow({
 					)}
 					<div className="flex gap-1">
 						{ch.unlock_cron && (
-							<TestButton label="Unlock" pending={testPending} onClick={() => onTest("unlock")} />
+							<TestButton
+								label="Unlock"
+								pending={testPending}
+								onClick={() => onTest("unlock")}
+							/>
 						)}
 						{ch.on_check_complete && (
-							<TestButton label="Check" pending={testPending} onClick={() => onTest("check")} />
+							<TestButton
+								label="Check"
+								pending={testPending}
+								onClick={() => onTest("check")}
+							/>
 						)}
 						{(ch.platform_alerts ?? []).length > 0 && (
-							<TestButton label="Alert" pending={testPending} onClick={() => onTest("platform_alert")} />
+							<TestButton
+								label="Alert"
+								pending={testPending}
+								onClick={() => onTest("platform_alert")}
+							/>
 						)}
 					</div>
 					<button
 						type="button"
 						onClick={() => (isEditing ? setIsEditing(false) : openEdit())}
 						className="rounded-md p-1.5 transition-colors hover:bg-white/5"
-						style={{ color: isEditing ? "var(--primary)" : "var(--color-dimmed)" }}
+						style={{
+							color: isEditing ? "var(--primary)" : "var(--color-dimmed)",
+						}}
 					>
 						<Pencil size={13} strokeWidth={1.5} />
 					</button>
@@ -547,7 +599,7 @@ function ChannelRow({
 				</div>
 			</div>
 			{isEditing && (
-				<div className="space-y-3 border-t border-border px-4 py-3">
+				<div className="space-y-3 border-border border-t px-4 py-3">
 					<div className="space-y-1.5">
 						<Label className="text-muted-foreground text-xs">Name</Label>
 						<Input
@@ -561,7 +613,7 @@ function ChannelRow({
 							checked={editEnabled}
 							onCheckedChange={(v) => setEditEnabled(v === true)}
 						/>
-						<span className="text-xs text-muted-foreground">Enabled</span>
+						<span className="text-muted-foreground text-xs">Enabled</span>
 					</label>
 					<ReportSettings
 						onCheckComplete={editOnCheck}
@@ -579,12 +631,16 @@ function ChannelRow({
 							className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-white disabled:opacity-50"
 							style={{ background: "var(--color-btn-success)" }}
 						>
-							{savePending ? <Loader2 size={13} className="animate-spin" /> : "Save"}
+							{savePending ? (
+								<Loader2 size={13} className="animate-spin" />
+							) : (
+								"Save"
+							)}
 						</button>
 						<button
 							type="button"
 							onClick={() => setIsEditing(false)}
-							className="rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground"
+							className="rounded-md border border-border px-3 py-1.5 text-muted-foreground text-sm"
 						>
 							Cancel
 						</button>
@@ -609,7 +665,7 @@ function TestButton({
 			type="button"
 			onClick={onClick}
 			disabled={pending}
-			className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-white/5 disabled:opacity-50"
+			className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-muted-foreground text-xs transition-colors hover:bg-white/5 disabled:opacity-50"
 		>
 			{pending ? (
 				<Loader2 size={10} className="animate-spin" />

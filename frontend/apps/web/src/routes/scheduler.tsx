@@ -21,11 +21,10 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-
+import type { PlatformKey } from "@/components/platform-icons";
+import { PlatformIcon } from "@/components/platform-icons";
 import { client, isApiError } from "@/lib/client";
 import type { checker, scheduler, subscription } from "@/lib/client.gen";
-import { PlatformIcon } from "@/components/platform-icons";
-import type { PlatformKey } from "@/components/platform-icons";
 
 type CheckJob = checker.JobSummary;
 type ScheduledJob = scheduler.ScheduledJob;
@@ -98,6 +97,7 @@ function SchedulerPage() {
 					speed_test: params.speed_test,
 					upload_speed_test: false,
 					media_apps: params.media_apps,
+					debug: false,
 				},
 			}),
 		onSuccess: () => {
@@ -195,7 +195,7 @@ function SchedulerPage() {
 					/>
 				))}
 				{!jobsQuery.isLoading && jobs.length === 0 && (
-					<p className="py-10 text-center text-sm text-muted-foreground">
+					<p className="py-10 text-center text-muted-foreground text-sm">
 						No scheduled jobs.
 					</p>
 				)}
@@ -296,7 +296,7 @@ function ScheduleForm({
 						checked={speedTest}
 						onCheckedChange={(v) => setSpeedTest(v === true)}
 					/>
-					<span className="flex items-center gap-1 text-xs text-muted-foreground">
+					<span className="flex items-center gap-1 text-muted-foreground text-xs">
 						<Zap size={11} strokeWidth={1.5} />
 						Speed test
 					</span>
@@ -382,11 +382,7 @@ function JobRow({
 		<div className="rounded-lg border border-border bg-card">
 			{/* Main row */}
 			<div className="flex items-center gap-3 px-4 py-3">
-				<Clock
-					size={13}
-					strokeWidth={1.5}
-					className="text-muted-foreground"
-				/>
+				<Clock size={13} strokeWidth={1.5} className="text-muted-foreground" />
 				<div className="min-w-0 flex-1">
 					<Link
 						to="/subscriptions/$id"
@@ -396,7 +392,7 @@ function JobRow({
 					>
 						{subName}
 					</Link>
-					<p className="mt-0.5 text-xs text-muted-foreground">
+					<p className="mt-0.5 text-muted-foreground text-xs">
 						{cronToLabel(job.cron_expr)}
 					</p>
 				</div>
@@ -467,7 +463,7 @@ function JobRow({
 
 			{/* Inline edit panel */}
 			{showEdit && (
-				<div className="border-t border-border">
+				<div className="border-border border-t">
 					<ScheduleForm
 						subs={subs}
 						subId={job.subscription_id}
@@ -491,10 +487,8 @@ function JobRow({
 
 			{/* History panel */}
 			{showHistory && (
-				<div className="border-t border-border px-4 py-3">
-					<p
-						className="mb-2 font-medium text-xs text-muted-foreground"
-					>
+				<div className="border-border border-t px-4 py-3">
+					<p className="mb-2 font-medium text-muted-foreground text-xs">
 						Recent runs
 					</p>
 					{historyQuery.isLoading && (
@@ -504,10 +498,7 @@ function JobRow({
 					)}
 					{!historyQuery.isLoading &&
 						(historyQuery.data?.jobs.length ?? 0) === 0 && (
-							<p
-								className="text-xs"
-								style={{ color: "var(--color-dimmed)" }}
-							>
+							<p className="text-xs" style={{ color: "var(--color-dimmed)" }}>
 								No runs yet.
 							</p>
 						)}
@@ -538,9 +529,7 @@ function JobRow({
 									</span>
 								</div>
 								<div className="flex items-center gap-3">
-									<span
-										className="text-[11px] text-muted-foreground"
-									>
+									<span className="text-[11px] text-muted-foreground">
 										{j.available}/{j.total} alive
 									</span>
 									<ChevronRight

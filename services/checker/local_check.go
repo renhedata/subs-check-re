@@ -52,55 +52,55 @@ func GetLocalUnlock(ctx context.Context) (*LocalUnlockResult, error) {
 	}
 
 	run(func() {
-		v, _ := checkNetflix(checkCtx, client)
+		v := checkNetflix(checkCtx, client, nil)
 		mu.Lock()
 		res.Netflix = v
 		mu.Unlock()
 	})
 	run(func() {
-		v, _ := checkYouTube(checkCtx, client)
+		v := checkYouTube(checkCtx, client, nil)
 		mu.Lock()
 		res.YouTube = v
 		mu.Unlock()
 	})
 	run(func() {
-		v, _ := checkYouTubePremium(checkCtx, client)
+		v := checkYouTubePremium(checkCtx, client, nil)
 		mu.Lock()
 		res.YouTubePremium = v
 		mu.Unlock()
 	})
 	run(func() {
-		v, _ := checkOpenAI(checkCtx, client)
+		v := checkOpenAI(checkCtx, client, nil)
 		mu.Lock()
 		res.OpenAI = v
 		mu.Unlock()
 	})
 	run(func() {
-		v, _ := checkClaude(checkCtx, client)
+		v := checkClaude(checkCtx, client, nil)
 		mu.Lock()
 		res.Claude = v
 		mu.Unlock()
 	})
 	run(func() {
-		v, _ := checkGemini(checkCtx, client)
+		v := checkGemini(checkCtx, client, nil)
 		mu.Lock()
 		res.Gemini = v
 		mu.Unlock()
 	})
 	run(func() {
-		v, _ := checkGrok(checkCtx, client)
+		v := checkGrok(checkCtx, client, nil)
 		mu.Lock()
 		res.Grok = v
 		mu.Unlock()
 	})
 	run(func() {
-		v, _ := checkDisney(checkCtx, client)
+		v := checkDisney(checkCtx, client, nil)
 		mu.Lock()
 		res.Disney = v
 		mu.Unlock()
 	})
 	run(func() {
-		v, _ := checkTikTok(checkCtx, client)
+		v := checkTikTok(checkCtx, client, nil)
 		mu.Lock()
 		res.TikTok = v
 		mu.Unlock()

@@ -177,6 +177,7 @@ export namespace checker {
         "speed_test": boolean
         "upload_speed_test": boolean
         "media_apps": string[]
+        debug: boolean
     }
 
     /**
@@ -295,10 +296,6 @@ export namespace checker {
     /**
      * NodeResult represents a single node's check result for the API response.
      */
-    export interface SetNodeEnabledParams {
-        enabled: boolean
-    }
-
     export interface NodeResult {
         "node_id": string
         "node_name": string
@@ -359,6 +356,13 @@ export namespace checker {
     }
 
     /**
+     * SetNodeEnabledParams is the request body for PATCH /nodes/:nodeID.
+     */
+    export interface SetNodeEnabledParams {
+        enabled: boolean
+    }
+
+    /**
      * TestRuleParams is the request body for POST /platform-rules/test.
      */
     export interface TestRuleParams {
@@ -388,6 +392,7 @@ export namespace checker {
         "speed_test": boolean
         "upload_speed_test": boolean
         "media_apps": string[]
+        debug: boolean
     }
 
     /**
@@ -425,8 +430,8 @@ export namespace checker {
             this.ListJobs = this.ListJobs.bind(this)
             this.ListRules = this.ListRules.bind(this)
             this.ListTestNodes = this.ListTestNodes.bind(this)
-            this.TestRule = this.TestRule.bind(this)
             this.SetNodeEnabled = this.SetNodeEnabled.bind(this)
+            this.TestRule = this.TestRule.bind(this)
             this.TriggerCheck = this.TriggerCheck.bind(this)
             this.UpdateRule = this.UpdateRule.bind(this)
         }
@@ -505,13 +510,6 @@ export namespace checker {
         }
 
         /**
-         * SetNodeEnabled enables or disables a single node.
-         */
-        public async SetNodeEnabled(nodeID: string, params: SetNodeEnabledParams): Promise<void> {
-            await this.baseClient.callTypedAPI("PATCH", `/nodes/${encodeURIComponent(nodeID)}`, JSON.stringify(params))
-        }
-
-        /**
          * ListJobs returns paginated check job history for a subscription.
          */
         public async ListJobs(subscriptionID: string, params: ListJobsParams): Promise<ListJobsResponse> {
@@ -543,6 +541,14 @@ export namespace checker {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("GET", `/platform-rules/test-nodes`)
             return await resp.json() as ListTestNodesResponse
+        }
+
+        /**
+         * SetNodeEnabled enables or disables a single node for the authenticated user.
+         * Disabled nodes are excluded from subscription exports but still appear in results.
+         */
+        public async SetNodeEnabled(nodeID: string, params: SetNodeEnabledParams): Promise<void> {
+            await this.baseClient.callTypedAPI("PATCH", `/nodes/${encodeURIComponent(nodeID)}`, JSON.stringify(params))
         }
 
         /**
