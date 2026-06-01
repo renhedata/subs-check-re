@@ -7,8 +7,9 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@frontend/ui/components/select";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+// queries imported from queries/ — no direct @tanstack/react-query usage here
 import { createFileRoute, Link } from "@tanstack/react-router";
+import cronstrue from "cronstrue";
 import {
 	ChevronRight,
 	Clock,
@@ -21,10 +22,18 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { CronPicker } from "@/components/cron-picker";
 import type { PlatformKey } from "@/components/platform-icons";
 import { PlatformIcon } from "@/components/platform-icons";
-import { client, isApiError } from "@/lib/client";
+import { isApiError } from "@/lib/client";
 import type { checker, scheduler, subscription } from "@/lib/client.gen";
+import {
+	useCreateScheduledJob,
+	useDeleteScheduledJob,
+	useScheduledJobs,
+	useSchedulerHistory,
+	useSubscriptions,
+} from "@/queries";
 
 type CheckJob = checker.JobSummary;
 type ScheduledJob = scheduler.ScheduledJob;
@@ -41,18 +50,13 @@ const MEDIA_APPS = [
 	"tiktok",
 ] as const;
 
-const SCHEDULE_PRESETS = [
-	{ label: "1h", cron: "0 * * * *", desc: "Every hour" },
-	{ label: "2h", cron: "0 */2 * * *", desc: "Every 2 hours" },
-	{ label: "6h", cron: "0 */6 * * *", desc: "Every 6 hours" },
-	{ label: "12h", cron: "0 */12 * * *", desc: "Every 12 hours" },
-	{ label: "Daily", cron: "0 0 * * *", desc: "Once a day" },
-	{ label: "Weekly", cron: "0 0 * * 0", desc: "Once a week" },
-] as const;
-
 function cronToLabel(cron: string): string {
-	const preset = SCHEDULE_PRESETS.find((p) => p.cron === cron);
-	return preset ? preset.desc : cron;
+	if (!cron) return "Not scheduled";
+	try {
+		return cronstrue.toString(cron, { use24HourTimeFormat: true });
+	} catch {
+		return cron;
+	}
 }
 
 function statusColor(status: CheckJob["status"]): string {
@@ -66,31 +70,25 @@ export const Route = createFileRoute("/scheduler")({
 });
 
 function SchedulerPage() {
-	const qc = useQueryClient();
 	const [adding, setAdding] = useState(false);
 	const [subId, setSubId] = useState("");
-	const [selectedCron, setSelectedCron] = useState("");
+	const [selectedCron, setSelectedCron] = useState("0 * * * *");
 	const [speedTest, setSpeedTest] = useState(true);
 	const [mediaApps, setMediaApps] = useState<string[]>([...MEDIA_APPS]);
 
-	const jobsQuery = useQuery({
-		queryKey: ["scheduler"],
-		queryFn: () => client.scheduler.List(),
-	});
+	const jobsQuery = useScheduledJobs();
+	const subsQuery = useSubscriptions();
+	const createMut = useCreateScheduledJob();
+	const deleteMut = useDeleteScheduledJob();
 
-	const subsQuery = useQuery({
-		queryKey: ["subscriptions"],
-		queryFn: () => client.subscription.List(),
-	});
-
-	const createMut = useMutation({
-		mutationFn: (params: {
-			subscription_id: string;
-			cron_expr: string;
-			speed_test: boolean;
-			media_apps: string[];
-		}) =>
-			client.scheduler.Create({
+	const handleCreate = (params: {
+		subscription_id: string;
+		cron_expr: string;
+		speed_test: boolean;
+		media_apps: string[];
+	}) =>
+		createMut.mutate(
+			{
 				subscription_id: params.subscription_id,
 				cron_expr: params.cron_expr,
 				options: {
@@ -99,27 +97,25 @@ function SchedulerPage() {
 					media_apps: params.media_apps,
 					debug: false,
 				},
-			}),
-		onSuccess: () => {
-			qc.invalidateQueries({ queryKey: ["scheduler"] });
-			setAdding(false);
-			setSubId("");
-			setSelectedCron("");
-			setSpeedTest(true);
-			setMediaApps([...MEDIA_APPS]);
-			toast.success("Schedule created");
-		},
-		onError: (e) => toast.error(isApiError(e) ? e.message : "Failed"),
-	});
+			},
+			{
+				onSuccess: () => {
+					setAdding(false);
+					setSubId("");
+					setSelectedCron("");
+					setSpeedTest(true);
+					setMediaApps([...MEDIA_APPS]);
+					toast.success("Schedule created");
+				},
+				onError: (e) => toast.error(isApiError(e) ? e.message : "Failed"),
+			},
+		);
 
-	const deleteMut = useMutation({
-		mutationFn: (id: string) => client.scheduler.Delete(id),
-		onSuccess: () => {
-			qc.invalidateQueries({ queryKey: ["scheduler"] });
-			toast.success("Removed");
-		},
-		onError: (e) => toast.error(isApiError(e) ? e.message : "Failed"),
-	});
+	const handleDelete = (id: string) =>
+		deleteMut.mutate(id, {
+			onSuccess: () => toast.success("Removed"),
+			onError: (e) => toast.error(isApiError(e) ? e.message : "Failed"),
+		});
 
 	const jobs = jobsQuery.data?.jobs ?? [];
 	const subs = subsQuery.data?.subscriptions ?? [];
@@ -163,7 +159,7 @@ function SchedulerPage() {
 					toggleApp={toggleApp}
 					isPending={createMut.isPending}
 					onSave={() =>
-						createMut.mutate({
+						handleCreate({
 							subscription_id: subId,
 							cron_expr: selectedCron,
 							speed_test: speedTest,
@@ -181,10 +177,10 @@ function SchedulerPage() {
 						job={job}
 						subName={subName(job.subscription_id)}
 						subs={subs}
-						onDelete={() => deleteMut.mutate(job.id)}
+						onDelete={() => handleDelete(job.id)}
 						deleting={deleteMut.isPending}
 						onSaveEdit={(cron, st, apps) =>
-							createMut.mutate({
+							handleCreate({
 								subscription_id: job.subscription_id,
 								cron_expr: cron,
 								speed_test: st,
@@ -255,37 +251,9 @@ function ScheduleForm({
 				</div>
 			)}
 
-			{/* Schedule presets */}
 			<div className="space-y-1.5">
 				<p className="text-muted-foreground text-xs">Schedule</p>
-				<div className="flex flex-wrap gap-2">
-					{SCHEDULE_PRESETS.map((preset) => {
-						const active = selectedCron === preset.cron;
-						return (
-							<button
-								key={preset.cron}
-								type="button"
-								onClick={() => setSelectedCron(preset.cron)}
-								title={preset.desc}
-								className="rounded-md border px-3 py-1 text-sm transition-colors"
-								style={{
-									borderColor: active ? "var(--primary)" : "var(--border)",
-									color: active ? "var(--primary)" : "var(--muted-foreground)",
-									background: active
-										? "var(--color-badge-info-bg)"
-										: "transparent",
-								}}
-							>
-								{preset.label}
-							</button>
-						);
-					})}
-				</div>
-				{selectedCron && (
-					<p className="text-[11px]" style={{ color: "var(--color-dimmed)" }}>
-						{SCHEDULE_PRESETS.find((p) => p.cron === selectedCron)?.desc}
-					</p>
-				)}
+				<CronPicker value={selectedCron} onChange={setSelectedCron} />
 			</div>
 
 			{/* Check options */}
@@ -321,7 +289,7 @@ function ScheduleForm({
 				<Button
 					size="sm"
 					onClick={onSave}
-					disabled={(!hideSubSelector && !subId) || !selectedCron || isPending}
+					disabled={(!hideSubSelector && !subId) || isPending}
 					style={{ background: "var(--color-btn-success)", color: "#fff" }}
 					className="border-0"
 				>
@@ -370,12 +338,8 @@ function JobRow({
 		);
 	}
 
-	const historyQuery = useQuery({
-		queryKey: ["scheduler-history", job.subscription_id],
-		queryFn: () =>
-			client.checker.ListJobs(job.subscription_id, { Limit: 8, Offset: 0 }),
+	const historyQuery = useSchedulerHistory(job.subscription_id, {
 		enabled: showHistory,
-		staleTime: 15_000,
 	});
 
 	return (
