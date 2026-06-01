@@ -8,6 +8,7 @@ import {
 	SelectValue,
 } from "@frontend/ui/components/select";
 import cronstrue from "cronstrue";
+import { useEffect, useState } from "react";
 
 const DEFAULT_CRON = "0 * * * *";
 
@@ -103,7 +104,17 @@ interface CronPickerProps {
 
 export function CronPicker({ value, onChange, allowDisable }: CronPickerProps) {
 	const enabled = value !== "";
-	const parsed = value ? parseCron(value) : parseCron(DEFAULT_CRON);
+	const parsed = parseCron(value || DEFAULT_CRON);
+	const [activePeriod, setActivePeriod] = useState<Period>(parsed.period);
+
+	// Sync activePeriod when the parent changes value externally,
+	// but don't override when the user has selected "custom".
+	useEffect(() => {
+		const p = parseCron(value || DEFAULT_CRON).period;
+		if (p !== "custom") {
+			setActivePeriod(p);
+		}
+	}, [value]);
 
 	function handleEnable(checked: boolean) {
 		onChange(checked ? DEFAULT_CRON : "");
@@ -117,11 +128,12 @@ export function CronPicker({ value, onChange, allowDisable }: CronPickerProps) {
 	}
 
 	function handlePeriodChange(period: Period) {
-		const next = { ...parsed, period };
+		setActivePeriod(period);
 		if (period === "custom") {
-			// keep current raw value for editing
+			// User will type in the input; don't call onChange yet.
 			return;
 		}
+		const next = { ...parsed, period };
 		onChange(buildCron(next));
 	}
 
@@ -141,7 +153,7 @@ export function CronPicker({ value, onChange, allowDisable }: CronPickerProps) {
 					<span className="text-muted-foreground">Every</span>
 
 					<Select
-						value={parsed.period}
+						value={activePeriod}
 						onValueChange={(v) => handlePeriodChange(v as Period)}
 					>
 						<SelectTrigger size="sm">
@@ -156,7 +168,7 @@ export function CronPicker({ value, onChange, allowDisable }: CronPickerProps) {
 						</SelectContent>
 					</Select>
 
-					{parsed.period === "hour" && (
+					{activePeriod === "hour" && (
 						<>
 							<span className="text-muted-foreground">at minute</span>
 							<Select
@@ -177,7 +189,7 @@ export function CronPicker({ value, onChange, allowDisable }: CronPickerProps) {
 						</>
 					)}
 
-					{parsed.period === "day" && (
+					{activePeriod === "day" && (
 						<>
 							<span className="text-muted-foreground">at</span>
 							<HourSelect
@@ -192,7 +204,7 @@ export function CronPicker({ value, onChange, allowDisable }: CronPickerProps) {
 						</>
 					)}
 
-					{parsed.period === "week" && (
+					{activePeriod === "week" && (
 						<>
 							<Select
 								value={String(parsed.weekday)}
@@ -222,7 +234,7 @@ export function CronPicker({ value, onChange, allowDisable }: CronPickerProps) {
 						</>
 					)}
 
-					{parsed.period === "month" && (
+					{activePeriod === "month" && (
 						<>
 							<span className="text-muted-foreground">on day</span>
 							<Select
@@ -253,11 +265,11 @@ export function CronPicker({ value, onChange, allowDisable }: CronPickerProps) {
 						</>
 					)}
 
-					{parsed.period === "custom" && (
+					{activePeriod === "custom" && (
 						<Input
 							className="h-7 w-40 font-mono text-xs"
 							placeholder="* * * * *"
-							value={value}
+							value={value || DEFAULT_CRON}
 							onChange={(e) => onChange(e.target.value)}
 						/>
 					)}
