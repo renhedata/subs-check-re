@@ -102,7 +102,7 @@ function SchedulerPage() {
 				onSuccess: () => {
 					setAdding(false);
 					setSubId("");
-					setSelectedCron("");
+					setSelectedCron("0 * * * *");
 					setSpeedTest(true);
 					setMediaApps([...MEDIA_APPS]);
 					toast.success("Schedule created");
