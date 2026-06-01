@@ -8,8 +8,9 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@frontend/ui/components/select";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+// queries imported from queries/ — no direct @tanstack/react-query usage here
 import { createFileRoute } from "@tanstack/react-router";
+import cronstrue from "cronstrue";
 import {
 	AlertTriangle,
 	Bell,
@@ -24,21 +25,20 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { CronPicker } from "@/components/cron-picker";
 import type { PlatformKey } from "@/components/platform-icons";
 import { PlatformIcon } from "@/components/platform-icons";
-import { client, isApiError } from "@/lib/client";
+import { isApiError } from "@/lib/client";
 import type { JSONValue, notify } from "@/lib/client.gen";
+import {
+	useCreateNotifyChannel,
+	useDeleteNotifyChannel,
+	useNotifyChannels,
+	useTestNotifyChannel,
+	useUpdateNotifyChannel,
+} from "@/queries";
 
 type NotifyChannel = notify.Channel;
-
-const CRON_PRESETS = [
-	{ label: "Disabled", value: "" },
-	{ label: "Every hour", value: "0 * * * *" },
-	{ label: "Every 2 hours", value: "0 */2 * * *" },
-	{ label: "Every 6 hours", value: "0 */6 * * *" },
-	{ label: "Every 12 hours", value: "0 */12 * * *" },
-	{ label: "Once a day", value: "0 0 * * *" },
-] as const;
 
 const ALL_PLATFORMS: { key: PlatformKey; label: string }[] = [
 	{ key: "netflix", label: "Netflix" },
@@ -53,8 +53,12 @@ const ALL_PLATFORMS: { key: PlatformKey; label: string }[] = [
 ];
 
 function cronToLabel(cron: string): string {
-	const preset = CRON_PRESETS.find((p) => p.value === cron);
-	return preset ? preset.label : cron;
+	if (!cron) return "disabled";
+	try {
+		return cronstrue.toString(cron, { use24HourTimeFormat: true });
+	} catch {
+		return cron;
+	}
 }
 
 export const Route = createFileRoute("/settings/notify")({
@@ -62,7 +66,6 @@ export const Route = createFileRoute("/settings/notify")({
 });
 
 function NotifyPage() {
-	const qc = useQueryClient();
 	const [adding, setAdding] = useState(false);
 
 	// Create form state
@@ -75,78 +78,74 @@ function NotifyPage() {
 	const [unlockCron, setUnlockCron] = useState("");
 	const [platformAlerts, setPlatformAlerts] = useState<string[]>([]);
 
-	const channelsQuery = useQuery({
-		queryKey: ["notify-channels"],
-		queryFn: () => client.notify.ListChannels(),
-	});
+	const channelsQuery = useNotifyChannels();
+	const createMut = useCreateNotifyChannel();
+	const deleteMut = useDeleteNotifyChannel();
+	const updateMut = useUpdateNotifyChannel();
+	const testMut = useTestNotifyChannel();
 
-	const createMut = useMutation({
-		mutationFn: () => {
-			const config: JSONValue =
-				type === "webhook"
-					? { url: webhookUrl, method: "POST" }
-					: type === "telegram"
-						? { bot_token: botToken, chat_id: chatId }
-						: {};
-			return client.notify.CreateChannel({
+	const handleCreate = () => {
+		const config: JSONValue =
+			type === "webhook"
+				? { url: webhookUrl, method: "POST" }
+				: type === "telegram"
+					? { bot_token: botToken, chat_id: chatId }
+					: {};
+		createMut.mutate(
+			{
 				name,
 				type,
 				config,
 				on_check_complete: onCheckComplete,
 				unlock_cron: unlockCron,
 				platform_alerts: platformAlerts,
-			});
-		},
-		onSuccess: () => {
-			qc.invalidateQueries({ queryKey: ["notify-channels"] });
-			setAdding(false);
-			setName("");
-			setWebhookUrl("");
-			setBotToken("");
-			setChatId("");
-			setOnCheckComplete(false);
-			setUnlockCron("");
-			setPlatformAlerts([]);
-			toast.success("Channel added");
-		},
-		onError: (e) => toast.error(isApiError(e) ? e.message : "Failed"),
-	});
+			},
+			{
+				onSuccess: () => {
+					setAdding(false);
+					setName("");
+					setWebhookUrl("");
+					setBotToken("");
+					setChatId("");
+					setOnCheckComplete(false);
+					setUnlockCron("");
+					setPlatformAlerts([]);
+					toast.success("Channel added");
+				},
+				onError: (e) => toast.error(isApiError(e) ? e.message : "Failed"),
+			},
+		);
+	};
 
-	const deleteMut = useMutation({
-		mutationFn: (id: string) => client.notify.DeleteChannel(id),
-		onSuccess: () => {
-			qc.invalidateQueries({ queryKey: ["notify-channels"] });
-			toast.success("Removed");
-		},
-	});
+	const handleDelete = (id: string) =>
+		deleteMut.mutate(id, {
+			onSuccess: () => toast.success("Removed"),
+		});
 
-	const updateMut = useMutation({
-		mutationFn: ({
-			id,
-			data,
-		}: {
-			id: string;
-			data: notify.UpdateChannelParams;
-		}) => client.notify.UpdateChannel(id, data),
-		onSuccess: () => {
-			qc.invalidateQueries({ queryKey: ["notify-channels"] });
-			toast.success("Updated");
-		},
-		onError: (e) => toast.error(isApiError(e) ? e.message : "Update failed"),
-	});
+	const handleUpdate = (id: string, data: notify.UpdateChannelParams) =>
+		updateMut.mutate(
+			{ id, params: data },
+			{
+				onSuccess: () => toast.success("Updated"),
+				onError: (e) =>
+					toast.error(isApiError(e) ? e.message : "Update failed"),
+			},
+		);
 
-	const testMut = useMutation({
-		mutationFn: ({ id, reportType }: { id: string; reportType: string }) =>
-			client.notify.TestChannel(id, { report_type: reportType }),
-		onSuccess: (resp) => {
-			if (resp.ok) {
-				toast.success("Test notification sent");
-			} else {
-				toast.error(`Test failed: ${resp.error ?? "unknown error"}`);
-			}
-		},
-		onError: (e) => toast.error(isApiError(e) ? e.message : "Test failed"),
-	});
+	const handleTest = (id: string, reportType: string) =>
+		testMut.mutate(
+			{ id, params: { report_type: reportType } },
+			{
+				onSuccess: (resp) => {
+					if (resp.ok) {
+						toast.success("Test notification sent");
+					} else {
+						toast.error(`Test failed: ${resp.error ?? "unknown error"}`);
+					}
+				},
+				onError: (e) => toast.error(isApiError(e) ? e.message : "Test failed"),
+			},
+		);
 
 	const channels = channelsQuery.data?.channels ?? [];
 
@@ -271,7 +270,7 @@ function NotifyPage() {
 					<div className="flex gap-2">
 						<button
 							type="button"
-							onClick={() => createMut.mutate()}
+							onClick={handleCreate}
 							disabled={createMut.isPending}
 							className="flex items-center gap-2 rounded-md px-3 py-1.5 font-medium text-sm text-white transition-opacity hover:opacity-90 disabled:opacity-50"
 							style={{ background: "var(--color-btn-success)" }}
@@ -298,9 +297,9 @@ function NotifyPage() {
 					<ChannelRow
 						key={ch.id}
 						ch={ch}
-						onSave={(data) => updateMut.mutate({ id: ch.id, data })}
-						onDelete={() => deleteMut.mutate(ch.id)}
-						onTest={(reportType) => testMut.mutate({ id: ch.id, reportType })}
+						onSave={(data) => handleUpdate(ch.id, data)}
+						onDelete={() => handleDelete(ch.id)}
+						onTest={(reportType) => handleTest(ch.id, reportType)}
 						savePending={
 							updateMut.isPending && updateMut.variables?.id === ch.id
 						}
@@ -412,26 +411,7 @@ function ReportSettings({
 						Scheduled network unlock report
 					</Label>
 				</div>
-				<Select
-					value={unlockCron || "__disabled__"}
-					onValueChange={(v) =>
-						setUnlockCron(!v || v === "__disabled__" ? "" : v)
-					}
-				>
-					<SelectTrigger className="h-7 w-48 text-xs">
-						<SelectValue placeholder="Disabled" />
-					</SelectTrigger>
-					<SelectContent>
-						{CRON_PRESETS.map((p) => (
-							<SelectItem
-								key={p.value || "__disabled__"}
-								value={p.value || "__disabled__"}
-							>
-								{p.label}
-							</SelectItem>
-						))}
-					</SelectContent>
-				</Select>
+				<CronPicker allowDisable value={unlockCron} onChange={setUnlockCron} />
 				<p className="text-[10px] text-muted-foreground/70">
 					Periodically reports which streaming platforms are accessible from
 					this server's network.
