@@ -3,6 +3,7 @@ package checker
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"sync"
 	"time"
@@ -26,98 +27,82 @@ type LocalUnlockResult struct {
 }
 
 // GetLocalUnlock checks which streaming/AI platforms are accessible from the server's own network.
+// It runs the seeded default rules (see rules_defaults.go) against a plain HTTP client — no proxy.
 //
 //encore:api auth method=GET path=/network-unlock
 func GetLocalUnlock(ctx context.Context) (*LocalUnlockResult, error) {
-	client := &http.Client{
-		Timeout: 15 * time.Second,
-	}
-
+	client := &http.Client{Timeout: 15 * time.Second}
 	checkCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 
-	var (
-		mu  sync.Mutex
-		res LocalUnlockResult
-		wg  sync.WaitGroup
-	)
+	results := runDefaultRulesAgainst(checkCtx, client)
 
-	run := func(fn func()) {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			defer func() { recover() }()
-			fn()
-		}()
+	var res LocalUnlockResult
+	for _, r := range results {
+		switch r.key {
+		case "netflix":
+			res.Netflix = r.ok
+		case "youtube":
+			res.YouTube = r.ok
+		case "youtube_premium":
+			res.YouTubePremium = r.ok
+		case "openai":
+			res.OpenAI = r.ok
+		case "claude":
+			res.Claude = r.ok
+		case "gemini":
+			res.Gemini = r.ok
+		case "grok":
+			res.Grok = r.ok
+		case "disney":
+			res.Disney = r.ok
+		case "tiktok":
+			res.TikTok = r.ok
+		}
 	}
 
-	run(func() {
-		v := checkNetflix(checkCtx, client, nil)
-		mu.Lock()
-		res.Netflix = v
-		mu.Unlock()
-	})
-	run(func() {
-		v := checkYouTube(checkCtx, client, nil)
-		mu.Lock()
-		res.YouTube = v
-		mu.Unlock()
-	})
-	run(func() {
-		v := checkYouTubePremium(checkCtx, client, nil)
-		mu.Lock()
-		res.YouTubePremium = v
-		mu.Unlock()
-	})
-	run(func() {
-		v := checkOpenAI(checkCtx, client, nil)
-		mu.Lock()
-		res.OpenAI = v
-		mu.Unlock()
-	})
-	run(func() {
-		v := checkClaude(checkCtx, client, nil)
-		mu.Lock()
-		res.Claude = v
-		mu.Unlock()
-	})
-	run(func() {
-		v := checkGemini(checkCtx, client, nil)
-		mu.Lock()
-		res.Gemini = v
-		mu.Unlock()
-	})
-	run(func() {
-		v := checkGrok(checkCtx, client, nil)
-		mu.Lock()
-		res.Grok = v
-		mu.Unlock()
-	})
-	run(func() {
-		v := checkDisney(checkCtx, client, nil)
-		mu.Lock()
-		res.Disney = v
-		mu.Unlock()
-	})
-	run(func() {
-		v := checkTikTok(checkCtx, client, nil)
-		mu.Lock()
-		res.TikTok = v
-		mu.Unlock()
-	})
-	run(func() {
-		ip, country := getProxyInfo(checkCtx, client)
-		mu.Lock()
-		res.IP = ip
-		res.Country = country
-		mu.Unlock()
-	})
-
-	wg.Wait()
+	res.IP, res.Country = getProxyInfo(checkCtx, client)
 
 	if err := checkCtx.Err(); err != nil {
 		return nil, errs.B().Code(errs.DeadlineExceeded).Msg("check timed out").Err()
 	}
-
 	return &res, nil
+}
+
+type ruleResult struct {
+	key string
+	ok  bool
+}
+
+// runDefaultRulesAgainst evaluates the seeded default rules against the given HTTP client.
+// Runs all rules concurrently and aggregates results.
+func runDefaultRulesAgainst(ctx context.Context, client *http.Client) []ruleResult {
+	out := make(chan ruleResult, len(defaultRules))
+	var wg sync.WaitGroup
+	for _, dr := range defaultRules {
+		wg.Add(1)
+		go func(d defaultRule) {
+			defer wg.Done()
+			defer func() { _ = recover() }()
+			defJSON, err := json.Marshal(d.def)
+			if err != nil {
+				out <- ruleResult{key: d.key, ok: false}
+				return
+			}
+			rule := &PlatformRule{
+				RuleType:   d.ruleType,
+				Definition: defJSON,
+			}
+			ok, _ := runRule(ctx, client, rule, nil)
+			out <- ruleResult{key: d.key, ok: ok}
+		}(dr)
+	}
+	wg.Wait()
+	close(out)
+
+	results := make([]ruleResult, 0, len(defaultRules))
+	for r := range out {
+		results = append(results, r)
+	}
+	return results
 }

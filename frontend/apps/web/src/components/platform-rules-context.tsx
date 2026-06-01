@@ -1,7 +1,6 @@
-import { useQuery } from "@tanstack/react-query";
 import { createContext, useContext, useMemo } from "react";
-import { client } from "@/lib/client";
 import type { checker } from "@/lib/client.gen";
+import { useRules } from "@/queries";
 
 type PlatformRule = checker.PlatformRule;
 
@@ -14,11 +13,7 @@ export function PlatformRulesProvider({
 }: {
 	children: React.ReactNode;
 }) {
-	const { data } = useQuery({
-		queryKey: ["platform-rules"],
-		queryFn: () => client.checker.ListRules(),
-		staleTime: 60_000,
-	});
+	const { data } = useRules();
 
 	const ruleMap = useMemo(
 		() =>

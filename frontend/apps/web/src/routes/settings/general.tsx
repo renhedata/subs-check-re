@@ -1,13 +1,12 @@
 import { Input } from "@frontend/ui/components/input";
 import { Label } from "@frontend/ui/components/label";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { Loader2, Mail } from "lucide-react";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
-import { client } from "@/lib/client";
 import type { settings } from "@/lib/client.gen";
+import { useSettings, useUpdateSettings } from "@/queries";
 
 type UserSettings = settings.UserSettings;
 
@@ -20,12 +19,7 @@ const DEFAULT_SPEED_TEST_URL =
 const DEFAULT_LATENCY_TEST_URL = "http://www.gstatic.com/generate_204";
 
 function GeneralSettingsPage() {
-	const qc = useQueryClient();
-
-	const settingsQuery = useQuery({
-		queryKey: ["settings"],
-		queryFn: () => client.settings.GetSettings(),
-	});
+	const settingsQuery = useSettings();
 
 	const { register, handleSubmit, reset } = useForm<UserSettings>({
 		defaultValues: {
@@ -47,14 +41,12 @@ function GeneralSettingsPage() {
 		if (settingsQuery.data) reset(settingsQuery.data);
 	}, [settingsQuery.data, reset]);
 
-	const saveMutation = useMutation({
-		mutationFn: (data: UserSettings) => client.settings.UpdateSettings(data),
-		onSuccess: () => {
-			qc.invalidateQueries({ queryKey: ["settings"] });
-			toast.success("Settings saved");
-		},
-		onError: () => toast.error("Failed to save settings"),
-	});
+	const saveMutation = useUpdateSettings();
+	const handleSave = (data: UserSettings) =>
+		saveMutation.mutate(data, {
+			onSuccess: () => toast.success("Settings saved"),
+			onError: () => toast.error("Failed to save settings"),
+		});
 
 	return (
 		<div className="max-w-lg space-y-5">
@@ -62,10 +54,7 @@ function GeneralSettingsPage() {
 				General Settings
 			</h1>
 
-			<form
-				onSubmit={handleSubmit((d) => saveMutation.mutate(d))}
-				className="space-y-5"
-			>
+			<form onSubmit={handleSubmit(handleSave)} className="space-y-5">
 				{/* Latency test */}
 				<div className="rounded-lg border border-border bg-card p-5">
 					<p className="mb-3 font-medium text-foreground text-sm">

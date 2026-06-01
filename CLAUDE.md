@@ -34,15 +34,6 @@ bun check-types     # TypeScript type checking
 bun check           # Lint + format with Biome (auto-fix)
 ```
 
-### Playwright 服务
-
-```bash
-cd playwright
-npm install
-npm run dev        # 启动 Playwright 服务（端口 3000）
-npm test           # 运行测试
-```
-
 ### Both together
 
 ```bash
@@ -50,8 +41,6 @@ npm test           # 运行测试
 encore run
 # Terminal 2
 cd frontend && bun dev
-# Terminal 3
-cd playwright && npm run dev
 ```
 
 ## Architecture
@@ -67,7 +56,6 @@ Each subdirectory is an independent Encore service (Go package). Services commun
 | `checker` | Core: fetches subscription, replaces nodes, runs mihomo checks, SSE progress |
 | `scheduler` | Manages `robfig/cron` jobs; re-registers from DB on startup |
 | `notify` | Consumes PubSub events from checker, sends webhook/telegram/email |
-| `playwright` | Headless browser platform unlock detection service (Netflix, YouTube, etc.) |
 
 **Key dependency:** `github.com/metacubex/mihomo` is used as a Go library (not subprocess) for proxy protocol handling and platform unlock detection.
 

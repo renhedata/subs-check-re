@@ -198,7 +198,7 @@ export namespace checker {
      */
     export interface DebugStep {
         /**
-         * "http_request" | "http_response" | "variable" | "condition" | "log" | "error" | "playwright_script" | "playwright_result"
+         * "http_request" | "http_response" | "variable" | "condition" | "log" | "error"
          */
         type: string
 
@@ -413,8 +413,6 @@ export namespace checker {
         "node_name": string
         "duration_ms": number
         trace: DebugTrace
-        screenshot: string
-        logs: string[]
     }
 
     /**
@@ -513,6 +511,7 @@ export namespace checker {
 
         /**
          * GetLocalUnlock checks which streaming/AI platforms are accessible from the server's own network.
+         * It runs the seeded default rules (see rules_defaults.go) against a plain HTTP client — no proxy.
          */
         public async GetLocalUnlock(): Promise<LocalUnlockResult> {
             // Now make the actual call to the API

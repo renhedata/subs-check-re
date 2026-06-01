@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 
 	"github.com/dop251/goja"
@@ -105,33 +104,14 @@ func injectHTTPGet(ctx context.Context, vm *goja.Runtime, client *http.Client, d
 			}
 		}
 
-		if dr != nil {
-			dr.HTTPReq(url, "GET", headers)
+		res := trackedHTTPGet(ctx, client, url, headers, dr)
+		if res.Err != nil {
+			panic(vm.ToValue(res.Err.Error()))
 		}
-
-		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-		if err != nil {
-			panic(vm.ToValue(err.Error()))
-		}
-		for k, v := range headers {
-			req.Header.Set(k, v)
-		}
-
-		resp, err := client.Do(req)
-		if err != nil {
-			panic(vm.ToValue(err.Error()))
-		}
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 256*1024))
-		resp.Body.Close()
-
-		if dr != nil {
-			dr.HTTPResp(resp.StatusCode, nil, string(body))
-		}
-
 		return vm.ToValue(httpGetResult{
-			Status:   resp.StatusCode,
-			Body:     string(body),
-			FinalURL: resp.Request.URL.String(),
+			Status:   res.Status,
+			Body:     res.Body,
+			FinalURL: res.FinalURL,
 		})
 	}
 	return vm.Set("http_get", fn)

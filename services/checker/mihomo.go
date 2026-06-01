@@ -345,6 +345,13 @@ func checkNode(ctx context.Context, nodeID string, mapping map[string]any, speed
 
 		extra := make(map[string]bool)
 		for k, v := range ruleResults {
+			if opts.Debug && result.Debug != nil {
+				if rd, ok := ruleRecorders[k]; ok {
+					result.Debug.Traces = append(result.Debug.Traces, DebugTrace{
+						Platform: k, Result: v, Steps: rd.Steps,
+					})
+				}
+			}
 			if !builtinKeys[k] {
 				extra[k] = v
 			}
@@ -353,68 +360,33 @@ func checkNode(ctx context.Context, nodeID string, mapping map[string]any, speed
 			result.ExtraPlatforms = extra
 		}
 
-		resolve := func(key string, fallback func(*DebugRecorder) bool) bool {
-			if v, ok := ruleResults[key]; ok {
-				if opts.Debug && result.Debug != nil {
-					steps := []DebugStep{}
-					if rd, ok := ruleRecorders[key]; ok {
-						steps = rd.Steps
-					}
-					result.Debug.Traces = append(result.Debug.Traces, DebugTrace{
-						Platform: key, Result: v, Steps: steps,
-					})
-				}
-				return v
-			}
-			if v, ok := extra[key]; ok {
-				if opts.Debug && result.Debug != nil {
-					steps := []DebugStep{}
-					if rd, ok := ruleRecorders[key]; ok {
-						steps = rd.Steps
-					}
-					result.Debug.Traces = append(result.Debug.Traces, DebugTrace{
-						Platform: key, Result: v, Steps: steps,
-					})
-				}
-				return v
-			}
-			var dr *DebugRecorder
-			if opts.Debug {
-				dr = &DebugRecorder{}
-			}
-			v := fallback(dr)
-			if opts.Debug && result.Debug != nil {
-				result.Debug.Traces = append(result.Debug.Traces, DebugTrace{
-					Platform: key, Result: v, Steps: dr.Steps,
-				})
-			}
-			return v
-		}
-
+		// Surface builtin platform results from rule engine output. If a user disabled
+		// or deleted the rule for a key, that platform simply isn't checked — there's
+		// no Go fallback. Default rules are seeded into platform_rules on first ListRules.
 		if hasApp(opts, "netflix") {
-			result.Netflix = resolve("netflix", func(dr *DebugRecorder) bool { return checkNetflix(ctx, mediaClient, dr) })
+			result.Netflix = ruleResults["netflix"]
 		}
 		if hasApp(opts, "youtube") {
-			result.YouTube = resolve("youtube", func(dr *DebugRecorder) bool { return checkYouTube(ctx, mediaClient, dr) })
-			result.YouTubePremium = resolve("youtube_premium", func(dr *DebugRecorder) bool { return checkYouTubePremium(ctx, mediaClient, dr) })
+			result.YouTube = ruleResults["youtube"]
+			result.YouTubePremium = ruleResults["youtube_premium"]
 		}
 		if hasApp(opts, "openai") {
-			result.OpenAI = resolve("openai", func(dr *DebugRecorder) bool { return checkOpenAI(ctx, mediaClient, dr) })
+			result.OpenAI = ruleResults["openai"]
 		}
 		if hasApp(opts, "claude") {
-			result.Claude = resolve("claude", func(dr *DebugRecorder) bool { return checkClaude(ctx, mediaClient, dr) })
+			result.Claude = ruleResults["claude"]
 		}
 		if hasApp(opts, "gemini") {
-			result.Gemini = resolve("gemini", func(dr *DebugRecorder) bool { return checkGemini(ctx, mediaClient, dr) })
+			result.Gemini = ruleResults["gemini"]
 		}
 		if hasApp(opts, "grok") {
-			result.Grok = resolve("grok", func(dr *DebugRecorder) bool { return checkGrok(ctx, mediaClient, dr) })
+			result.Grok = ruleResults["grok"]
 		}
 		if hasApp(opts, "disney") {
-			result.Disney = resolve("disney", func(dr *DebugRecorder) bool { return checkDisney(ctx, mediaClient, dr) })
+			result.Disney = ruleResults["disney"]
 		}
 		if hasApp(opts, "tiktok") {
-			result.TikTok = resolve("tiktok", func(dr *DebugRecorder) bool { return checkTikTok(ctx, mediaClient, dr) })
+			result.TikTok = ruleResults["tiktok"]
 		}
 	}
 

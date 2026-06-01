@@ -3,7 +3,6 @@ package checker
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"sync"
 )
 
@@ -26,24 +25,47 @@ func toRawMessage(v any) json.RawMessage {
 	return b
 }
 
-func (d *DebugRecorder) HTTPReq(url, method string, headers map[string]string) {
+// HTTPReq records an outgoing HTTP request. body is the request body string
+// (empty for GET/HEAD); pass an empty string when there is no body.
+func (d *DebugRecorder) HTTPReq(method, url string, headers map[string]string, body string) {
 	d.Add(DebugStep{
 		Type:        "http_request",
 		Description: method + " " + url,
-		Details:     toRawMessage(map[string]any{"url": url, "method": method, "headers": headers}),
+		Details: toRawMessage(map[string]any{
+			"method":  method,
+			"url":     url,
+			"headers": headers,
+			"body":    body,
+		}),
 	})
 }
 
-func (d *DebugRecorder) HTTPResp(code int, headers map[string]string, body string) {
-	snippet := body
-	if len(snippet) > 2000 {
-		snippet = snippet[:2000]
-	}
+// HTTPResp records a response with the FULL body (no truncation). The console
+// panel displays / lets users search this. durationMs is round-trip latency in ms.
+// finalURL is the URL after redirects.
+func (d *DebugRecorder) HTTPResp(code int, headers map[string]string, body string, durationMs int64, finalURL string) {
 	d.Add(DebugStep{
 		Type:        "http_response",
-		Description: "HTTP " + strconv.Itoa(code),
-		Details:     toRawMessage(map[string]any{"status_code": code, "headers": headers, "body_snippet": snippet}),
+		Description: fmt.Sprintf("HTTP %d  ·  %d ms  ·  %s", code, durationMs, humanBytes(len(body))),
+		Details: toRawMessage(map[string]any{
+			"status_code": code,
+			"headers":     headers,
+			"body":        body,
+			"duration_ms": durationMs,
+			"final_url":   finalURL,
+			"size_bytes":  len(body),
+		}),
 	})
+}
+
+func humanBytes(n int) string {
+	if n < 1024 {
+		return fmt.Sprintf("%d B", n)
+	}
+	if n < 1024*1024 {
+		return fmt.Sprintf("%.1f KB", float64(n)/1024)
+	}
+	return fmt.Sprintf("%.1f MB", float64(n)/(1024*1024))
 }
 
 func (d *DebugRecorder) Variable(name string, value any) {
@@ -75,21 +97,5 @@ func (d *DebugRecorder) Error(err error) {
 		Type:        "error",
 		Description: err.Error(),
 		Details:     toRawMessage(map[string]any{"error": err.Error()}),
-	})
-}
-
-func (d *DebugRecorder) PlaywrightScript(description string) {
-	d.Add(DebugStep{
-		Type:        "playwright_script",
-		Description: description,
-		Details:     toRawMessage(map[string]any{"script": description}),
-	})
-}
-
-func (d *DebugRecorder) PlaywrightResult(result bool, logs []string, screenshot string) {
-	d.Add(DebugStep{
-		Type:        "playwright_result",
-		Description: fmt.Sprintf("playwright result = %v", result),
-		Details:     toRawMessage(map[string]any{"result": result, "logs": logs, "screenshot": screenshot}),
 	})
 }

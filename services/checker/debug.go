@@ -4,7 +4,7 @@ import "encoding/json"
 
 // DebugStep captures one step in a platform check trace.
 type DebugStep struct {
-	Type        string          `json:"type"`        // "http_request" | "http_response" | "variable" | "condition" | "log" | "error" | "playwright_script" | "playwright_result"
+	Type        string          `json:"type"`        // "http_request" | "http_response" | "variable" | "condition" | "log" | "error"
 	Description string          `json:"description"` // human-readable summary
 	Details     json.RawMessage `json:"details"`     // free-form key-value pairs as JSON
 }

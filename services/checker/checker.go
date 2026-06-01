@@ -190,7 +190,8 @@ type TriggerParams struct {
 	Debug           *bool    `json:"debug"`
 }
 
-// --- In-process SSE channels ---
+// --- Progress event payload ---
+// The bus that routes these to subscribers lives in jobbus.go.
 
 type progressUpdate struct {
 	Progress        int        `json:"progress"`
@@ -201,77 +202,6 @@ type progressUpdate struct {
 	SpeedKbps       int        `json:"speed_kbps,omitempty"`
 	UploadSpeedKbps int        `json:"upload_speed_kbps,omitempty"`
 	Debug           *NodeDebug `json:"debug,omitempty"`
-}
-
-var (
-	jobChannels   = make(map[string][]chan progressUpdate)
-	jobChannelsMu sync.Mutex
-)
-
-var (
-	jobCancels   = make(map[string]context.CancelFunc)
-	jobCancelsMu sync.Mutex
-)
-
-func storeJobCancel(jobID string, cancel context.CancelFunc) {
-	jobCancelsMu.Lock()
-	jobCancels[jobID] = cancel
-	jobCancelsMu.Unlock()
-}
-
-func removeJobCancel(jobID string) {
-	jobCancelsMu.Lock()
-	delete(jobCancels, jobID)
-	jobCancelsMu.Unlock()
-}
-
-func triggerJobCancel(jobID string) {
-	jobCancelsMu.Lock()
-	if fn, ok := jobCancels[jobID]; ok {
-		fn()
-		delete(jobCancels, jobID)
-	}
-	jobCancelsMu.Unlock()
-}
-
-func subscribeJobProgress(jobID string) chan progressUpdate {
-	ch := make(chan progressUpdate, 100)
-	jobChannelsMu.Lock()
-	jobChannels[jobID] = append(jobChannels[jobID], ch)
-	jobChannelsMu.Unlock()
-	return ch
-}
-
-func unsubscribeJobProgress(jobID string, ch chan progressUpdate) {
-	jobChannelsMu.Lock()
-	defer jobChannelsMu.Unlock()
-	channels := jobChannels[jobID]
-	for i, c := range channels {
-		if c == ch {
-			jobChannels[jobID] = append(channels[:i], channels[i+1:]...)
-			return
-		}
-	}
-}
-
-func broadcastProgress(jobID string, update progressUpdate) {
-	jobChannelsMu.Lock()
-	defer jobChannelsMu.Unlock()
-	for _, ch := range jobChannels[jobID] {
-		select {
-		case ch <- update:
-		default:
-		}
-	}
-}
-
-func closeJobChannels(jobID string) {
-	jobChannelsMu.Lock()
-	defer jobChannelsMu.Unlock()
-	for _, ch := range jobChannels[jobID] {
-		close(ch)
-	}
-	delete(jobChannels, jobID)
 }
 
 // --- API endpoints ---
@@ -430,8 +360,8 @@ func GetProgress(w http.ResponseWriter, req *http.Request) {
 	// Send current snapshot
 	writeSSE(w, flusher, progressUpdate{Progress: progress, Total: total})
 
-	ch := subscribeJobProgress(jobID)
-	defer unsubscribeJobProgress(jobID, ch)
+	ch := defaultJobBus.Subscribe(jobID)
+	defer defaultJobBus.Unsubscribe(jobID, ch)
 
 	for {
 		select {
@@ -464,7 +394,7 @@ func CancelCheck(ctx context.Context, jobID string) error {
 		jobID, claims.UserID).Scan(&count); err != nil || count == 0 {
 		return errs.B().Code(errs.NotFound).Msg("active job not found").Err()
 	}
-	triggerJobCancel(jobID)
+	defaultJobBus.TriggerCancel(jobID)
 	return nil
 }
 
@@ -679,12 +609,12 @@ const (
 func runJob(parentCtx context.Context, jobID, subscriptionID, userID string) {
 	ctx, cancel := context.WithTimeout(parentCtx, 4*time.Hour)
 	defer cancel()
-	storeJobCancel(jobID, cancel)
-	defer removeJobCancel(jobID)
+	defaultJobBus.StoreCancel(jobID, cancel)
+	defer defaultJobBus.RemoveCancel(jobID)
 
 	markFailed := func() {
 		db.Exec(context.Background(), `UPDATE check_jobs SET status='failed', finished_at=$2 WHERE id=$1`, jobID, time.Now())
-		closeJobChannels(jobID)
+		defaultJobBus.Close(jobID)
 	}
 
 	// Mark as running
@@ -708,7 +638,7 @@ func runJob(parentCtx context.Context, jobID, subscriptionID, userID string) {
 	}
 
 	// Fetch and parse proxies from subscription URL
-	proxies, err := fetchProxies(subURL)
+	proxies, err := defaultFetcher.Fetch(parentCtx, subURL)
 	if err != nil {
 		markFailed()
 		return
@@ -819,7 +749,7 @@ func runJob(parentCtx context.Context, jobID, subscriptionID, userID string) {
 				if opts.Debug && res.Debug != nil {
 					pu.Debug = res.Debug
 				}
-				broadcastProgress(jobID, pu)
+				defaultJobBus.Publish(jobID, pu)
 			}
 		}()
 	}
@@ -853,5 +783,5 @@ func runJob(parentCtx context.Context, jobID, subscriptionID, userID string) {
 		Total:          total,
 	})
 
-	closeJobChannels(jobID)
+	defaultJobBus.Close(jobID)
 }

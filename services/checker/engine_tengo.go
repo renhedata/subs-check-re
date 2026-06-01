@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 
 	"github.com/d5/tengo/v2"
@@ -61,33 +60,14 @@ func runTengoRule(ctx context.Context, client *http.Client, defRaw json.RawMessa
 				}
 			}
 
-			if dr != nil {
-				dr.HTTPReq(url, "GET", headers)
+			res := trackedHTTPGet(ctx, client, url, headers, dr)
+			if res.Err != nil {
+				return errorResult(res.Err.Error()), nil
 			}
-
-			req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-			if err != nil {
-				return errorResult(err.Error()), nil
-			}
-			for k, v := range headers {
-				req.Header.Set(k, v)
-			}
-
-			resp, err := client.Do(req)
-			if err != nil {
-				return errorResult(err.Error()), nil
-			}
-			body, _ := io.ReadAll(io.LimitReader(resp.Body, 256*1024))
-			resp.Body.Close()
-
-			if dr != nil {
-				dr.HTTPResp(resp.StatusCode, nil, string(body))
-			}
-
 			return &tengo.Map{Value: map[string]tengo.Object{
-				"status":    &tengo.Int{Value: int64(resp.StatusCode)},
-				"body":      &tengo.String{Value: string(body)},
-				"final_url": &tengo.String{Value: resp.Request.URL.String()},
+				"status":    &tengo.Int{Value: int64(res.Status)},
+				"body":      &tengo.String{Value: res.Body},
+				"final_url": &tengo.String{Value: res.FinalURL},
 				"error":     &tengo.String{Value: ""},
 			}}, nil
 		},
@@ -156,3 +136,4 @@ func errorResult(msg string) *tengo.Map {
 		"error":     &tengo.String{Value: msg},
 	}}
 }
+

@@ -4,12 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 )
 
-// runConditionRule evaluates an HTTP condition rule.
+// runConditionRule evaluates an HTTP condition rule. The full request/response
+// (headers + body + duration + final URL) is recorded into dr for the debug UI.
 func runConditionRule(ctx context.Context, client *http.Client, defRaw json.RawMessage, dr *DebugRecorder) (bool, error) {
 	var def ConditionDef
 	if err := json.Unmarshal(defRaw, &def); err != nil {
@@ -23,67 +23,38 @@ func runConditionRule(ctx context.Context, client *http.Client, defRaw json.RawM
 	if method == "" {
 		method = "GET"
 	}
-	req, err := http.NewRequestWithContext(ctx, method, def.URL, nil)
-	if err != nil {
-		if dr != nil {
-			dr.Error(err)
-		}
-		return false, err
-	}
-	for k, v := range def.Headers {
-		req.Header.Set(k, v)
-	}
 
-	if dr != nil {
-		dr.HTTPReq(def.URL, method, def.Headers)
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		if dr != nil {
-			dr.Error(err)
-		}
-		return false, err
-	}
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 256*1024))
-	resp.Body.Close()
-
-	bodyStr := string(body)
-	finalURL := resp.Request.URL.String()
-
-	if dr != nil {
-		hdrs := make(map[string]string, len(resp.Header))
-		for k, vv := range resp.Header {
-			if len(vv) > 0 {
-				hdrs[k] = vv[0]
-			}
-		}
-		dr.HTTPResp(resp.StatusCode, hdrs, bodyStr)
+	res := trackedHTTPRequest(ctx, client, method, def.URL, def.Headers, nil, dr)
+	if res.Err != nil {
+		return false, res.Err
 	}
 
 	ok := true
-	if def.StatusCode != 0 && resp.StatusCode != def.StatusCode {
-		ok = false
-		if dr != nil {
-			dr.Condition(fmt.Sprintf("status_code == %d", def.StatusCode), false)
-		}
-	} else if def.StatusCode != 0 && dr != nil {
-		dr.Condition(fmt.Sprintf("status_code == %d", def.StatusCode), true)
-	}
-	for _, s := range def.BodyContains {
-		if !strings.Contains(bodyStr, s) {
+
+	if def.StatusCode != 0 {
+		matched := res.Status == def.StatusCode
+		if !matched {
 			ok = false
-			if dr != nil {
-				dr.Condition(fmt.Sprintf("body contains %q", s), false)
-			}
-		} else if dr != nil {
-			dr.Condition(fmt.Sprintf("body contains %q", s), true)
+		}
+		if dr != nil {
+			dr.Condition(fmt.Sprintf("status_code == %d", def.StatusCode), matched)
 		}
 	}
+
+	for _, s := range def.BodyContains {
+		matched := strings.Contains(res.Body, s)
+		if !matched {
+			ok = false
+		}
+		if dr != nil {
+			dr.Condition(fmt.Sprintf("body contains %q", s), matched)
+		}
+	}
+
 	if len(def.BodyContainsAny) > 0 {
 		found := false
 		for _, s := range def.BodyContainsAny {
-			if strings.Contains(bodyStr, s) {
+			if strings.Contains(res.Body, s) {
 				found = true
 				if dr != nil {
 					dr.Condition(fmt.Sprintf("body contains any %q", s), true)
@@ -98,121 +69,39 @@ func runConditionRule(ctx context.Context, client *http.Client, defRaw json.RawM
 			}
 		}
 	}
+
 	for _, s := range def.BodyNotContains {
-		if strings.Contains(bodyStr, s) {
+		present := strings.Contains(res.Body, s)
+		if present {
 			ok = false
-			if dr != nil {
-				dr.Condition(fmt.Sprintf("body does not contain %q", s), false)
-			}
-		} else if dr != nil {
-			dr.Condition(fmt.Sprintf("body does not contain %q", s), true)
 		}
-	}
-	if def.FinalURLContains != "" && !strings.Contains(finalURL, def.FinalURLContains) {
-		ok = false
 		if dr != nil {
-			dr.Condition(fmt.Sprintf("final_url contains %q", def.FinalURLContains), false)
+			dr.Condition(fmt.Sprintf("body does not contain %q", s), !present)
 		}
-	} else if def.FinalURLContains != "" && dr != nil {
-		dr.Condition(fmt.Sprintf("final_url contains %q", def.FinalURLContains), true)
 	}
-	if def.FinalURLNotContains != "" && strings.Contains(finalURL, def.FinalURLNotContains) {
-		ok = false
+
+	if def.FinalURLContains != "" {
+		matched := strings.Contains(res.FinalURL, def.FinalURLContains)
+		if !matched {
+			ok = false
+		}
 		if dr != nil {
-			dr.Condition(fmt.Sprintf("final_url does not contain %q", def.FinalURLNotContains), false)
+			dr.Condition(fmt.Sprintf("final_url contains %q", def.FinalURLContains), matched)
 		}
-	} else if def.FinalURLNotContains != "" && dr != nil {
-		dr.Condition(fmt.Sprintf("final_url does not contain %q", def.FinalURLNotContains), true)
 	}
+
+	if def.FinalURLNotContains != "" {
+		present := strings.Contains(res.FinalURL, def.FinalURLNotContains)
+		if present {
+			ok = false
+		}
+		if dr != nil {
+			dr.Condition(fmt.Sprintf("final_url does not contain %q", def.FinalURLNotContains), !present)
+		}
+	}
+
 	if dr != nil {
 		dr.Variable("return_value", ok)
 	}
 	return ok, nil
-}
-
-type conditionDebug struct {
-	ok              bool
-	statusCode      int
-	finalURL        string
-	body            string
-	responseHeaders map[string]string
-}
-
-// testConditionVerbose is like runConditionRule but also returns HTTP response details for the test UI.
-func testConditionVerbose(ctx context.Context, client *http.Client, defRaw json.RawMessage) (*conditionDebug, error) {
-	var def ConditionDef
-	if err := json.Unmarshal(defRaw, &def); err != nil {
-		return nil, err
-	}
-
-	method := def.Method
-	if method == "" {
-		method = "GET"
-	}
-	req, err := http.NewRequestWithContext(ctx, method, def.URL, nil)
-	if err != nil {
-		return nil, err
-	}
-	for k, v := range def.Headers {
-		req.Header.Set(k, v)
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 256*1024))
-	resp.Body.Close()
-
-	bodyStr := string(body)
-	finalURL := resp.Request.URL.String()
-
-	// Collect response headers (canonicalized, one value per key).
-	hdrs := make(map[string]string, len(resp.Header))
-	for k, vv := range resp.Header {
-		if len(vv) > 0 {
-			hdrs[k] = vv[0]
-		}
-	}
-
-	ok := true
-	if def.StatusCode != 0 && resp.StatusCode != def.StatusCode {
-		ok = false
-	}
-	for _, s := range def.BodyContains {
-		if !strings.Contains(bodyStr, s) {
-			ok = false
-		}
-	}
-	if ok && len(def.BodyContainsAny) > 0 {
-		found := false
-		for _, s := range def.BodyContainsAny {
-			if strings.Contains(bodyStr, s) {
-				found = true
-				break
-			}
-		}
-		if !found {
-			ok = false
-		}
-	}
-	for _, s := range def.BodyNotContains {
-		if strings.Contains(bodyStr, s) {
-			ok = false
-		}
-	}
-	if def.FinalURLContains != "" && !strings.Contains(finalURL, def.FinalURLContains) {
-		ok = false
-	}
-	if def.FinalURLNotContains != "" && strings.Contains(finalURL, def.FinalURLNotContains) {
-		ok = false
-	}
-
-	return &conditionDebug{
-		ok:              ok,
-		statusCode:      resp.StatusCode,
-		finalURL:        finalURL,
-		body:            bodyStr,
-		responseHeaders: hdrs,
-	}, nil
 }

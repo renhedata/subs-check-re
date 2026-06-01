@@ -22,8 +22,6 @@ func runRule(ctx context.Context, client *http.Client, rule *PlatformRule, dr *D
 		return runTengoRule(ctx, client, rule.Definition, dr)
 	case "lua":
 		return runLuaRule(ctx, client, rule.Definition, dr)
-	case "playwright":
-		return runPlaywrightRule(ctx, client, rule, dr)
 	default:
 		err := fmt.Errorf("unknown rule_type: %s", rule.RuleType)
 		if dr != nil {

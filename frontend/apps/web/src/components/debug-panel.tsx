@@ -8,9 +8,7 @@ export interface DebugStep {
 		| "variable"
 		| "condition"
 		| "log"
-		| "error"
-		| "playwright_script"
-		| "playwright_result";
+		| "error";
 	description: string;
 	details: Record<string, unknown>;
 }
@@ -36,24 +34,20 @@ function DebugStepView({ step }: { step: DebugStep }) {
 				<span
 					className="rounded px-1 py-0.5 font-medium text-[10px] uppercase"
 					style={{
-					background:
-						step.type === "error"
-							? "var(--color-badge-danger-bg)"
-							: step.type === "http_request" || step.type === "http_response"
-								? "var(--color-badge-info-bg)"
-								: step.type === "playwright_script" || step.type === "playwright_result"
+						background:
+							step.type === "error"
+								? "var(--color-badge-danger-bg)"
+								: step.type === "http_request" || step.type === "http_response"
 									? "var(--color-badge-info-bg)"
 									: step.type === "variable"
 										? "var(--color-badge-success-bg)"
 										: step.type === "condition"
 											? "var(--color-badge-warning-bg)"
 											: "transparent",
-					color:
-						step.type === "error"
-							? "var(--destructive)"
-							: step.type === "http_request" || step.type === "http_response"
-								? "var(--color-badge-info)"
-								: step.type === "playwright_script" || step.type === "playwright_result"
+						color:
+							step.type === "error"
+								? "var(--destructive)"
+								: step.type === "http_request" || step.type === "http_response"
 									? "var(--color-badge-info)"
 									: step.type === "variable"
 										? "var(--color-badge-success)"
@@ -66,19 +60,15 @@ function DebugStepView({ step }: { step: DebugStep }) {
 						? "REQ"
 						: step.type === "http_response"
 							? "RES"
-							: step.type === "playwright_script"
-								? "PW"
-								: step.type === "playwright_result"
-									? "PW_RES"
-									: step.type === "variable"
-										? "VAR"
-										: step.type === "condition"
-											? "IF"
-											: step.type === "log"
-												? "LOG"
-												: step.type === "error"
-													? "ERR"
-													: step.type}
+							: step.type === "variable"
+								? "VAR"
+								: step.type === "condition"
+									? "IF"
+									: step.type === "log"
+										? "LOG"
+										: step.type === "error"
+											? "ERR"
+											: step.type}
 				</span>
 				<span style={{ color: "var(--color-code)" }}>{step.description}</span>
 				{Object.keys(step.details).length > 0 && (

@@ -3,7 +3,6 @@ package checker
 import (
 	"context"
 	"encoding/json"
-	"net/http"
 	"strings"
 	"time"
 
@@ -108,8 +107,6 @@ type TestRuleResult struct {
 	NodeName        string      `json:"node_name,omitempty"`
 	DurationMs      int64       `json:"duration_ms,omitempty"`
 	Trace           *DebugTrace `json:"trace,omitempty"`
-	Screenshot      string      `json:"screenshot,omitempty"`
-	Logs            []string    `json:"logs,omitempty"`
 }
 
 // NodeSummary is a minimal proxy node entry for the test node picker.
@@ -125,12 +122,11 @@ type ListTestNodesResponse struct {
 }
 
 var validRuleTypes = map[string]bool{
-	"condition":  true,
-	"js":         true,
-	"ts":         true,
-	"tengo":      true,
-	"lua":        true,
-	"playwright": true,
+	"condition": true,
+	"js":        true,
+	"ts":        true,
+	"tengo":     true,
+	"lua":       true,
 }
 
 // ListRules returns all platform rules for the current user.
@@ -263,134 +259,7 @@ func TestRule(ctx context.Context, p *TestRuleParams) (*TestRuleResult, error) {
 		return nil, errs.B().Code(errs.InvalidArgument).Msg("invalid rule_type").Err()
 	}
 	claims := encauth.Data().(*authsvc.UserClaims)
-
-	var httpClient *http.Client
-	var nodeName string
-
-	if p.NodeID != "" {
-		var configJSON []byte
-		err := db.QueryRow(ctx, `
-			SELECT n.name, n.config FROM nodes n
-			WHERE n.id = $1
-			  AND n.subscription_id IN (
-			        SELECT DISTINCT subscription_id FROM check_jobs WHERE user_id = $2
-			      )
-		`, p.NodeID, claims.UserID).Scan(&nodeName, &configJSON)
-		if err == nil && len(configJSON) > 0 {
-			var mapping map[string]any
-			if json.Unmarshal(configJSON, &mapping) == nil {
-				if pc := newProxyClient(mapping); pc != nil {
-					defer pc.close()
-					httpClient = pc.Client
-				}
-			}
-		}
-	}
-	if httpClient == nil {
-		httpClient = &http.Client{Timeout: 15 * time.Second}
-		nodeName = ""
-	}
-
-	start := time.Now()
-	dr := &DebugRecorder{}
-
-	if p.RuleType == "condition" {
-		ok, err := runConditionRule(ctx, httpClient, p.Definition, dr)
-		ms := time.Since(start).Milliseconds()
-		if err != nil {
-			return &TestRuleResult{OK: false, Error: err.Error(), DurationMs: ms, NodeName: nodeName, Trace: &DebugTrace{Platform: p.RuleType, Result: false, Steps: dr.Steps}}, nil
-		}
-		// Extract the last HTTP response details from debug steps for backward compatibility
-		var statusCode int
-		var finalURL, body string
-		var respHeaders map[string]string
-		for _, step := range dr.Steps {
-			if step.Type == "http_response" && len(step.Details) > 0 {
-				var details map[string]any
-				if json.Unmarshal(step.Details, &details) == nil {
-					if v, ok := details["status_code"]; ok {
-						if code, ok := v.(float64); ok {
-							statusCode = int(code)
-						}
-					}
-					if v, ok := details["body_snippet"]; ok {
-						if s, ok := v.(string); ok {
-							body = s
-						}
-					}
-					if v, ok := details["headers"]; ok {
-						if h, ok := v.(map[string]any); ok {
-							respHeaders = make(map[string]string, len(h))
-							for k, val := range h {
-								if sv, ok := val.(string); ok {
-									respHeaders[k] = sv
-								}
-							}
-						}
-					}
-				}
-			}
-			if step.Type == "variable" && len(step.Details) > 0 {
-				var details map[string]any
-				if json.Unmarshal(step.Details, &details) == nil {
-					if v, ok := details["name"]; ok && v == "final_url" {
-						if s, ok := details["value"]; ok {
-							if sv, ok := s.(string); ok {
-								finalURL = sv
-							}
-						}
-					}
-				}
-			}
-		}
-		return &TestRuleResult{
-			OK:              ok,
-			StatusCode:      statusCode,
-			FinalURL:        finalURL,
-			Body:            body,
-			ResponseHeaders: respHeaders,
-			NodeName:        nodeName,
-			DurationMs:      ms,
-			Trace:           &DebugTrace{Platform: p.RuleType, Result: ok, Steps: dr.Steps},
-		}, nil
-	}
-
-	rule := &PlatformRule{RuleType: p.RuleType, Definition: p.Definition}
-	ok, err := runRule(ctx, httpClient, rule, dr)
-	ms := time.Since(start).Milliseconds()
-
-	// Extract playwright-specific fields from debug steps
-	var screenshot string
-	var logs []string
-	if p.RuleType == "playwright" {
-		for _, step := range dr.Steps {
-			if step.Type == "playwright_result" && len(step.Details) > 0 {
-				var details map[string]any
-				if json.Unmarshal(step.Details, &details) == nil {
-					if v, ok := details["logs"]; ok {
-						if logArr, ok := v.([]any); ok {
-							logs = make([]string, 0, len(logArr))
-							for _, log := range logArr {
-								if s, ok := log.(string); ok {
-									logs = append(logs, s)
-								}
-							}
-						}
-					}
-					if v, ok := details["screenshot"]; ok {
-						if s, ok := v.(string); ok {
-							screenshot = s
-						}
-					}
-				}
-			}
-		}
-	}
-
-	if err != nil {
-		return &TestRuleResult{OK: false, Error: err.Error(), DurationMs: ms, NodeName: nodeName, Trace: &DebugTrace{Platform: p.RuleType, Result: false, Steps: dr.Steps}, Screenshot: screenshot, Logs: logs}, nil
-	}
-	return &TestRuleResult{OK: ok, DurationMs: ms, NodeName: nodeName, Trace: &DebugTrace{Platform: p.RuleType, Result: ok, Steps: dr.Steps}, Screenshot: screenshot, Logs: logs}, nil
+	return evaluateRuleForNode(ctx, claims.UserID, p.RuleType, p.Definition, p.NodeID)
 }
 
 // ListTestNodes returns all proxy nodes available to the current user, for the test node picker.

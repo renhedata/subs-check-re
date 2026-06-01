@@ -1,4 +1,3 @@
-import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
 	Bell,
@@ -13,8 +12,8 @@ import {
 	User,
 } from "lucide-react";
 import { clearToken } from "@/lib/auth";
-import { client } from "@/lib/client";
 import { useTheme } from "@/lib/theme";
+import { useMe } from "@/queries";
 
 const NAV_ITEMS = [
 	{ to: "/", label: "Dashboard", icon: LayoutDashboard, exact: true },
@@ -69,11 +68,7 @@ function NavItem({
 export function Sidebar() {
 	const navigate = useNavigate();
 	const { theme, toggle } = useTheme();
-	const meQuery = useQuery({
-		queryKey: ["me"],
-		queryFn: () => client.auth.Me(),
-		staleTime: Number.POSITIVE_INFINITY,
-	});
+	const meQuery = useMe();
 	const username = meQuery.data?.username ?? "…";
 
 	function logout() {

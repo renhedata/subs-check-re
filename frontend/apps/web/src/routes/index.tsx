@@ -1,7 +1,6 @@
 // frontend/apps/web/src/routes/index.tsx
 
 import { Skeleton } from "@frontend/ui/components/skeleton";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import {
 	Check,
@@ -17,8 +16,13 @@ import { useState } from "react";
 import { toast } from "sonner";
 import type { PlatformKey } from "@/components/platform-icons";
 import { PlatformIcon } from "@/components/platform-icons";
-import { client } from "@/lib/client";
 import type { checker } from "@/lib/client.gen";
+import {
+	useAPIKey,
+	useLocalUnlock,
+	useRegenerateAPIKey,
+	useSubscriptions,
+} from "@/queries";
 
 type LocalUnlockResult = checker.LocalUnlockResult;
 
@@ -67,29 +71,16 @@ function StatCard({
 }
 
 function DashboardPage() {
-	const qc = useQueryClient();
-
-	const { data, isLoading } = useQuery({
-		queryKey: ["subscriptions"],
-		queryFn: () => client.subscription.List(),
-	});
-
-	const apiKeyQuery = useQuery({
-		queryKey: ["api-key"],
-		queryFn: () => client.settings.GetAPIKey(),
-		staleTime: Number.POSITIVE_INFINITY,
-	});
-
+	const { data, isLoading } = useSubscriptions();
+	const apiKeyQuery = useAPIKey();
 	const apiKey = apiKeyQuery.data?.api_key ?? "";
 	const origin = typeof window !== "undefined" ? window.location.origin : "";
 
-	const regenerateMut = useMutation({
-		mutationFn: () => client.settings.RegenerateAPIKey(),
-		onSuccess: () => {
-			qc.invalidateQueries({ queryKey: ["api-key"] });
-			toast.success("API key regenerated");
-		},
-	});
+	const regenerateMut = useRegenerateAPIKey();
+	const handleRegenerate = () =>
+		regenerateMut.mutate(undefined, {
+			onSuccess: () => toast.success("API key regenerated"),
+		});
 
 	const subs = data?.subscriptions ?? [];
 	const enabled = subs.filter((s) => s.enabled).length;
@@ -158,7 +149,7 @@ function DashboardPage() {
 						</button>
 						<button
 							type="button"
-							onClick={() => regenerateMut.mutate()}
+							onClick={handleRegenerate}
 							disabled={regenerateMut.isPending}
 							className="rounded-md border border-border px-2.5 py-1.5 text-muted-foreground text-xs transition-colors hover:bg-white/5 disabled:opacity-50"
 						>
@@ -335,12 +326,7 @@ const PLATFORM_KEYS: (keyof LocalUnlockResult)[] = [
 ];
 
 function NetworkUnlockPanel() {
-	const { data, isLoading, isFetching, refetch } = useQuery({
-		queryKey: ["local-unlock"],
-		queryFn: () => client.checker.GetLocalUnlock(),
-		staleTime: 5 * 60 * 1000,
-		retry: false,
-	});
+	const { data, isLoading, isFetching, refetch } = useLocalUnlock();
 
 	return (
 		<div>

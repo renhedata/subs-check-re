@@ -3,20 +3,38 @@ package checker
 
 import (
 	"context"
-	"encoding/base64"
-	"encoding/json"
 	"fmt"
-	"net"
 	"net/http"
-	"sort"
 	"strings"
-	"time"
 
-	"github.com/google/uuid"
 	settingssvc "subs-check-re/services/settings"
-	subsvc "subs-check-re/services/subscription"
-	"gopkg.in/yaml.v3"
 )
+
+// Exporter renders the export response for a given (subscriptionID, userID)
+// pair. Each adapter knows which loader to call (proxies vs. server-addresses)
+// and how to format the output. Adapters live in this file because each is
+// small enough that splitting them across files would be more noise than locality.
+type Exporter interface {
+	ContentType() string
+	// Filename returns the file name for Content-Disposition, or "" to skip the header.
+	Filename(opts ExportOpts) string
+	// Export loads the necessary data and writes the response body.
+	Export(ctx context.Context, w http.ResponseWriter, subscriptionID, userID string, opts ExportOpts) error
+}
+
+// ExportOpts carries target-specific knobs (e.g. RouterOS list name) plus
+// metadata that exporters need to log the request.
+type ExportOpts struct {
+	ListName string
+	ClientIP string
+}
+
+// exporters is the dispatch table. New formats register here.
+var exporters = map[string]Exporter{
+	"clash":    clashExporter{},
+	"base64":   base64Exporter{},
+	"routeros": routerOSExporter{},
+}
 
 // Export generates a subscription link from the latest completed check results.
 // If subscriptionID is "all", combines nodes from all subscriptions.
@@ -26,57 +44,20 @@ import (
 //
 //encore:api public raw method=GET path=/export/:subscriptionID
 func Export(w http.ResponseWriter, req *http.Request) {
-	ctx := req.Context()
-
-	// Extract subscriptionID from path: /export/<subscriptionID>
 	parts := strings.Split(strings.Trim(req.URL.Path, "/"), "/")
 	if len(parts) < 2 {
 		http.Error(w, "invalid path", http.StatusBadRequest)
 		return
 	}
-	subscriptionID := parts[1]
-
-	token := req.URL.Query().Get("token")
-	if token == "" {
-		http.Error(w, "token required", http.StatusUnauthorized)
-		return
-	}
-	target := req.URL.Query().Get("target")
-	if target == "" {
-		target = "clash"
-	}
-
-	// Resolve token → user_id.
-	userResp, err := settingssvc.GetUserIDByAPIKey(ctx, token)
-	if err != nil {
-		http.Error(w, "invalid token", http.StatusUnauthorized)
-		return
-	}
-	userID := userResp.UserID
-
-	// RouterOS script export — handled separately (queries nodes table directly).
-	if target == "routeros" {
-		listName := req.URL.Query().Get("list")
-		if listName == "" {
-			listName = "clash_servers"
-		}
-		exportRouterOS(w, ctx, subscriptionID, userID, listName)
-		return
-	}
-
-	// Handle "all" case - combine all subscriptions.
-	if subscriptionID == "all" {
-		exportAllSubscriptions(w, req, ctx, userID, target)
-		return
-	}
-
-	// Single subscription case
-	exportSingleSubscription(w, req, ctx, subscriptionID, userID, target)
+	dispatchExport(w, req, parts[1])
 }
 
-// ExportAll is a testable wrapper around the export-all logic.
-// It can be called directly from tests without Encore routing.
+// ExportAll is a testable wrapper around the export-all path.
 func ExportAll(w http.ResponseWriter, req *http.Request) {
+	dispatchExport(w, req, "all")
+}
+
+func dispatchExport(w http.ResponseWriter, req *http.Request, subscriptionID string) {
 	ctx := req.Context()
 
 	token := req.URL.Query().Get("token")
@@ -84,493 +65,94 @@ func ExportAll(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "token required", http.StatusUnauthorized)
 		return
 	}
-	target := req.URL.Query().Get("target")
-	if target == "" {
-		target = "clash"
-	}
-
-	// Resolve token → user_id.
 	userResp, err := settingssvc.GetUserIDByAPIKey(ctx, token)
 	if err != nil {
 		http.Error(w, "invalid token", http.StatusUnauthorized)
 		return
 	}
-	userID := userResp.UserID
 
-	exportAllSubscriptions(w, req, ctx, userID, target)
-}
-
-func exportAllSubscriptions(w http.ResponseWriter, req *http.Request, ctx context.Context, userID string, target string) {
-	// Get the latest completed job per subscription owned by this user.
-	rows, err := db.Query(ctx, `
-		SELECT DISTINCT ON (subscription_id) id AS job_id, subscription_id
-		FROM check_jobs
-		WHERE user_id = $1 AND status = 'completed'
-		ORDER BY subscription_id, created_at DESC
-	`, userID)
-	if err != nil {
-		http.Error(w, "db error", http.StatusInternalServerError)
-		return
+	target := req.URL.Query().Get("target")
+	if target == "" {
+		target = "clash"
 	}
-	defer rows.Close()
-
-	type jobSub struct {
-		jobID          string
-		subscriptionID string
-	}
-	var jobs []jobSub
-	var subIDs []string
-	for rows.Next() {
-		var js jobSub
-		if err := rows.Scan(&js.jobID, &js.subscriptionID); err != nil {
-			continue
-		}
-		jobs = append(jobs, js)
-		subIDs = append(subIDs, js.subscriptionID)
-	}
-	if err := rows.Err(); err != nil {
-		http.Error(w, "db error", http.StatusInternalServerError)
-		return
+	exporter, ok := exporters[target]
+	if !ok {
+		exporter = exporters["clash"]
 	}
 
-	if len(jobs) == 0 {
-		switch target {
-		case "base64":
-			renderBase64(w, nil)
-		default:
-			renderClash(w, nil)
-		}
-		return
+	opts := ExportOpts{
+		ListName: req.URL.Query().Get("list"),
+		ClientIP: clientIP(req),
+	}
+	if opts.ListName == "" {
+		opts.ListName = "clash_servers"
 	}
 
-	// Resolve subscription names via subscription service.
-	namesResp, err := subsvc.GetSubscriptionNames(ctx, &subsvc.GetSubscriptionNamesParams{
-		UserID: userID,
-		IDs:    subIDs,
-	})
-	if err != nil {
-		http.Error(w, "name lookup failed", http.StatusInternalServerError)
-		return
-	}
-	subNames := namesResp.Names
-
-	// Collect alive nodes from all jobs, prefix names with subscription name.
-	type rankedNode struct {
-		config    map[string]any
-		speedKbps int
-		latencyMs int
-	}
-	var allNodes []rankedNode
-
-	for _, js := range jobs {
-		subName := subNames[js.subscriptionID]
-		if subName == "" {
-			continue // subscription was deleted; skip its stale jobs
-		}
-
-		func() {
-			nodeRows, err := db.Query(ctx, `
-				SELECT COALESCE(n.config, cr.node_config) AS config,
-				       COALESCE(n.name, cr.node_name) AS node_name,
-				       cr.netflix, cr.youtube, cr.youtube_premium, cr.openai, cr.claude, cr.gemini, cr.grok, cr.disney, cr.tiktok,
-				       CASE WHEN cr.speed_kbps > 0 THEN cr.speed_kbps
-				            ELSE COALESCE((
-				                SELECT cr2.speed_kbps
-				                FROM check_results cr2
-				                JOIN check_jobs cj2 ON cj2.id = cr2.job_id
-				                WHERE cr2.node_name = cr.node_name
-				                  AND cj2.subscription_id = $2
-				                  AND cr2.speed_kbps > 0
-				                ORDER BY cr2.checked_at DESC
-				                LIMIT 1
-				            ), 0)
-				       END AS speed_kbps,
-				       cr.latency_ms
-				FROM check_results cr
-				LEFT JOIN nodes n ON n.id = cr.node_id
-				WHERE cr.job_id = $1 AND cr.alive = true AND COALESCE(n.enabled, true) = true
-			`, js.jobID, js.subscriptionID)
-			if err != nil {
-				return
-			}
-			defer nodeRows.Close()
-
-			for nodeRows.Next() {
-				var (
-					configJSON                                                                     []byte
-					name                                                                           string
-					netflix, youtube, youtubePremium, openai, claude, gemini, grok, disney, tiktok bool
-					speedKbps, latencyMs                                                           int
-				)
-				if err := nodeRows.Scan(&configJSON, &name,
-					&netflix, &youtube, &youtubePremium, &openai, &claude, &gemini, &grok, &disney, &tiktok,
-					&speedKbps, &latencyMs); err != nil {
-					continue
-				}
-				if len(configJSON) == 0 {
-					continue
-				}
-				var cfg map[string]any
-				if err := json.Unmarshal(configJSON, &cfg); err != nil {
-					continue
-				}
-				tagged := taggedName(name, netflix, youtube, youtubePremium, openai, claude, gemini, grok, disney, tiktok, speedKbps)
-				cfg["name"] = subName + "|" + tagged
-				allNodes = append(allNodes, rankedNode{config: cfg, speedKbps: speedKbps, latencyMs: latencyMs})
-			}
-		}()
+	w.Header().Set("Content-Type", exporter.ContentType())
+	if fn := exporter.Filename(opts); fn != "" {
+		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fn))
 	}
 
-	// Sort all nodes by speed DESC, latency ASC.
-	sort.Slice(allNodes, func(i, j int) bool {
-		if allNodes[i].speedKbps != allNodes[j].speedKbps {
-			return allNodes[i].speedKbps > allNodes[j].speedKbps
-		}
-		return allNodes[i].latencyMs < allNodes[j].latencyMs
-	})
-
-	proxies := make([]map[string]any, len(allNodes))
-	for i, n := range allNodes {
-		proxies[i] = n.config
-	}
-
-	// Log export (best effort).
-	ip := clientIP(req)
-	db.Exec(ctx, `
-		INSERT INTO export_logs (id, subscription_id, user_id, ip, requested_at)
-		VALUES ($1, $2, $3, $4, $5)
-	`, uuid.New().String(), "all", userID, ip, time.Now()) //nolint:errcheck
-
-	switch target {
-	case "base64":
-		renderBase64(w, proxies)
-	default:
-		renderClash(w, proxies)
+	if err := exporter.Export(ctx, w, subscriptionID, userResp.UserID, opts); err != nil {
+		// Headers may already be flushed by Render; best-effort error reporting.
+		_, _ = fmt.Fprintf(w, "\n# export error: %v\n", err)
 	}
 }
 
-func exportSingleSubscription(w http.ResponseWriter, req *http.Request, ctx context.Context, subscriptionID string, userID string, target string) {
-	// Find latest completed job for this subscription owned by this user.
-	var jobID string
-	if err := db.QueryRow(ctx, `
-		SELECT id FROM check_jobs
-		WHERE subscription_id=$1 AND user_id=$2 AND status='completed'
-		ORDER BY created_at DESC LIMIT 1
-	`, subscriptionID, userID).Scan(&jobID); err != nil {
-		http.Error(w, "no completed check found", http.StatusNotFound)
-		return
-	}
+// --- Adapters ---
 
-	// Log this export request (best effort).
-	ip := clientIP(req)
-	db.Exec(ctx, `
-		INSERT INTO export_logs (id, subscription_id, user_id, ip, requested_at)
-		VALUES ($1, $2, $3, $4, $5)
-	`, uuid.New().String(), subscriptionID, userID, ip, time.Now()) //nolint:errcheck
+type clashExporter struct{}
 
-	// Query alive nodes with their config.
-	// node_config is denormalized into check_results so it survives node table replacement.
-	// speed_kbps falls back to the most recent historical speed if this job skipped speed testing.
-	rows, err := db.Query(ctx, `
-		WITH r AS (
-			SELECT COALESCE(n.config, cr.node_config) AS config,
-			       COALESCE(n.name, cr.node_name) AS node_name,
-			       cr.netflix, cr.youtube, cr.youtube_premium, cr.openai, cr.claude, cr.gemini, cr.grok, cr.disney, cr.tiktok,
-			       CASE WHEN cr.speed_kbps > 0 THEN cr.speed_kbps
-			            ELSE COALESCE((
-			                SELECT cr2.speed_kbps
-			                FROM check_results cr2
-			                JOIN check_jobs cj2 ON cj2.id = cr2.job_id
-			                WHERE cr2.node_name = cr.node_name
-			                  AND cj2.subscription_id = $2
-			                  AND cr2.speed_kbps > 0
-			                ORDER BY cr2.checked_at DESC
-			                LIMIT 1
-			            ), 0)
-			       END AS speed_kbps,
-			       cr.latency_ms
-			FROM check_results cr
-			LEFT JOIN nodes n ON n.id = cr.node_id
-			WHERE cr.job_id = $1 AND cr.alive = true AND COALESCE(n.enabled, true) = true
-		)
-		SELECT config, node_name, netflix, youtube, youtube_premium, openai, claude, gemini, grok, disney, tiktok,
-		       speed_kbps, latency_ms
-		FROM r
-		ORDER BY speed_kbps DESC NULLS LAST, latency_ms ASC NULLS LAST
-	`, jobID, subscriptionID)
+func (clashExporter) ContentType() string          { return "text/yaml; charset=utf-8" }
+func (clashExporter) Filename(_ ExportOpts) string { return "" }
+func (clashExporter) Export(ctx context.Context, w http.ResponseWriter, subID, userID string, opts ExportOpts) error {
+	proxies, err := loadExportProxies(ctx, subID, userID)
 	if err != nil {
-		http.Error(w, "db error", http.StatusInternalServerError)
-		return
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return nil
 	}
-	defer rows.Close()
-
-	type nodeRow struct {
-		config         map[string]any
-		name           string
-		netflix        bool
-		youtube        bool
-		youtubePremium bool
-		openai         bool
-		claude         bool
-		gemini         bool
-		grok           bool
-		disney         bool
-		tiktok         bool
-		speedKbps      int
-	}
-
-	var nodes []nodeRow
-	for rows.Next() {
-		var nr nodeRow
-		var configJSON []byte
-		if err := rows.Scan(&configJSON, &nr.name,
-			&nr.netflix, &nr.youtube, &nr.youtubePremium, &nr.openai, &nr.claude, &nr.gemini, &nr.grok, &nr.disney, &nr.tiktok,
-			&nr.speedKbps, new(int)); err != nil {
-			continue
-		}
-		if len(configJSON) == 0 {
-			continue // skip nodes with no config (pre-migration rows)
-		}
-		if err := json.Unmarshal(configJSON, &nr.config); err != nil {
-			continue
-		}
-		nodes = append(nodes, nr)
-	}
-
-	// Build tagged proxy configs.
-	proxies := make([]map[string]any, 0, len(nodes))
-	for _, nr := range nodes {
-		cfg := make(map[string]any, len(nr.config))
-		for k, v := range nr.config {
-			cfg[k] = v
-		}
-		cfg["name"] = taggedName(nr.name, nr.netflix, nr.youtube, nr.youtubePremium, nr.openai, nr.claude, nr.gemini, nr.grok, nr.disney, nr.tiktok, nr.speedKbps)
-		proxies = append(proxies, cfg)
-	}
-
-	switch target {
-	case "base64":
-		renderBase64(w, proxies)
-	default:
-		renderClash(w, proxies)
-	}
+	logExport(ctx, subID, userID, opts.ClientIP)
+	return renderClash(w, proxies)
 }
 
-// exportRouterOS generates a RouterOS .rsc script that rebuilds the firewall
-// address-list for all proxy server addresses (IPs and hostnames) in the
-// subscription.  subscriptionID may be "all" to include every subscription
-// owned by the user.
-func exportRouterOS(w http.ResponseWriter, ctx context.Context, subscriptionID, userID, listName string) {
-	servers, notFound, err := queryNodeServers(ctx, subscriptionID, userID)
+type base64Exporter struct{}
+
+func (base64Exporter) ContentType() string          { return "text/plain; charset=utf-8" }
+func (base64Exporter) Filename(_ ExportOpts) string { return "" }
+func (base64Exporter) Export(ctx context.Context, w http.ResponseWriter, subID, userID string, opts ExportOpts) error {
+	proxies, err := loadExportProxies(ctx, subID, userID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return nil
+	}
+	logExport(ctx, subID, userID, opts.ClientIP)
+	return renderBase64(w, proxies)
+}
+
+type routerOSExporter struct{}
+
+func (routerOSExporter) ContentType() string { return "text/plain; charset=utf-8" }
+func (routerOSExporter) Filename(opts ExportOpts) string {
+	return opts.ListName + ".rsc"
+}
+func (routerOSExporter) Export(ctx context.Context, w http.ResponseWriter, subID, userID string, opts ExportOpts) error {
+	servers, notFound, err := latestServerAddresses(ctx, subID, userID)
 	if notFound {
 		http.Error(w, "subscription not found", http.StatusNotFound)
-		return
+		return nil
 	}
 	if err != nil {
 		http.Error(w, "db error", http.StatusInternalServerError)
-		return
+		return nil
 	}
-	renderRouterOS(w, servers, listName)
+	return renderRouterOS(w, servers, opts.ListName)
 }
 
-func queryNodeServers(ctx context.Context, subscriptionID, userID string) (servers []string, notFound bool, err error) {
-	if subscriptionID == "all" {
-		// Use check_jobs as an ownership bridge (nodes table has no user_id column).
-		rows, qErr := db.Query(ctx, `
-			SELECT DISTINCT n.server
-			FROM nodes n
-			INNER JOIN (
-				SELECT DISTINCT subscription_id FROM check_jobs WHERE user_id = $1
-			) owned ON owned.subscription_id = n.subscription_id
-			WHERE n.server != '' AND n.enabled = true
-			ORDER BY n.server
-		`, userID)
-		if qErr != nil {
-			return nil, false, qErr
-		}
-		defer rows.Close()
-		for rows.Next() {
-			var s string
-			if rows.Scan(&s) == nil && s != "" {
-				servers = append(servers, s)
-			}
-		}
-		return servers, false, rows.Err()
+// loadExportProxies routes single-vs-all to the right loader.
+func loadExportProxies(ctx context.Context, subID, userID string) ([]map[string]any, error) {
+	if subID == "all" {
+		return latestUsableProxiesAcrossAllSubs(ctx, userID)
 	}
-
-	// Verify ownership via check_jobs (subscriptions table lives in a separate DB).
-	var count int
-	if scanErr := db.QueryRow(ctx,
-		`SELECT COUNT(*) FROM check_jobs WHERE subscription_id=$1 AND user_id=$2`,
-		subscriptionID, userID).Scan(&count); scanErr != nil || count == 0 {
-		return nil, true, nil
-	}
-
-	rows, qErr := db.Query(ctx, `
-		SELECT DISTINCT server FROM nodes
-		WHERE subscription_id = $1 AND server != '' AND enabled = true
-		ORDER BY server
-	`, subscriptionID)
-	if qErr != nil {
-		return nil, false, qErr
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var s string
-		if rows.Scan(&s) == nil && s != "" {
-			servers = append(servers, s)
-		}
-	}
-	return servers, false, rows.Err()
+	return latestUsableProxies(ctx, subID, userID)
 }
 
-// renderRouterOS writes a RouterOS .rsc script to w.
-// It first removes all existing entries for listName, then re-adds each server.
-func renderRouterOS(w http.ResponseWriter, servers []string, listName string) {
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.rsc"`, listName))
-
-	fmt.Fprintf(w, "/ip firewall address-list remove [find where list=%s]\n", listName)
-	for _, s := range servers {
-		fmt.Fprintf(w, "/ip firewall address-list add list=%s address=%s\n", listName, s)
-	}
-}
-
-// clientIP extracts the real client IP from the request.
-func clientIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		if ip, _, err := net.SplitHostPort(strings.SplitN(xff, ",", 2)[0]); err == nil {
-			return ip
-		}
-		return strings.TrimSpace(strings.SplitN(xff, ",", 2)[0])
-	}
-	if ip, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
-		return ip
-	}
-	return r.RemoteAddr
-}
-
-func taggedName(name string, netflix bool, youtube bool, youtubePremium bool, openai bool, claude bool, gemini bool, grok bool, disney bool, tiktok bool, speedKbps int) string {
-	var tags []string
-	if netflix {
-		tags = append(tags, "NF")
-	}
-	if openai {
-		tags = append(tags, "GPT")
-	}
-	if gemini {
-		tags = append(tags, "GM")
-	}
-	if claude {
-		tags = append(tags, "CL")
-	}
-	if grok {
-		tags = append(tags, "GK")
-	}
-	if youtubePremium {
-		tags = append(tags, "YT+")
-	} else if youtube {
-		tags = append(tags, "YT")
-	}
-	if disney {
-		tags = append(tags, "D+")
-	}
-	if tiktok {
-		tags = append(tags, "TK")
-	}
-	if speedKbps > 0 {
-		if speedKbps >= 1024 {
-			tags = append(tags, fmt.Sprintf("%.1fMB", float64(speedKbps)/1024))
-		} else {
-			tags = append(tags, fmt.Sprintf("%dKB", speedKbps))
-		}
-	}
-	if len(tags) == 0 {
-		return name
-	}
-	return name + "|" + strings.Join(tags, "|")
-}
-
-func renderClash(w http.ResponseWriter, proxies []map[string]any) {
-	data, err := yaml.Marshal(map[string]any{"proxies": proxies})
-	if err != nil {
-		http.Error(w, "yaml error", http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "text/yaml; charset=utf-8")
-	w.Write(data)
-}
-
-func renderBase64(w http.ResponseWriter, proxies []map[string]any) {
-	var lines []string
-	for _, p := range proxies {
-		uri := proxyToURI(p)
-		if uri != "" {
-			lines = append(lines, uri)
-		}
-	}
-	raw := strings.Join(lines, "\n")
-	encoded := base64.StdEncoding.EncodeToString([]byte(raw))
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	fmt.Fprint(w, encoded)
-}
-
-// proxyToURI converts a mihomo proxy config map to a URI string.
-// Supports ss, trojan, vless, vmess. Returns "" for unknown types.
-func proxyToURI(p map[string]any) string {
-	ptype, _ := p["type"].(string)
-	name, _ := p["name"].(string)
-	server, _ := p["server"].(string)
-	port := fmt.Sprint(p["port"])
-
-	switch ptype {
-	case "ss":
-		cipher, _ := p["cipher"].(string)
-		password, _ := p["password"].(string)
-		userinfo := base64.StdEncoding.EncodeToString([]byte(cipher + ":" + password))
-		return fmt.Sprintf("ss://%s@%s:%s#%s", userinfo, server, port, urlEncode(name))
-	case "trojan":
-		password, _ := p["password"].(string)
-		return fmt.Sprintf("trojan://%s@%s:%s#%s", password, server, port, urlEncode(name))
-	case "vless":
-		uuid, _ := p["uuid"].(string)
-		network, _ := p["network"].(string)
-		tls, _ := p["tls"].(bool)
-		params := ""
-		if network != "" {
-			params += "type=" + network
-		}
-		if tls {
-			if params != "" {
-				params += "&"
-			}
-			params += "security=tls"
-		}
-		if params != "" {
-			params = "?" + params
-		}
-		return fmt.Sprintf("vless://%s@%s:%s%s#%s", uuid, server, port, params, urlEncode(name))
-	case "vmess":
-		uuid, _ := p["uuid"].(string)
-		network, _ := p["network"].(string)
-		aid := 0
-		if v, ok := p["alterId"].(int); ok {
-			aid = v
-		}
-		vmessObj := map[string]any{
-			"v": "2", "ps": name, "add": server, "port": port,
-			"id": uuid, "aid": aid, "net": network, "type": "none",
-			"host": "", "path": "", "tls": "",
-		}
-		if tls, ok := p["tls"].(bool); ok && tls {
-			vmessObj["tls"] = "tls"
-		}
-		vmessJSON, _ := json.Marshal(vmessObj)
-		return "vmess://" + base64.StdEncoding.EncodeToString(vmessJSON)
-	}
-	return ""
-}
-
-func urlEncode(s string) string {
-	return strings.NewReplacer(" ", "%20", "#", "%23", "&", "%26").Replace(s)
-}

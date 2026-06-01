@@ -3,15 +3,21 @@ import { Checkbox } from "@frontend/ui/components/checkbox";
 import { Input } from "@frontend/ui/components/input";
 import { Label } from "@frontend/ui/components/label";
 import { Skeleton } from "@frontend/ui/components/skeleton";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { Clock, Loader2, Pencil, Play, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import type { PlatformKey } from "@/components/platform-icons";
 import { PlatformIcon } from "@/components/platform-icons";
-import { client, isApiError } from "@/lib/client";
+import { isApiError } from "@/lib/client";
 import type { subscription } from "@/lib/client.gen";
+import {
+	useCreateSubscription,
+	useDeleteSubscription,
+	useSubscriptions,
+	useTriggerCheck,
+	useUpdateSubscription,
+} from "@/queries";
 
 type Subscription = subscription.Subscription;
 
@@ -32,105 +38,108 @@ export const Route = createFileRoute("/subscriptions/")({
 
 function SubscriptionsPage() {
 	const navigate = useNavigate();
-	const qc = useQueryClient();
 	const [name, setName] = useState("");
 	const [url, setUrl] = useState("");
 	const [adding, setAdding] = useState(false);
 
-	const { data, isLoading } = useQuery({
-		queryKey: ["subscriptions"],
-		queryFn: () => client.subscription.List(),
-	});
-
-	const deleteMut = useMutation({
-		mutationFn: (id: string) => client.subscription.Delete(id),
-		onSuccess: () => {
-			qc.invalidateQueries({ queryKey: ["subscriptions"] });
-			toast.success("Deleted");
-		},
-		onError: (e) => toast.error(isApiError(e) ? e.message : "Delete failed"),
-	});
-
-	const updateMut = useMutation({
-		mutationFn: ({
-			id,
-			data,
-		}: {
-			id: string;
-			data: { name?: string; url?: string };
-		}) => {
-			const current = subs.find((s) => s.id === id);
-			return client.subscription.Update(id, {
-				name: data.name ?? current?.name ?? "",
-				url: data.url ?? current?.url ?? "",
-				enabled: current?.enabled ?? true,
-				cron_expr: current?.cron_expr ?? "",
-				clear_cron_expr: false,
-			});
-		},
-		onSuccess: () => {
-			qc.invalidateQueries({ queryKey: ["subscriptions"] });
-			toast.success("Updated");
-		},
-		onError: (e) => toast.error(isApiError(e) ? e.message : "Update failed"),
-	});
-
-	const toggleEnabledMut = useMutation({
-		mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) => {
-			const current = subs.find((s) => s.id === id);
-			return client.subscription.Update(id, {
-				name: current?.name ?? "",
-				url: current?.url ?? "",
-				enabled,
-				cron_expr: current?.cron_expr ?? "",
-				clear_cron_expr: false,
-			});
-		},
-		onSuccess: (_, { enabled }) => {
-			qc.invalidateQueries({ queryKey: ["subscriptions"] });
-			toast.success(enabled ? "Subscription enabled" : "Subscription disabled");
-		},
-		onError: (e) => toast.error(isApiError(e) ? e.message : "Failed to update"),
-	});
-
-	const triggerMut = useMutation({
-		mutationFn: ({
-			id,
-			opts,
-		}: {
-			id: string;
-			opts: {
-				speed_test: boolean;
-				upload_speed_test: boolean;
-				media_apps: string[];
-				debug: boolean;
-			};
-		}) => client.checker.TriggerCheck(id, opts),
-		onSuccess: (resp, { id }) => {
-			toast.success("Check started");
-			navigate({
-				to: "/subscriptions/$id",
-				params: { id },
-				search: { job: resp.job_id },
-			});
-		},
-		onError: (e) =>
-			toast.error(isApiError(e) ? e.message : "Failed to start check"),
-	});
-
-	const createMut = useMutation({
-		mutationFn: () => client.subscription.Create({ name, url, cron_expr: "" }),
-		onSuccess: () => {
-			qc.invalidateQueries({ queryKey: ["subscriptions"] });
-			setName("");
-			setUrl("");
-			setAdding(false);
-			toast.success("Subscription added");
-		},
-		onError: (e) => toast.error(isApiError(e) ? e.message : "Failed to add"),
-	});
-
+	const { data, isLoading } = useSubscriptions();
 	const subs = data?.subscriptions ?? [];
+
+	const deleteMut = useDeleteSubscription();
+	const updateMut = useUpdateSubscription();
+	const triggerMut = useTriggerCheck();
+	const createMut = useCreateSubscription();
+
+	const handleDelete = (id: string) =>
+		deleteMut.mutate(id, {
+			onSuccess: () => toast.success("Deleted"),
+			onError: (e) => toast.error(isApiError(e) ? e.message : "Delete failed"),
+		});
+
+	const handleUpdate = (id: string, data: { name?: string; url?: string }) => {
+		const current = subs.find((s) => s.id === id);
+		updateMut.mutate(
+			{
+				id,
+				params: {
+					name: data.name ?? current?.name ?? "",
+					url: data.url ?? current?.url ?? "",
+					enabled: current?.enabled ?? true,
+					cron_expr: current?.cron_expr ?? "",
+					clear_cron_expr: false,
+				},
+			},
+			{
+				onSuccess: () => toast.success("Updated"),
+				onError: (e) =>
+					toast.error(isApiError(e) ? e.message : "Update failed"),
+			},
+		);
+	};
+
+	const handleToggleEnabled = (id: string, enabled: boolean) => {
+		const current = subs.find((s) => s.id === id);
+		updateMut.mutate(
+			{
+				id,
+				params: {
+					name: current?.name ?? "",
+					url: current?.url ?? "",
+					enabled,
+					cron_expr: current?.cron_expr ?? "",
+					clear_cron_expr: false,
+				},
+			},
+			{
+				onSuccess: () =>
+					toast.success(
+						enabled ? "Subscription enabled" : "Subscription disabled",
+					),
+				onError: (e) =>
+					toast.error(isApiError(e) ? e.message : "Failed to update"),
+			},
+		);
+	};
+
+	const handleTrigger = (
+		id: string,
+		opts: {
+			speed_test: boolean;
+			upload_speed_test: boolean;
+			media_apps: string[];
+			debug: boolean;
+		},
+	) =>
+		triggerMut.mutate(
+			{ subscriptionId: id, params: opts },
+			{
+				onSuccess: (resp) => {
+					toast.success("Check started");
+					navigate({
+						to: "/subscriptions/$id",
+						params: { id },
+						search: { job: resp.job_id },
+					});
+				},
+				onError: (e) =>
+					toast.error(isApiError(e) ? e.message : "Failed to start check"),
+			},
+		);
+
+	const handleCreate = () =>
+		createMut.mutate(
+			{ name, url, cron_expr: "" },
+			{
+				onSuccess: () => {
+					setName("");
+					setUrl("");
+					setAdding(false);
+					toast.success("Subscription added");
+				},
+				onError: (e) =>
+					toast.error(isApiError(e) ? e.message : "Failed to add"),
+			},
+		);
 
 	return (
 		<div className="space-y-5">
@@ -174,7 +183,7 @@ function SubscriptionsPage() {
 					<div className="flex gap-2">
 						<Button
 							size="sm"
-							onClick={() => createMut.mutate()}
+							onClick={handleCreate}
 							disabled={!url || createMut.isPending}
 							style={{ background: "var(--color-btn-success)", color: "#fff" }}
 							className="border-0"
@@ -211,10 +220,16 @@ function SubscriptionsPage() {
 							<SubRow
 								key={sub.id}
 								sub={sub}
-								deleteMut={deleteMut}
-								updateMut={updateMut}
-								triggerMut={triggerMut}
-								toggleEnabledMut={toggleEnabledMut}
+								onDelete={handleDelete}
+								onUpdate={handleUpdate}
+								onTrigger={handleTrigger}
+								onToggleEnabled={handleToggleEnabled}
+								mutating={{
+									delete: deleteMut.isPending,
+									update: updateMut.isPending,
+									trigger: triggerMut.isPending,
+									toggle: updateMut.isPending,
+								}}
 							/>
 						))}
 
@@ -228,51 +243,44 @@ function SubscriptionsPage() {
 	);
 }
 
+interface TriggerOpts {
+	speed_test: boolean;
+	upload_speed_test: boolean;
+	media_apps: string[];
+	debug: boolean;
+}
+
+interface SubRowProps {
+	sub: Subscription;
+	onDelete: (id: string) => void;
+	onUpdate: (id: string, data: { name?: string; url?: string }) => void;
+	onTrigger: (id: string, opts: TriggerOpts) => void;
+	onToggleEnabled: (id: string, enabled: boolean) => void;
+	mutating: {
+		delete: boolean;
+		update: boolean;
+		trigger: boolean;
+		toggle: boolean;
+	};
+}
+
 function SubRow({
 	sub,
-	deleteMut,
-	updateMut,
-	triggerMut,
-	toggleEnabledMut,
-}: {
-	sub: Subscription;
-	deleteMut: { mutate: (id: string) => void; isPending: boolean };
-	updateMut: {
-		mutate: (args: {
-			id: string;
-			data: { name?: string; url?: string };
-		}) => void;
-		isPending: boolean;
-	};
-	triggerMut: {
-		mutate: (args: {
-			id: string;
-			opts: {
-				speed_test: boolean;
-				upload_speed_test: boolean;
-				media_apps: string[];
-				debug: boolean;
-			};
-		}) => void;
-		isPending: boolean;
-	};
-	toggleEnabledMut: {
-		mutate: (args: { id: string; enabled: boolean }) => void;
-		isPending: boolean;
-	};
-}) {
+	onDelete,
+	onUpdate,
+	onTrigger,
+	onToggleEnabled,
+	mutating,
+}: SubRowProps) {
 	const [showOpts, setShowOpts] = useState(false);
 	const [showEdit, setShowEdit] = useState(false);
 	const [editName, setEditName] = useState(sub.name);
 	const [editUrl, setEditUrl] = useState(sub.url);
 
 	function handleSaveEdit() {
-		updateMut.mutate({
-			id: sub.id,
-			data: {
-				name: editName || undefined,
-				url: editUrl || undefined,
-			},
+		onUpdate(sub.id, {
+			name: editName || undefined,
+			url: editUrl || undefined,
 		});
 		setShowEdit(false);
 	}
@@ -289,14 +297,11 @@ function SubRow({
 	}
 
 	function handleCheck() {
-		triggerMut.mutate({
-			id: sub.id,
-			opts: {
-				speed_test: speedTest,
-				upload_speed_test: uploadSpeedTest,
-				media_apps: mediaApps,
-				debug: debugMode,
-			},
+		onTrigger(sub.id, {
+			speed_test: speedTest,
+			upload_speed_test: uploadSpeedTest,
+			media_apps: mediaApps,
+			debug: debugMode,
 		});
 		setShowOpts(false);
 	}
@@ -349,10 +354,8 @@ function SubRow({
 				<div className="flex flex-shrink-0 items-center gap-2">
 					<button
 						type="button"
-						onClick={() =>
-							toggleEnabledMut.mutate({ id: sub.id, enabled: !sub.enabled })
-						}
-						disabled={toggleEnabledMut.isPending}
+						onClick={() => onToggleEnabled(sub.id, !sub.enabled)}
+						disabled={mutating.toggle}
 						title={sub.enabled ? "Disable subscription" : "Enable subscription"}
 						className="rounded px-1.5 py-0.5 font-medium text-[10px] transition-colors disabled:opacity-50"
 						style={{
@@ -389,8 +392,8 @@ function SubRow({
 					</button>
 					<button
 						type="button"
-						onClick={() => deleteMut.mutate(sub.id)}
-						disabled={deleteMut.isPending}
+						onClick={() => onDelete(sub.id)}
+						disabled={mutating.delete}
 						className="rounded-md p-1.5 transition-colors hover:bg-[#f85149]/10 hover:text-[#f85149] disabled:opacity-50"
 						style={{ color: "var(--color-dimmed)" }}
 					>
@@ -450,11 +453,11 @@ function SubRow({
 						<button
 							type="button"
 							onClick={handleCheck}
-							disabled={triggerMut.isPending}
+							disabled={mutating.trigger}
 							className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-white disabled:opacity-50"
 							style={{ background: "var(--color-btn-success)" }}
 						>
-							{triggerMut.isPending ? (
+							{mutating.trigger ? (
 								<Loader2 size={13} className="animate-spin" />
 							) : (
 								"Start"
@@ -497,11 +500,11 @@ function SubRow({
 						<button
 							type="button"
 							onClick={handleSaveEdit}
-							disabled={updateMut.isPending}
+							disabled={mutating.update}
 							className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-white disabled:opacity-50"
 							style={{ background: "var(--color-btn-success)" }}
 						>
-							{updateMut.isPending ? (
+							{mutating.update ? (
 								<Loader2 size={13} className="animate-spin" />
 							) : (
 								"Save"

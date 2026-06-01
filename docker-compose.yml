@@ -54,3 +54,4 @@ services:
       - backend
       - frontend
     restart: unless-stopped
+

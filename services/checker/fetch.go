@@ -2,6 +2,7 @@
 package checker
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"io"
@@ -12,11 +13,21 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// fetchProxies fetches a subscription URL and returns parsed proxy maps.
-// Supports Clash YAML format and V2Ray/base64 format.
-// Respects HTTP_PROXY/HTTPS_PROXY env vars so region-restricted URLs work via a local proxy.
-func fetchProxies(url string) ([]map[string]any, error) {
-	client := &http.Client{
+// SubscriptionFetcher resolves a subscription URL to a list of proxy maps.
+// The default adapter ([HTTPSubscriptionFetcher]) performs an HTTP GET; tests
+// inject in-memory adapters by overriding [defaultFetcher].
+type SubscriptionFetcher interface {
+	Fetch(ctx context.Context, url string) ([]map[string]any, error)
+}
+
+// HTTPSubscriptionFetcher fetches via HTTP GET. Respects HTTP_PROXY/HTTPS_PROXY
+// so region-restricted URLs work through a local proxy.
+type HTTPSubscriptionFetcher struct {
+	Client *http.Client
+}
+
+func newHTTPClient() *http.Client {
+	return &http.Client{
 		Timeout: 30 * time.Second,
 		Transport: &http.Transport{
 			TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
@@ -28,8 +39,14 @@ func fetchProxies(url string) ([]map[string]any, error) {
 			ExpectContinueTimeout: 1 * time.Second,
 		},
 	}
+}
 
-	req, err := http.NewRequest("GET", url, nil)
+func (f *HTTPSubscriptionFetcher) Fetch(ctx context.Context, url string) ([]map[string]any, error) {
+	client := f.Client
+	if client == nil {
+		client = newHTTPClient()
+	}
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
@@ -53,9 +70,12 @@ func fetchProxies(url string) ([]map[string]any, error) {
 	return parseProxies(data)
 }
 
+// defaultFetcher is the package-level fetcher used by runJob.
+// Tests can swap this for a stub.
+var defaultFetcher SubscriptionFetcher = &HTTPSubscriptionFetcher{}
+
 // parseProxies tries Clash YAML first, then V2Ray format.
 func parseProxies(data []byte) ([]map[string]any, error) {
-	// Try Clash YAML
 	var clash struct {
 		Proxies []map[string]any `yaml:"proxies"`
 	}
@@ -63,7 +83,6 @@ func parseProxies(data []byte) ([]map[string]any, error) {
 		return clash.Proxies, nil
 	}
 
-	// Try V2Ray/base64 format
 	proxyList, err := convert.ConvertsV2Ray(data)
 	if err != nil {
 		return nil, fmt.Errorf("unable to parse as Clash YAML or V2Ray format: %w", err)

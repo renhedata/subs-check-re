@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 
 	lua "github.com/yuin/gopher-lua"
@@ -51,33 +50,15 @@ func runLuaRule(ctx context.Context, client *http.Client, defRaw json.RawMessage
 			return 1
 		}
 
-		if dr != nil {
-			dr.HTTPReq(url, "GET", headers)
-		}
-
-		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-		if err != nil {
-			return pushError(err.Error())
-		}
-		for k, v := range headers {
-			req.Header.Set(k, v)
-		}
-
-		resp, err := client.Do(req)
-		if err != nil {
-			return pushError(err.Error())
-		}
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 256*1024))
-		resp.Body.Close()
-
-		if dr != nil {
-			dr.HTTPResp(resp.StatusCode, nil, string(body))
+		res := trackedHTTPGet(ctx, client, url, headers, dr)
+		if res.Err != nil {
+			return pushError(res.Err.Error())
 		}
 
 		t := L.NewTable()
-		L.SetField(t, "status", lua.LNumber(resp.StatusCode))
-		L.SetField(t, "body", lua.LString(string(body)))
-		L.SetField(t, "final_url", lua.LString(resp.Request.URL.String()))
+		L.SetField(t, "status", lua.LNumber(res.Status))
+		L.SetField(t, "body", lua.LString(res.Body))
+		L.SetField(t, "final_url", lua.LString(res.FinalURL))
 		L.SetField(t, "error", lua.LString(""))
 		L.Push(t)
 		return 1
@@ -134,3 +115,4 @@ func runLuaRule(ctx context.Context, client *http.Client, defRaw json.RawMessage
 	}
 	return false, err
 }
+

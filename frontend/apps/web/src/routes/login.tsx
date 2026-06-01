@@ -6,7 +6,8 @@ import { Loader2, Lock } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { setToken } from "@/lib/auth";
-import { client, isApiError } from "@/lib/client";
+import { isApiError } from "@/lib/client";
+import { useLogin, useRegister } from "@/queries";
 
 export const Route = createFileRoute("/login")({
 	component: LoginPage,
@@ -18,25 +19,29 @@ function LoginPage() {
 	const [username, setUsername] = useState("");
 	const [password, setPassword] = useState("");
 	const [remember, setRemember] = useState(false);
-	const [loading, setLoading] = useState(false);
+
+	const loginMut = useLogin();
+	const registerMut = useRegister();
+	const loading = loginMut.isPending || registerMut.isPending;
 
 	async function handleSubmit(e: React.FormEvent) {
 		e.preventDefault();
-		setLoading(true);
 		try {
 			if (mode === "register") {
-				await client.auth.Register({ username, password });
+				await registerMut.mutateAsync({ username, password });
 				toast.success("Account created — please log in");
 				setMode("login");
 			} else {
-				const resp = await client.auth.Login({ username, password, remember });
+				const resp = await loginMut.mutateAsync({
+					username,
+					password,
+					remember,
+				});
 				setToken(resp.token, remember);
 				navigate({ to: "/" });
 			}
 		} catch (err) {
 			toast.error(isApiError(err) ? err.message : "Something went wrong");
-		} finally {
-			setLoading(false);
 		}
 	}
 

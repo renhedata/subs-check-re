@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import {
 	Check,
@@ -16,6 +16,17 @@ import { DebugPanel, type NodeDebug } from "@/components/debug-panel";
 import { NodeTable } from "@/components/node-table";
 import { client, isApiError } from "@/lib/client";
 import { formatBytes } from "@/lib/format";
+import {
+	useAPIKey,
+	useCancelCheck,
+	useExportLogs,
+	useJobs,
+	useResults,
+	useRules,
+	useSetNodeEnabled,
+	useSSEProgress,
+	useSubscriptions,
+} from "@/queries";
 
 const searchSchema = z.object({
 	job: z.string().optional(),
@@ -25,19 +36,6 @@ export const Route = createFileRoute("/subscriptions/$id")({
 	validateSearch: searchSchema,
 	component: SubscriptionDetailPage,
 });
-
-interface SSEProgress {
-	progress?: number;
-	total?: number;
-	node_name?: string;
-	alive?: boolean;
-	latency_ms?: number;
-	speed_kbps?: number;
-	upload_speed_kbps?: number;
-	done?: boolean;
-	status?: string;
-	debug?: NodeDebug;
-}
 
 function latencyColor(ms: number): string {
 	if (ms < 50) return "var(--color-success)";
@@ -84,43 +82,23 @@ function SubscriptionDetailPage() {
 	const { id } = Route.useParams();
 	const { job: jobIdFromSearch } = Route.useSearch();
 	const [jobId, setJobId] = useState<string | null>(jobIdFromSearch ?? null);
-	const [progress, setProgress] = useState<SSEProgress | null>(null);
-	const [logEntries, setLogEntries] = useState<SSEProgress[]>([]);
-	const [debugData, setDebugData] = useState<NodeDebug[]>([]);
 	const logContainerRef = useRef<HTMLDivElement | null>(null);
-	const esRef = useRef<EventSource | null>(null);
 	const qc = useQueryClient();
 	const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
 
-	const jobsQuery = useQuery({
-		queryKey: ["jobs", id],
-		queryFn: () => client.checker.ListJobs(id, { Limit: 10, Offset: 0 }),
-		staleTime: 5_000,
-	});
-
-	const rulesQuery = useQuery({
-		queryKey: ["platform-rules"],
-		queryFn: () => client.checker.ListRules(),
-		staleTime: 60_000,
-	});
-
-	const resultsQuery = useQuery({
-		queryKey: ["results", id, selectedJobId],
-		queryFn: () =>
-			client.checker.GetResults(id, { JobID: selectedJobId ?? "" }),
-		retry: false,
-		staleTime: 0,
-	});
-
-	// Resolve subscription name from cache
-	const subsQuery = useQuery({
-		queryKey: ["subscriptions"],
-		queryFn: () => client.subscription.List(),
-		staleTime: 30_000,
-	});
+	const jobsQuery = useJobs(id, { Limit: 10, Offset: 0 });
+	const rulesQuery = useRules();
+	const resultsQuery = useResults(id, selectedJobId);
+	const subsQuery = useSubscriptions();
 	const sub = subsQuery.data?.subscriptions.find(
 		(s) => s.id === (resultsQuery.data?.job.subscription_id ?? id),
 	);
+
+	const { progress, logEntries, debugData } = useSSEProgress({
+		jobId,
+		subscriptionId: id,
+		onDone: () => setSelectedJobId(null),
+	});
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: intentionally narrow deps to avoid re-running on every render
 	useEffect(() => {
@@ -134,62 +112,29 @@ function SubscriptionDetailPage() {
 		}
 	}, [resultsQuery.data?.job?.id, resultsQuery.data?.job?.status, jobId]);
 
-	const cancelMut = useMutation({
-		mutationFn: (jid: string) => client.checker.CancelCheck(jid),
-		onSuccess: () => {
-			setJobId(null);
-			setProgress(null);
-			qc.invalidateQueries({ queryKey: ["jobs", id] });
-			resultsQuery.refetch();
-			toast.success("Check cancelled");
-		},
-		onError: (e) => toast.error(isApiError(e) ? e.message : "Cancel failed"),
-	});
+	const cancelMut = useCancelCheck(id);
+	const toggleEnabledMut = useSetNodeEnabled(id);
 
-	const toggleEnabledMut = useMutation({
-		mutationFn: ({ nodeId, enabled }: { nodeId: string; enabled: boolean }) =>
-			client.checker.SetNodeEnabled(nodeId, { enabled }),
-		onSuccess: (_, { enabled }) => {
-			qc.invalidateQueries({ queryKey: ["results", id] });
-			toast.success(enabled ? "Node enabled" : "Node disabled");
-		},
-		onError: (e) =>
-			toast.error(isApiError(e) ? e.message : "Failed to update node"),
-	});
-
-	// Clear log when a new job starts
-	// biome-ignore lint/correctness/useExhaustiveDependencies: clear log only when jobId changes
-	useEffect(() => {
-		setLogEntries([]);
-		setProgress(null);
-		setDebugData([]);
-	}, [jobId]);
-
-	useEffect(() => {
-		if (!jobId) return;
-		const es = new EventSource(
-			`${window.location.origin}/api/check/${jobId}/progress`,
-		);
-		esRef.current = es;
-		es.onmessage = (e) => {
-			const data: SSEProgress = JSON.parse(e.data);
-			setProgress(data);
-			if (data.debug) {
-				setDebugData((prev) => [...prev, data.debug as NodeDebug]);
-			}
-			if (data.node_name) {
-				setLogEntries((prev) => [...prev, data]);
-			}
-			if (data.done) {
-				es.close();
-				setSelectedJobId(null);
+	const handleCancel = (jid: string) => {
+		cancelMut.mutate(jid, {
+			onSuccess: () => {
+				setJobId(null);
 				resultsQuery.refetch();
-				qc.invalidateQueries({ queryKey: ["jobs", id] });
-			}
-		};
-		es.onerror = () => es.close();
-		return () => es.close();
-	}, [jobId, resultsQuery.refetch, qc, id]);
+				toast.success("Check cancelled");
+			},
+			onError: (e) => toast.error(isApiError(e) ? e.message : "Cancel failed"),
+		});
+	};
+
+	const handleToggleEnabled = (args: { nodeId: string; enabled: boolean }) => {
+		toggleEnabledMut.mutate(args, {
+			onSuccess: () => {
+				toast.success(args.enabled ? "Node enabled" : "Node disabled");
+			},
+			onError: (e) =>
+				toast.error(isApiError(e) ? e.message : "Failed to update node"),
+		});
+	};
 
 	// Auto-scroll only within the log container, not the page
 	// biome-ignore lint/correctness/useExhaustiveDependencies: scroll on new entries
@@ -291,7 +236,7 @@ function SubscriptionDetailPage() {
 							{jobId && (
 								<button
 									type="button"
-									onClick={() => cancelMut.mutate(jobId)}
+									onClick={() => handleCancel(jobId)}
 									disabled={cancelMut.isPending}
 									className="flex items-center gap-1 rounded border border-border px-2 py-0.5 text-[11px] transition-colors hover:border-[#f85149]/60 hover:bg-[#f85149]/10 hover:text-[#f85149] disabled:opacity-50"
 									style={{ color: "var(--color-dimmed)" }}
@@ -419,7 +364,7 @@ function SubscriptionDetailPage() {
 				results={results}
 				rules={rulesQuery.data?.rules}
 				onToggleEnabled={(nodeId, enabled) =>
-					toggleEnabledMut.mutate({ nodeId, enabled })
+					handleToggleEnabled({ nodeId, enabled })
 				}
 			/>
 
@@ -451,12 +396,7 @@ function CopyButton({ text }: { text: string }) {
 function ExportLinksSection({ subscriptionId }: { subscriptionId: string }) {
 	const [open, setOpen] = useState(false);
 
-	const apiKeyQuery = useQuery({
-		queryKey: ["api-key"],
-		queryFn: () => client.settings.GetAPIKey(),
-		enabled: open,
-		staleTime: Number.POSITIVE_INFINITY,
-	});
+	const apiKeyQuery = useAPIKey({ enabled: open });
 
 	const apiKey = apiKeyQuery.data?.api_key ?? "";
 	const base = `${window.location.origin}/api/export/${subscriptionId}`;
@@ -529,12 +469,7 @@ function ExportLinksSection({ subscriptionId }: { subscriptionId: string }) {
 function ExportLogsSection({ subscriptionId }: { subscriptionId: string }) {
 	const [open, setOpen] = useState(false);
 
-	const logsQuery = useQuery({
-		queryKey: ["export-logs", subscriptionId],
-		queryFn: () => client.checker.GetExportLogs(subscriptionId),
-		enabled: open,
-		staleTime: 30_000,
-	});
+	const logsQuery = useExportLogs(subscriptionId, { enabled: open });
 
 	const logs = logsQuery.data?.logs ?? [];
 
