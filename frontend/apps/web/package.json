@@ -12,6 +12,7 @@
 		"gen:client": "encore gen client subs-check-uqti --lang=typescript --output=./src/lib/client.gen.ts"
 	},
 	"dependencies": {
+		"@base-ui/react": "^1.0.0",
 		"@frontend/env": "workspace:*",
 		"@frontend/ui": "workspace:*",
 		"@hookform/resolvers": "^5.1.1",
