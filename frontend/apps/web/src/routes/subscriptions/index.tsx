@@ -311,7 +311,7 @@ function SubRow({
 			className="rounded-lg border border-border bg-card transition-opacity"
 			style={{ opacity: sub.enabled ? 1 : 0.5 }}
 		>
-			<div className="flex items-center gap-3 px-4 py-3">
+			<div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:gap-3">
 				{/* Info — entire left section navigates to detail */}
 				<Link
 					to="/subscriptions/$id"
@@ -351,7 +351,7 @@ function SubRow({
 					</div>
 				</Link>
 				{/* Actions */}
-				<div className="flex flex-shrink-0 items-center gap-2">
+				<div className="flex flex-shrink-0 items-center gap-2 self-end sm:self-auto">
 					<button
 						type="button"
 						onClick={() => onToggleEnabled(sub.id, !sub.enabled)}
@@ -385,7 +385,7 @@ function SubRow({
 							setShowEdit(!showEdit);
 							setShowOpts(false);
 						}}
-						className="rounded-md p-1.5 transition-colors hover:bg-white/5"
+						className="rounded-md p-2 transition-colors hover:bg-white/5 sm:p-1.5"
 						style={{ color: "var(--color-dimmed)" }}
 					>
 						<Pencil size={13} strokeWidth={1.5} />
@@ -394,7 +394,7 @@ function SubRow({
 						type="button"
 						onClick={() => onDelete(sub.id)}
 						disabled={mutating.delete}
-						className="rounded-md p-1.5 transition-colors hover:bg-[#f85149]/10 hover:text-[#f85149] disabled:opacity-50"
+						className="rounded-md p-2 transition-colors hover:bg-[#f85149]/10 hover:text-[#f85149] disabled:opacity-50 sm:p-1.5"
 						style={{ color: "var(--color-dimmed)" }}
 					>
 						<Trash2 size={13} strokeWidth={1.5} />
