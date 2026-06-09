@@ -513,7 +513,7 @@ function ChannelRow({
 
 	return (
 		<div className="rounded-lg border border-border bg-card">
-			<div className="flex items-center justify-between px-4 py-3">
+			<div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
 				<div className="flex items-center gap-3">
 					{ch.enabled ? (
 						<CheckCircle2
@@ -540,7 +540,7 @@ function ChannelRow({
 						</p>
 					</div>
 				</div>
-				<div className="flex items-center gap-1">
+				<div className="flex flex-wrap items-center gap-1 self-end sm:self-auto">
 					{(ch.platform_alerts ?? []).length > 0 && (
 						<div className="mr-1 flex items-center gap-0.5">
 							{ch.platform_alerts.map((p) => (
