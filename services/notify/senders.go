@@ -145,22 +145,34 @@ func (t *telegramSender) send(ctx context.Context, message, parseMode string) er
 
 // --- Email (SMTP, reads global config from settings service) ---
 
+type emailConfig struct {
+	To string `json:"to_email"`
+}
+
 type emailSender struct {
-	config []byte // unused — email config lives in the settings service per user
+	config []byte
 }
 
 func (e *emailSender) SendMessage(ctx context.Context, userID, subject, body string) error {
-	return sendSMTP(ctx, userID, subject, htmlWrap(body))
+	var cfg emailConfig
+	if err := json.Unmarshal(e.config, &cfg); err != nil || cfg.To == "" {
+		return fmt.Errorf("email channel not configured: set a recipient in the channel settings")
+	}
+	return sendSMTP(ctx, userID, cfg.To, subject, htmlWrap(body))
 }
 
 func (e *emailSender) SendPayload(ctx context.Context, userID string, payload any) error {
+	var cfg emailConfig
+	if err := json.Unmarshal(e.config, &cfg); err != nil || cfg.To == "" {
+		return fmt.Errorf("email channel not configured: set a recipient in the channel settings")
+	}
 	data, _ := json.Marshal(payload)
-	return sendSMTP(ctx, userID, "Notification", string(data))
+	return sendSMTP(ctx, userID, cfg.To, "Notification", string(data))
 }
 
-func sendSMTP(ctx context.Context, userID, subject, htmlBody string) error {
+func sendSMTP(ctx context.Context, userID, to, subject, htmlBody string) error {
 	cfg, err := settingssvc.GetEmailConfigForUser(ctx, userID)
-	if err != nil || cfg.SMTPHost == "" || cfg.To == "" {
+	if err != nil || cfg.SMTPHost == "" {
 		return fmt.Errorf("email not configured: set SMTP settings in General Settings")
 	}
 
@@ -173,14 +185,14 @@ func sendSMTP(ctx context.Context, userID, subject, htmlBody string) error {
 		from = cfg.SMTPUser
 	}
 
-	recipients := strings.Split(cfg.To, ",")
+	recipients := strings.Split(to, ",")
 	for i := range recipients {
 		recipients[i] = strings.TrimSpace(recipients[i])
 	}
 
 	header := fmt.Sprintf(
 		"From: %s\r\nTo: %s\r\nSubject: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n",
-		from, cfg.To, subject,
+		from, to, subject,
 	)
 	msg := []byte(header + htmlBody)
 	addr := fmt.Sprintf("%s:%d", cfg.SMTPHost, port)

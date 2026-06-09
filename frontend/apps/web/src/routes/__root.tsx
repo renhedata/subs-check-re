@@ -13,7 +13,7 @@ import {
 	useRouterState,
 } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
-
+import { MobileNav } from "@/components/mobile-nav";
 import { PlatformRulesProvider } from "@/components/platform-rules-context";
 import { Sidebar } from "@/components/sidebar";
 import { isAuthenticated } from "@/lib/auth";
@@ -76,11 +76,14 @@ function RootComponent() {
 				<PlatformRulesProvider>
 					<div className="flex h-screen overflow-hidden">
 						<Sidebar />
-						<main className="flex-1 overflow-y-auto px-6 py-6">
-							<div className="mx-auto max-w-5xl">
-								<Outlet />
-							</div>
-						</main>
+						<div className="flex min-w-0 flex-1 flex-col">
+							<MobileNav />
+							<main className="flex-1 overflow-y-auto px-4 py-4 md:px-6 md:py-6">
+								<div className="mx-auto max-w-5xl">
+									<Outlet />
+								</div>
+							</main>
+						</div>
 					</div>
 				</PlatformRulesProvider>
 			) : (

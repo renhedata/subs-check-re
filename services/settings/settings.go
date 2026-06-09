@@ -19,13 +19,13 @@ var db = sqldb.NewDatabase("settings", sqldb.DatabaseConfig{
 })
 
 // EmailConfig holds global SMTP settings for email notifications.
+// The recipient address is configured per-channel in the notify service.
 type EmailConfig struct {
 	SMTPHost string `json:"smtp_host"`
 	SMTPPort int    `json:"smtp_port"`
 	SMTPUser string `json:"smtp_user"`
 	SMTPPass string `json:"smtp_pass"`
 	From     string `json:"from"`
-	To       string `json:"to"`
 }
 
 // UserSettings holds configurable per-user settings.

@@ -74,6 +74,7 @@ function NotifyPage() {
 	const [webhookUrl, setWebhookUrl] = useState("");
 	const [botToken, setBotToken] = useState("");
 	const [chatId, setChatId] = useState("");
+	const [toEmail, setToEmail] = useState("");
 	const [onCheckComplete, setOnCheckComplete] = useState(false);
 	const [unlockCron, setUnlockCron] = useState("");
 	const [platformAlerts, setPlatformAlerts] = useState<string[]>([]);
@@ -90,7 +91,7 @@ function NotifyPage() {
 				? { url: webhookUrl, method: "POST" }
 				: type === "telegram"
 					? { bot_token: botToken, chat_id: chatId }
-					: {};
+					: { to_email: toEmail };
 		createMut.mutate(
 			{
 				name,
@@ -107,6 +108,7 @@ function NotifyPage() {
 					setWebhookUrl("");
 					setBotToken("");
 					setChatId("");
+					setToEmail("");
 					setOnCheckComplete(false);
 					setUnlockCron("");
 					setPlatformAlerts([]);
@@ -246,16 +248,30 @@ function NotifyPage() {
 						</>
 					)}
 					{type === "email" && (
-						<p className="rounded-md bg-secondary/40 px-3 py-2 text-muted-foreground text-xs">
-							Uses SMTP settings from{" "}
-							<a
-								href="/settings/general"
-								className="underline underline-offset-2 hover:text-foreground"
-							>
-								General Settings
-							</a>
-							.
-						</p>
+						<>
+							<div className="space-y-1.5">
+								<Label className="text-muted-foreground text-xs">
+									To address(es){" "}
+									<span className="opacity-60">(comma-separated)</span>
+								</Label>
+								<Input
+									placeholder="you@example.com, team@example.com"
+									value={toEmail}
+									onChange={(e) => setToEmail(e.target.value)}
+									className="h-8 text-sm"
+								/>
+							</div>
+							<p className="rounded-md bg-secondary/40 px-3 py-2 text-muted-foreground text-xs">
+								SMTP sender settings are in{" "}
+								<a
+									href="/settings/general"
+									className="underline underline-offset-2 hover:text-foreground"
+								>
+									General Settings
+								</a>
+								.
+							</p>
+						</>
 					)}
 
 					<ReportSettings
@@ -497,7 +513,7 @@ function ChannelRow({
 
 	return (
 		<div className="rounded-lg border border-border bg-card">
-			<div className="flex items-center justify-between px-4 py-3">
+			<div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
 				<div className="flex items-center gap-3">
 					{ch.enabled ? (
 						<CheckCircle2
@@ -524,7 +540,7 @@ function ChannelRow({
 						</p>
 					</div>
 				</div>
-				<div className="flex items-center gap-1">
+				<div className="flex flex-wrap items-center gap-1 self-end sm:self-auto">
 					{(ch.platform_alerts ?? []).length > 0 && (
 						<div className="mr-1 flex items-center gap-0.5">
 							{ch.platform_alerts.map((p) => (

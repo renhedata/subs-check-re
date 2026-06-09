@@ -32,7 +32,6 @@ function GeneralSettingsPage() {
 				smtp_user: "",
 				smtp_pass: "",
 				from: "",
-				to: "",
 			},
 		},
 	});
@@ -135,7 +134,7 @@ function GeneralSettingsPage() {
 						</p>
 					</div>
 					<div className="space-y-3">
-						<div className="grid grid-cols-3 gap-3">
+						<div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
 							<div className="col-span-2 space-y-1.5">
 								<Label className="text-muted-foreground text-xs">
 									SMTP Host
@@ -158,7 +157,7 @@ function GeneralSettingsPage() {
 								/>
 							</div>
 						</div>
-						<div className="grid grid-cols-2 gap-3">
+						<div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
 							<div className="space-y-1.5">
 								<Label className="text-muted-foreground text-xs">
 									Username
@@ -188,17 +187,6 @@ function GeneralSettingsPage() {
 							<Input
 								placeholder="alerts@example.com"
 								{...register("email_config.from")}
-								className="h-8 text-sm"
-							/>
-						</div>
-						<div className="space-y-1.5">
-							<Label className="text-muted-foreground text-xs">
-								To address(es){" "}
-								<span className="opacity-60">(comma-separated)</span>
-							</Label>
-							<Input
-								placeholder="you@example.com, team@example.com"
-								{...register("email_config.to")}
 								className="h-8 text-sm"
 							/>
 						</div>
