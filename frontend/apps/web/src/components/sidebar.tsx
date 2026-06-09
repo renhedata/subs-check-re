@@ -32,11 +32,13 @@ function NavItem({
 	label,
 	icon: Icon,
 	exact,
+	onNavigate,
 }: {
 	to: string;
 	label: string;
 	icon: React.ElementType;
 	exact: boolean;
+	onNavigate?: () => void;
 }) {
 	const pathname = useRouterState({ select: (s) => s.location.pathname });
 	const isActive = exact ? pathname === to : pathname.startsWith(to);
@@ -44,6 +46,7 @@ function NavItem({
 	return (
 		<Link
 			to={to}
+			onClick={onNavigate}
 			className={[
 				"flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors",
 				isActive
@@ -65,7 +68,7 @@ function NavItem({
 	);
 }
 
-export function Sidebar() {
+export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
 	const navigate = useNavigate();
 	const { theme, toggle } = useTheme();
 	const meQuery = useMe();
@@ -73,11 +76,12 @@ export function Sidebar() {
 
 	function logout() {
 		clearToken();
+		onNavigate?.();
 		navigate({ to: "/login" });
 	}
 
 	return (
-		<aside className="flex h-screen w-[220px] flex-shrink-0 flex-col border-border border-r bg-card">
+		<div className="flex h-full flex-col">
 			{/* Logo */}
 			<div className="flex items-center gap-2.5 border-border border-b px-4 py-3">
 				<div
@@ -97,14 +101,14 @@ export function Sidebar() {
 			{/* Primary nav */}
 			<nav className="flex flex-1 flex-col gap-0.5 p-2">
 				{NAV_ITEMS.map((item) => (
-					<NavItem key={item.to} {...item} />
+					<NavItem key={item.to} {...item} onNavigate={onNavigate} />
 				))}
 			</nav>
 
 			{/* Bottom nav */}
 			<div className="flex flex-col gap-0.5 border-border border-t p-2">
 				{BOTTOM_ITEMS.map((item) => (
-					<NavItem key={item.to} {...item} />
+					<NavItem key={item.to} {...item} onNavigate={onNavigate} />
 				))}
 
 				{/* Theme toggle */}
@@ -136,6 +140,14 @@ export function Sidebar() {
 					<LogOut size={12} strokeWidth={1.5} />
 				</button>
 			</div>
+		</div>
+	);
+}
+
+export function Sidebar() {
+	return (
+		<aside className="hidden h-screen w-[220px] flex-shrink-0 flex-col border-border border-r bg-card md:flex">
+			<SidebarNav />
 		</aside>
 	);
 }
