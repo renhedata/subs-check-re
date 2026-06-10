@@ -132,6 +132,40 @@ func TestOneActiveJobPerSubscriptionConstraint(t *testing.T) {
 	}
 }
 
+func TestRecoverOrphanedJobs(t *testing.T) {
+	ctx := context.Background()
+	mkJob := func(status string) string {
+		id := uuid.New().String()
+		if _, err := db.Exec(ctx, `
+			INSERT INTO check_jobs (id, subscription_id, user_id, sub_url, status, created_at)
+			VALUES ($1, $2, 'test-user-id', 'http://example.test/sub', $3, NOW())
+		`, id, "orphan-sub-"+uuid.New().String(), status); err != nil {
+			t.Fatalf("insert: %v", err)
+		}
+		return id
+	}
+	runningID := mkJob("running")
+	queuedID := mkJob("queued")
+	completedID := mkJob("completed")
+
+	if _, err := recoverOrphanedJobs(ctx); err != nil {
+		t.Fatalf("recoverOrphanedJobs: %v", err)
+	}
+
+	assertStatus := func(id, want string) {
+		var got string
+		if err := db.QueryRow(ctx, `SELECT status FROM check_jobs WHERE id=$1`, id).Scan(&got); err != nil {
+			t.Fatalf("query: %v", err)
+		}
+		if got != want {
+			t.Errorf("job %s: want status %q, got %q", id, want, got)
+		}
+	}
+	assertStatus(runningID, "failed")
+	assertStatus(queuedID, "failed")
+	assertStatus(completedID, "completed")
+}
+
 func TestCountingTransport(t *testing.T) {
 	body := "hello world" // 11 bytes
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
