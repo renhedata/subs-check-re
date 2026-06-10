@@ -54,7 +54,7 @@ Each subdirectory is an independent Encore service (Go package). Services commun
 | `auth` | JWT auth (register/login), `encore.dev/beta/auth` middleware |
 | `subscription` | CRUD for subscription URLs and node listings |
 | `checker` | Core: fetches subscription, replaces nodes, runs mihomo checks, SSE progress |
-| `scheduler` | Manages `robfig/cron` jobs; re-registers from DB on startup |
+| `scheduler` | Manages `robfig/cron` jobs; re-registers from its `scheduled_jobs` table on startup; resolves subscription URL at fire time |
 | `notify` | Consumes PubSub events from checker, sends webhook/telegram/email |
 
 **Key dependency:** `github.com/metacubex/mihomo` is used as a Go library (not subprocess) for proxy protocol handling and platform unlock detection.
@@ -100,6 +100,7 @@ Core tables: `users`, `subscriptions`, `nodes`, `check_jobs`, `check_results`, `
 - `nodes` are fully replaced (DELETE + INSERT in transaction) each time a check job starts
 - `check_results` references `check_jobs.id` for grouping results by run
 - `subscriptions.cron_expr` (nullable) drives scheduled checks; scheduler re-registers all on startup
+- `check_jobs` has a partial unique index (`idx_check_jobs_one_active`) enforcing one queued/running job per subscription; orphaned active jobs are auto-failed at checker startup
 
 ### Real-time Progress (SSE)
 

@@ -4,6 +4,7 @@ package settings
 import (
 	"context"
 	"encoding/json"
+	"errors"
 
 	"github.com/google/uuid"
 
@@ -49,7 +50,10 @@ func GetSettings(ctx context.Context) (*UserSettings, error) {
 		claims.UserID,
 	).Scan(&s.SpeedTestURL, &s.UploadTestURL, &s.LatencyTestURL, &emailConfigJSON)
 	if err != nil {
-		return &UserSettings{}, nil
+		if errors.Is(err, sqldb.ErrNoRows) {
+			return &UserSettings{}, nil
+		}
+		return nil, errs.B().Code(errs.Internal).Msg("failed to load settings").Err()
 	}
 	if len(emailConfigJSON) > 0 {
 		json.Unmarshal(emailConfigJSON, &s.EmailConfig) //nolint:errcheck

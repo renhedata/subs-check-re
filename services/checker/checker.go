@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"sync"
-	"sync/atomic"
 	"time"
 
 	encauth "encore.dev/beta/auth"
@@ -173,6 +171,13 @@ func applyOptionDefaults(o *CheckOptions) {
 	}
 }
 
+// isActiveJobConflict reports whether err is a violation of the
+// idx_check_jobs_one_active partial unique index (another queued/running job
+// exists for the subscription).
+func isActiveJobConflict(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "idx_check_jobs_one_active")
+}
+
 func hasApp(opts CheckOptions, app string) bool {
 	for _, a := range opts.MediaApps {
 		if a == app {
@@ -221,7 +226,7 @@ func TriggerCheckInternal(ctx context.Context, subscriptionID string, p *Trigger
 	var runningCount int
 	if err := db.QueryRow(ctx, `
 		SELECT COUNT(*) FROM check_jobs
-		WHERE subscription_id = $1 AND status = 'running'
+		WHERE subscription_id = $1 AND status IN ('queued', 'running')
 	`, subscriptionID).Scan(&runningCount); err != nil {
 		return nil, errs.B().Code(errs.Internal).Msg("db error").Err()
 	}
@@ -246,6 +251,9 @@ func TriggerCheckInternal(ctx context.Context, subscriptionID string, p *Trigger
 		INSERT INTO check_jobs (id, subscription_id, user_id, sub_url, speed_test_url, latency_test_url, options_json, status, created_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, 'queued', $8)
 	`, jobID, subscriptionID, p.UserID, p.SubURL, speedTestURL, latencyTestURL, optsJSON, time.Now()); err != nil {
+		if isActiveJobConflict(err) {
+			return nil, errs.B().Code(errs.FailedPrecondition).Msg("a check is already running").Err()
+		}
 		return nil, errs.B().Code(errs.Internal).Msg("failed to create job").Err()
 	}
 
@@ -269,7 +277,7 @@ func TriggerCheck(ctx context.Context, subscriptionID string, p *TriggerParams) 
 	var runningCount int
 	if err := db.QueryRow(ctx, `
 		SELECT COUNT(*) FROM check_jobs
-		WHERE subscription_id = $1 AND status = 'running'
+		WHERE subscription_id = $1 AND status IN ('queued', 'running')
 	`, subscriptionID).Scan(&runningCount); err != nil {
 		return nil, errs.B().Code(errs.Internal).Msg("db error").Err()
 	}
@@ -308,6 +316,9 @@ func TriggerCheck(ctx context.Context, subscriptionID string, p *TriggerParams) 
 		INSERT INTO check_jobs (id, subscription_id, user_id, sub_url, speed_test_url, latency_test_url, options_json, status, created_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, 'queued', $8)
 	`, jobID, subscriptionID, claims.UserID, sub.URL, speedTestURL, latencyTestURL, optsJSON, time.Now()); err != nil {
+		if isActiveJobConflict(err) {
+			return nil, errs.B().Code(errs.FailedPrecondition).Msg("a check is already running for this subscription").Err()
+		}
 		return nil, errs.B().Code(errs.Internal).Msg("failed to create job").Err()
 	}
 
@@ -363,13 +374,32 @@ func GetProgress(w http.ResponseWriter, req *http.Request) {
 	ch := defaultJobBus.Subscribe(jobID)
 	defer defaultJobBus.Unsubscribe(jobID, ch)
 
+	// Re-check after subscribing: the job may have finished between the
+	// snapshot query above and Subscribe, in which case Close already ran and
+	// no events (including the final close) will ever arrive on ch. Use
+	// context.Background() so a request-context race can't skip the check and
+	// leave the client waiting on a channel that never closes.
+	if err := db.QueryRow(context.Background(), `SELECT status FROM check_jobs WHERE id = $1`, jobID).Scan(&status); err == nil &&
+		(status == "completed" || status == "failed") {
+		writeSSE(w, flusher, map[string]any{"done": true, "status": status})
+		return
+	}
+
 	for {
 		select {
 		case <-req.Context().Done():
 			return
 		case update, ok := <-ch:
 			if !ok {
-				writeSSE(w, flusher, map[string]any{"done": true})
+				done := map[string]any{"done": true}
+				var finalStatus string
+				var available int
+				if err := db.QueryRow(context.Background(),
+					`SELECT status, available FROM check_jobs WHERE id = $1`, jobID).Scan(&finalStatus, &available); err == nil {
+					done["status"] = finalStatus
+					done["available"] = available
+				}
+				writeSSE(w, flusher, done)
 				return
 			}
 			writeSSE(w, flusher, update)
@@ -596,192 +626,4 @@ func GetExportLogs(ctx context.Context, subscriptionID string) (*ExportLogsRespo
 		logs = []ExportLog{}
 	}
 	return &ExportLogsResponse{Logs: logs}, nil
-}
-
-// --- Async job runner ---
-
-const (
-	checkConcurrency      = 20
-	nodeTimeout           = 90 * time.Second
-	defaultSpeedTestURL   = "https://speed.cloudflare.com/__down?bytes=204800"
-)
-
-func runJob(parentCtx context.Context, jobID, subscriptionID, userID string) {
-	ctx, cancel := context.WithTimeout(parentCtx, 4*time.Hour)
-	defer cancel()
-	defaultJobBus.StoreCancel(jobID, cancel)
-	defer defaultJobBus.RemoveCancel(jobID)
-
-	markFailed := func() {
-		db.Exec(context.Background(), `UPDATE check_jobs SET status='failed', finished_at=$2 WHERE id=$1`, jobID, time.Now())
-		defaultJobBus.Close(jobID)
-	}
-
-	// Mark as running
-	db.Exec(context.Background(), `UPDATE check_jobs SET status='running' WHERE id=$1`, jobID)
-
-	// Get subscription URL, test URLs, and options from job row
-	var subURL, speedTestURL, latencyTestURL string
-	var optsJSON []byte
-	if err := db.QueryRow(context.Background(),
-		`SELECT sub_url, COALESCE(speed_test_url, ''), COALESCE(latency_test_url, ''), COALESCE(options_json, '{}') FROM check_jobs WHERE id=$1`,
-		jobID).Scan(&subURL, &speedTestURL, &latencyTestURL, &optsJSON); err != nil || subURL == "" {
-		markFailed()
-		return
-	}
-	if speedTestURL == "" {
-		speedTestURL = defaultSpeedTestURL
-	}
-	var opts CheckOptions
-	if err := json.Unmarshal(optsJSON, &opts); err != nil {
-		opts = defaultCheckOptions()
-	}
-
-	// Fetch and parse proxies from subscription URL
-	proxies, err := defaultFetcher.Fetch(parentCtx, subURL)
-	if err != nil {
-		markFailed()
-		return
-	}
-
-	total := len(proxies)
-	db.Exec(context.Background(), `UPDATE check_jobs SET total=$2 WHERE id=$1`, jobID, total)
-
-	// Capture disabled node names before replacement so they can be restored.
-	disabledNames := map[string]bool{}
-	if drows, err := db.Query(context.Background(),
-		`SELECT name FROM nodes WHERE subscription_id=$1 AND enabled=false`, subscriptionID); err == nil {
-		for drows.Next() {
-			var n string
-			if drows.Scan(&n) == nil {
-				disabledNames[n] = true
-			}
-		}
-		drows.Close()
-	}
-
-	// Replace nodes for this subscription
-	db.Exec(context.Background(), `DELETE FROM nodes WHERE subscription_id=$1`, subscriptionID)
-	nodeIDs := make([]string, len(proxies))
-	for i, p := range proxies {
-		id := uuid.New().String()
-		nodeIDs[i] = id
-		name, _ := p["name"].(string)
-		ptype, _ := p["type"].(string)
-		server, _ := p["server"].(string)
-		port := 0
-		if v, ok := p["port"].(int); ok {
-			port = v
-		}
-		configJSON, _ := json.Marshal(p)
-		db.Exec(context.Background(), `
-			INSERT INTO nodes (id, subscription_id, name, type, server, port, config)
-			VALUES ($1, $2, $3, $4, $5, $6, $7)
-		`, id, subscriptionID, name, ptype, server, port, configJSON)
-	}
-
-	// Restore disabled state for nodes that carried over by name.
-	for name := range disabledNames {
-		db.Exec(context.Background(),
-			`UPDATE nodes SET enabled=false WHERE subscription_id=$1 AND name=$2`,
-			subscriptionID, name)
-	}
-
-	// Load user-defined platform rules (best-effort; falls back to built-ins on error).
-	userRules, _ := loadUserRules(ctx, userID)
-
-	// Load upload test URL from user settings (empty string → derive from speedTestURL).
-	uploadTestURL := ""
-	if userCfg, err := settingssvc.GetSpeedTestURLForUser(ctx, userID); err == nil {
-		uploadTestURL = userCfg.UploadTestURL
-	}
-
-	// Run concurrent checks
-	type task struct {
-		index  int
-		nodeID string
-		proxy  map[string]any
-	}
-	taskCh := make(chan task, checkConcurrency)
-
-	var processedCount atomic.Int64
-	var totalTrafficBytes atomic.Int64
-	var wg sync.WaitGroup
-	for i := 0; i < checkConcurrency; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			defer func() { recover() }() // prevent a mihomo panic from killing the worker
-			for t := range taskCh {
-				nodeCtx, cancel := context.WithTimeout(ctx, nodeTimeout)
-				res := checkNode(nodeCtx, t.nodeID, t.proxy, speedTestURL, uploadTestURL, latencyTestURL, opts, userRules)
-				cancel()
-
-				nodeName := res.NodeName
-				nodeType, _ := t.proxy["type"].(string)
-				resultID := uuid.New().String()
-				nodeConfigJSON, _ := json.Marshal(t.proxy)
-				extraJSON, _ := json.Marshal(res.ExtraPlatforms)
-				db.Exec(context.Background(), `
-					INSERT INTO check_results
-					  (id, job_id, node_id, node_name, node_type, node_config, checked_at, alive, latency_ms, speed_kbps, upload_speed_kbps, country, ip,
-					   netflix, youtube, youtube_premium, openai, claude, gemini, grok, disney, tiktok, traffic_bytes, extra_platforms)
-					VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)
-				`, resultID, jobID, t.nodeID, nodeName, nodeType, nodeConfigJSON, time.Now(),
-					res.Alive, res.LatencyMs, res.SpeedKbps, res.UploadSpeedKbps, res.Country, res.IP,
-					res.Netflix, res.YouTube, res.YouTubePremium, res.OpenAI,
-					res.Claude, res.Gemini, res.Grok, res.Disney, res.TikTok,
-					res.TrafficBytes, extraJSON,
-				)
-
-				totalTrafficBytes.Add(res.TrafficBytes)
-				n := processedCount.Add(1)
-				db.Exec(context.Background(), `UPDATE check_jobs SET progress=$2 WHERE id=$1`, jobID, n)
-				pu := progressUpdate{
-					Progress:        int(n),
-					Total:           total,
-					NodeName:        res.NodeName,
-					Alive:           res.Alive,
-					LatencyMs:       res.LatencyMs,
-					SpeedKbps:       res.SpeedKbps,
-					UploadSpeedKbps: res.UploadSpeedKbps,
-				}
-				if opts.Debug && res.Debug != nil {
-					pu.Debug = res.Debug
-				}
-				defaultJobBus.Publish(jobID, pu)
-			}
-		}()
-	}
-
-	for i, p := range proxies {
-		select {
-		case <-ctx.Done():
-			close(taskCh)
-			wg.Wait()
-			markFailed()
-			return
-		case taskCh <- task{index: i, nodeID: nodeIDs[i], proxy: p}:
-		}
-	}
-	close(taskCh)
-	wg.Wait()
-
-	// Count available BEFORE updating (count query must run first).
-	var available int
-	db.QueryRow(context.Background(), `SELECT COUNT(*) FROM check_results WHERE job_id=$1 AND alive=true`, jobID).Scan(&available)
-
-	db.Exec(context.Background(), `UPDATE check_jobs SET status='completed', finished_at=$2, available=$3, total_traffic_bytes=$4 WHERE id=$1`,
-		jobID, time.Now(), available, totalTrafficBytes.Load())
-
-	// Publish completion event — notify service fetches details on demand via GetJobDetailedSummary
-	JobCompletedTopic.Publish(context.Background(), &JobCompletedEvent{
-		JobID:          jobID,
-		SubscriptionID: subscriptionID,
-		UserID:         userID,
-		Available:      available,
-		Total:          total,
-	})
-
-	defaultJobBus.Close(jobID)
 }

@@ -53,6 +53,26 @@ func TestDeleteSubscription(t *testing.T) {
 	}
 }
 
+func TestGetSubscriptionByID(t *testing.T) {
+	ctx := withAuth()
+	sub, err := Create(ctx, &CreateParams{Name: "internal-lookup", URL: "http://example.test/sub"})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	got, err := GetSubscriptionByID(context.Background(), &GetByIDParams{ID: sub.ID})
+	if err != nil {
+		t.Fatalf("GetSubscriptionByID: %v", err)
+	}
+	if got.URL != "http://example.test/sub" || got.UserID == "" {
+		t.Errorf("unexpected subscription: %+v", got)
+	}
+
+	if _, err := GetSubscriptionByID(context.Background(), &GetByIDParams{ID: "missing-id"}); err == nil {
+		t.Error("expected NotFound for missing subscription")
+	}
+}
+
 func TestGetSubscriptionNamesEmpty(t *testing.T) {
 	resp, err := GetSubscriptionNames(context.Background(), &GetSubscriptionNamesParams{
 		UserID: "nonexistent-user",

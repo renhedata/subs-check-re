@@ -188,6 +188,29 @@ func GetSubscription(ctx context.Context, id string) (*Subscription, error) {
 	return &s, nil
 }
 
+// GetByIDParams is the request for the internal subscription lookup endpoint.
+type GetByIDParams struct {
+	ID string `json:"id"`
+}
+
+// GetSubscriptionByID returns a subscription by ID without an auth context.
+// Internal-only: used by the scheduler at cron-fire time to resolve the
+// subscription's current URL and owner (the stored sub_url snapshot in
+// scheduled_jobs goes stale when the user edits the subscription).
+//
+//encore:api private method=POST path=/internal/subscriptions/get
+func GetSubscriptionByID(ctx context.Context, p *GetByIDParams) (*Subscription, error) {
+	var s Subscription
+	err := db.QueryRow(ctx, `
+		SELECT id, user_id, name, url, enabled, cron_expr, created_at, last_run_at
+		FROM subscriptions WHERE id = $1
+	`, p.ID).Scan(&s.ID, &s.UserID, &s.Name, &s.URL, &s.Enabled, &s.CronExpr, &s.CreatedAt, &s.LastRunAt)
+	if err != nil {
+		return nil, errs.B().Code(errs.NotFound).Msg("subscription not found").Err()
+	}
+	return &s, nil
+}
+
 // GetSubscriptionNamesParams is the request for the internal name-lookup endpoint.
 type GetSubscriptionNamesParams struct {
 	UserID string   `json:"user_id"`
