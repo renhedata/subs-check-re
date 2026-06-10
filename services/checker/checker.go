@@ -226,7 +226,7 @@ func TriggerCheckInternal(ctx context.Context, subscriptionID string, p *Trigger
 	var runningCount int
 	if err := db.QueryRow(ctx, `
 		SELECT COUNT(*) FROM check_jobs
-		WHERE subscription_id = $1 AND status = 'running'
+		WHERE subscription_id = $1 AND status IN ('queued', 'running')
 	`, subscriptionID).Scan(&runningCount); err != nil {
 		return nil, errs.B().Code(errs.Internal).Msg("db error").Err()
 	}
@@ -277,7 +277,7 @@ func TriggerCheck(ctx context.Context, subscriptionID string, p *TriggerParams) 
 	var runningCount int
 	if err := db.QueryRow(ctx, `
 		SELECT COUNT(*) FROM check_jobs
-		WHERE subscription_id = $1 AND status = 'running'
+		WHERE subscription_id = $1 AND status IN ('queued', 'running')
 	`, subscriptionID).Scan(&runningCount); err != nil {
 		return nil, errs.B().Code(errs.Internal).Msg("db error").Err()
 	}
@@ -376,8 +376,10 @@ func GetProgress(w http.ResponseWriter, req *http.Request) {
 
 	// Re-check after subscribing: the job may have finished between the
 	// snapshot query above and Subscribe, in which case Close already ran and
-	// no events (including the final close) will ever arrive on ch.
-	if err := db.QueryRow(req.Context(), `SELECT status FROM check_jobs WHERE id = $1`, jobID).Scan(&status); err == nil &&
+	// no events (including the final close) will ever arrive on ch. Use
+	// context.Background() so a request-context race can't skip the check and
+	// leave the client waiting on a channel that never closes.
+	if err := db.QueryRow(context.Background(), `SELECT status FROM check_jobs WHERE id = $1`, jobID).Scan(&status); err == nil &&
 		(status == "completed" || status == "failed") {
 		writeSSE(w, flusher, map[string]any{"done": true, "status": status})
 		return
@@ -389,7 +391,15 @@ func GetProgress(w http.ResponseWriter, req *http.Request) {
 			return
 		case update, ok := <-ch:
 			if !ok {
-				writeSSE(w, flusher, map[string]any{"done": true})
+				done := map[string]any{"done": true}
+				var finalStatus string
+				var available int
+				if err := db.QueryRow(context.Background(),
+					`SELECT status, available FROM check_jobs WHERE id = $1`, jobID).Scan(&finalStatus, &available); err == nil {
+					done["status"] = finalStatus
+					done["available"] = available
+				}
+				writeSSE(w, flusher, done)
 				return
 			}
 			writeSSE(w, flusher, update)
