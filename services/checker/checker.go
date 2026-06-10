@@ -173,6 +173,13 @@ func applyOptionDefaults(o *CheckOptions) {
 	}
 }
 
+// isActiveJobConflict reports whether err is a violation of the
+// idx_check_jobs_one_active partial unique index (another queued/running job
+// exists for the subscription).
+func isActiveJobConflict(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "idx_check_jobs_one_active")
+}
+
 func hasApp(opts CheckOptions, app string) bool {
 	for _, a := range opts.MediaApps {
 		if a == app {
@@ -246,6 +253,9 @@ func TriggerCheckInternal(ctx context.Context, subscriptionID string, p *Trigger
 		INSERT INTO check_jobs (id, subscription_id, user_id, sub_url, speed_test_url, latency_test_url, options_json, status, created_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, 'queued', $8)
 	`, jobID, subscriptionID, p.UserID, p.SubURL, speedTestURL, latencyTestURL, optsJSON, time.Now()); err != nil {
+		if isActiveJobConflict(err) {
+			return nil, errs.B().Code(errs.FailedPrecondition).Msg("a check is already running").Err()
+		}
 		return nil, errs.B().Code(errs.Internal).Msg("failed to create job").Err()
 	}
 
@@ -308,6 +318,9 @@ func TriggerCheck(ctx context.Context, subscriptionID string, p *TriggerParams) 
 		INSERT INTO check_jobs (id, subscription_id, user_id, sub_url, speed_test_url, latency_test_url, options_json, status, created_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, 'queued', $8)
 	`, jobID, subscriptionID, claims.UserID, sub.URL, speedTestURL, latencyTestURL, optsJSON, time.Now()); err != nil {
+		if isActiveJobConflict(err) {
+			return nil, errs.B().Code(errs.FailedPrecondition).Msg("a check is already running for this subscription").Err()
+		}
 		return nil, errs.B().Code(errs.Internal).Msg("failed to create job").Err()
 	}
 

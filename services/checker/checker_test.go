@@ -12,6 +12,7 @@ import (
 
 	"encore.dev/beta/auth"
 	"encore.dev/et"
+	"github.com/google/uuid"
 
 	authsvc "subs-check-re/services/auth"
 )
@@ -105,6 +106,29 @@ func TestDefaultCheckOptionsHasAllPlatforms(t *testing.T) {
 		if !found {
 			t.Errorf("expected platform %q in default MediaApps", p)
 		}
+	}
+}
+
+func TestOneActiveJobPerSubscriptionConstraint(t *testing.T) {
+	ctx := context.Background()
+	subID := "constraint-sub-" + uuid.New().String()
+
+	insert := func(id, status string) error {
+		_, err := db.Exec(ctx, `
+			INSERT INTO check_jobs (id, subscription_id, user_id, sub_url, status, created_at)
+			VALUES ($1, $2, 'test-user-id', 'http://example.test/sub', $3, NOW())
+		`, id, subID, status)
+		return err
+	}
+
+	if err := insert(uuid.New().String(), "queued"); err != nil {
+		t.Fatalf("first active job insert failed: %v", err)
+	}
+	if err := insert(uuid.New().String(), "running"); err == nil {
+		t.Error("expected unique violation for second active job on same subscription")
+	}
+	if err := insert(uuid.New().String(), "completed"); err != nil {
+		t.Errorf("completed job should not conflict: %v", err)
 	}
 }
 
