@@ -117,6 +117,7 @@ func handleJobCompleted(ctx context.Context, event *checkersvc.JobCompletedEvent
 	checkerSummary, err := checkersvc.GetJobDetailedSummary(ctx, event.JobID)
 	var report *JobReport
 	if err != nil {
+		rlog.Warn("job summary unavailable; sending minimal report", "job_id", event.JobID, "err", err)
 		report = &JobReport{
 			JobID:            event.JobID,
 			SubscriptionName: event.SubscriptionID,
@@ -162,19 +163,25 @@ func handleJobCompleted(ctx context.Context, event *checkersvc.JobCompletedEvent
 func sendUnlockReport(ctx context.Context, userID, chType string, configJSON []byte) {
 	result, err := checkersvc.GetLocalUnlock(ctx)
 	if err != nil {
+		rlog.Error("unlock report: failed to get local unlock status", "user_id", userID, "err", err)
 		return
 	}
 	report := fromCheckerLocalUnlock(result)
 
 	sender := senderFor(chType, configJSON)
 	if sender == nil {
+		rlog.Error("unlock report: unknown channel type", "user_id", userID, "type", chType)
 		return
 	}
+	var sendErr error
 	if chType == "webhook" {
-		_ = sender.SendPayload(ctx, userID, report)
-		return
+		sendErr = sender.SendPayload(ctx, userID, report)
+	} else {
+		sendErr = sender.SendMessage(ctx, userID, "🌐 Network Unlock Report", formatUnlockReport(report))
 	}
-	_ = sender.SendMessage(ctx, userID, "🌐 Network Unlock Report", formatUnlockReport(report))
+	if sendErr != nil {
+		rlog.Error("unlock report: send failed", "user_id", userID, "type", chType, "err", sendErr)
+	}
 }
 
 // --- API endpoints ---

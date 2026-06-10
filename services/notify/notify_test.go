@@ -80,7 +80,7 @@ func TestCreateInvalidType(t *testing.T) {
 	s := testSvc()
 	_, err := s.CreateChannel(ctx, &CreateChannelParams{
 		Name: "Bad",
-		Type: "email",
+		Type: "carrier-pigeon",
 	})
 	if err == nil {
 		t.Error("expected error for unsupported type")
