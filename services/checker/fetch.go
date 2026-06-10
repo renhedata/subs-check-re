@@ -4,11 +4,13 @@ package checker
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"time"
 
+	"encore.dev/rlog"
 	"github.com/metacubex/mihomo/common/convert"
 	"gopkg.in/yaml.v3"
 )
@@ -59,7 +61,11 @@ func (f *HTTPSubscriptionFetcher) Fetch(ctx context.Context, url string) ([]map[
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("subscription returned status %d", resp.StatusCode)
+		err := fmt.Errorf("subscription returned status %d", resp.StatusCode)
+		if resp.StatusCode >= 400 && resp.StatusCode < 500 {
+			return nil, permanent(err)
+		}
+		return nil, err
 	}
 
 	data, err := io.ReadAll(resp.Body)
@@ -67,7 +73,59 @@ func (f *HTTPSubscriptionFetcher) Fetch(ctx context.Context, url string) ([]map[
 		return nil, fmt.Errorf("read response: %w", err)
 	}
 
-	return parseProxies(data)
+	proxies, err := parseProxies(data)
+	if err != nil {
+		return nil, permanent(err)
+	}
+	return proxies, nil
+}
+
+// permanentError marks a fetch failure retrying cannot fix (4xx, unparseable payload).
+type permanentError struct{ err error }
+
+func (e *permanentError) Error() string { return e.err.Error() }
+func (e *permanentError) Unwrap() error { return e.err }
+
+func permanent(err error) error { return &permanentError{err: err} }
+
+func isPermanentFetchError(err error) bool {
+	var pe *permanentError
+	return errors.As(err, &pe)
+}
+
+const fetchAttempts = 3
+
+// fetchBackoff is the initial retry delay (doubles per attempt); var so tests can shrink it.
+var fetchBackoff = 1 * time.Second
+
+// fetchWithRetry retries transient fetch failures (network errors, 5xx) with
+// exponential backoff. Permanent failures and context cancellation abort
+// immediately — a temporarily unreachable subscription source should not fail
+// the whole check job on the first hiccup.
+func fetchWithRetry(ctx context.Context, fetcher SubscriptionFetcher, url string) ([]map[string]any, error) {
+	backoff := fetchBackoff
+	var lastErr error
+	for attempt := 1; attempt <= fetchAttempts; attempt++ {
+		proxies, err := fetcher.Fetch(ctx, url)
+		if err == nil {
+			return proxies, nil
+		}
+		lastErr = err
+		if isPermanentFetchError(err) || ctx.Err() != nil {
+			return nil, err
+		}
+		if attempt == fetchAttempts {
+			break
+		}
+		rlog.Warn("subscription fetch failed; retrying", "attempt", attempt, "url", url, "err", err)
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(backoff):
+		}
+		backoff *= 2
+	}
+	return nil, lastErr
 }
 
 // defaultFetcher is the package-level fetcher used by runJob.
