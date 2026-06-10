@@ -374,6 +374,15 @@ func GetProgress(w http.ResponseWriter, req *http.Request) {
 	ch := defaultJobBus.Subscribe(jobID)
 	defer defaultJobBus.Unsubscribe(jobID, ch)
 
+	// Re-check after subscribing: the job may have finished between the
+	// snapshot query above and Subscribe, in which case Close already ran and
+	// no events (including the final close) will ever arrive on ch.
+	if err := db.QueryRow(req.Context(), `SELECT status FROM check_jobs WHERE id = $1`, jobID).Scan(&status); err == nil &&
+		(status == "completed" || status == "failed") {
+		writeSSE(w, flusher, map[string]any{"done": true, "status": status})
+		return
+	}
+
 	for {
 		select {
 		case <-req.Context().Done():
