@@ -4,11 +4,14 @@ package scheduler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	encauth "encore.dev/beta/auth"
 	"encore.dev/beta/errs"
+	"encore.dev/rlog"
 	"encore.dev/storage/sqldb"
 	"github.com/google/uuid"
 	"github.com/robfig/cron/v3"
@@ -27,6 +30,7 @@ var db = sqldb.NewDatabase("scheduler", sqldb.DatabaseConfig{
 //encore:service
 type Service struct {
 	cron    *cron.Cron
+	mu      sync.Mutex              // guards entries (Create/Delete handlers run concurrently)
 	entries map[string]cron.EntryID // subscription_id → cron entry ID
 }
 
@@ -39,7 +43,7 @@ func initService() (*Service, error) {
 	// Load all enabled scheduled jobs from DB on startup
 	ctx := context.Background()
 	rows, err := db.Query(ctx, `
-		SELECT subscription_id, cron_expr, sub_url, user_id, COALESCE(options_json, '{}')
+		SELECT subscription_id, cron_expr, COALESCE(options_json, '{}')
 		FROM scheduled_jobs WHERE enabled = true
 	`)
 	if err != nil {
@@ -48,40 +52,79 @@ func initService() (*Service, error) {
 	defer rows.Close()
 
 	for rows.Next() {
-		var subID, cronExpr, subURL, userID string
+		var subID, cronExpr string
 		var optsJSON []byte
-		if err := rows.Scan(&subID, &cronExpr, &subURL, &userID, &optsJSON); err != nil {
+		if err := rows.Scan(&subID, &cronExpr, &optsJSON); err != nil {
+			rlog.Error("skipping malformed scheduled job row", "err", err)
 			continue
 		}
 		var opts checkersvc.CheckOptions
 		if err := json.Unmarshal(optsJSON, &opts); err != nil {
 			opts = defaultCheckOptions()
 		}
-		svc.registerCron(subID, cronExpr, subURL, userID, opts)
+		svc.registerCron(subID, cronExpr, opts)
 	}
 
 	svc.cron.Start()
 	return svc, nil
 }
 
-func (s *Service) registerCron(subscriptionID, cronExpr, subURL, userID string, opts checkersvc.CheckOptions) {
-	entryID, err := s.cron.AddFunc(cronExpr, func() {
-		ctx := context.Background()
-		checkersvc.TriggerCheckInternal(ctx, subscriptionID, &checkersvc.TriggerInternalParams{ //nolint
-			UserID:  userID,
-			SubURL:  subURL,
-			Options: opts,
-		})
-	})
-	if err == nil {
-		s.entries[subscriptionID] = entryID
+func (s *Service) registerCron(subscriptionID, cronExpr string, opts checkersvc.CheckOptions) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if old, ok := s.entries[subscriptionID]; ok {
+		s.cron.Remove(old)
+		delete(s.entries, subscriptionID)
 	}
+	entryID, err := s.cron.AddFunc(cronExpr, func() {
+		s.runScheduledCheck(subscriptionID, opts)
+	})
+	if err != nil {
+		rlog.Error("failed to register cron entry", "subscription_id", subscriptionID, "cron", cronExpr, "err", err)
+		return
+	}
+	s.entries[subscriptionID] = entryID
 }
 
 func (s *Service) removeCron(subscriptionID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if entryID, ok := s.entries[subscriptionID]; ok {
 		s.cron.Remove(entryID)
 		delete(s.entries, subscriptionID)
+	}
+}
+
+// runScheduledCheck fires one scheduled check. It resolves the subscription's
+// CURRENT url/owner at fire time (the snapshot in scheduled_jobs goes stale
+// when the user edits the subscription) and lazily removes the schedule when
+// the subscription has been deleted.
+func (s *Service) runScheduledCheck(subscriptionID string, opts checkersvc.CheckOptions) {
+	ctx := context.Background()
+	sub, err := subsvc.GetSubscriptionByID(ctx, &subsvc.GetByIDParams{ID: subscriptionID})
+	if err != nil {
+		var e *errs.Error
+		if errors.As(err, &e) && e.Code == errs.NotFound {
+			rlog.Info("subscription deleted; removing schedule", "subscription_id", subscriptionID)
+			s.removeCron(subscriptionID)
+			if _, derr := db.Exec(ctx, `DELETE FROM scheduled_jobs WHERE subscription_id = $1`, subscriptionID); derr != nil {
+				rlog.Error("failed to delete stale scheduled job", "subscription_id", subscriptionID, "err", derr)
+			}
+			return
+		}
+		rlog.Error("scheduled check: subscription lookup failed", "subscription_id", subscriptionID, "err", err)
+		return
+	}
+	if !sub.Enabled {
+		return
+	}
+	if _, err := checkersvc.TriggerCheckInternal(ctx, subscriptionID, &checkersvc.TriggerInternalParams{
+		UserID:  sub.UserID,
+		SubURL:  sub.URL,
+		Options: opts,
+	}); err != nil {
+		// FailedPrecondition (already running) is expected when runs overlap.
+		rlog.Warn("scheduled check trigger failed", "subscription_id", subscriptionID, "err", err)
 	}
 }
 
@@ -197,9 +240,8 @@ func (s *Service) Create(ctx context.Context, p *CreateParams) (*ScheduledJob, e
 		return nil, errs.B().Code(errs.Internal).Msg("failed to create scheduled job").Err()
 	}
 
-	// Register/update in-memory cron
-	s.removeCron(p.SubscriptionID)
-	s.registerCron(p.SubscriptionID, p.CronExpr, sub.URL, claims.UserID, opts)
+	// Register/update in-memory cron (registerCron replaces any existing entry)
+	s.registerCron(p.SubscriptionID, p.CronExpr, opts)
 
 	return &ScheduledJob{
 		ID:             id,
