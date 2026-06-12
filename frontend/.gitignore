@@ -6,6 +6,8 @@ node_modules
 # Build outputs
 dist
 build
+.output
+.tanstack
 *.tsbuildinfo
 
 # Environment variables
