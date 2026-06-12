@@ -1,4 +1,3 @@
-// frontend/apps/web/src/lib/client.ts
 import { clearToken, getToken } from "./auth";
 import Client, { isAPIError } from "./client.gen";
 

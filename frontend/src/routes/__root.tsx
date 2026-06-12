@@ -45,6 +45,7 @@ const queryClient = new QueryClient({
 
 export const Route = createRootRouteWithContext<RouterAppContext>()({
 	beforeLoad: ({ location }) => {
+		if (typeof window === "undefined") return; // auth unknowable during SSR — client re-runs this
 		const authed = isAuthenticated();
 		const isLoginPage = location.pathname === "/login";
 		if (!authed && !isLoginPage) {

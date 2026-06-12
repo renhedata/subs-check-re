@@ -1,4 +1,3 @@
-// frontend/apps/web/src/lib/auth.ts
 const TOKEN_KEY = "jwt_token";
 
 function isBrowser(): boolean {
