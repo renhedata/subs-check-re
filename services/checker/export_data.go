@@ -281,19 +281,10 @@ func loadJobProxies(ctx context.Context, jobID, subscriptionID, subNamePrefix st
 		nodes = append(nodes, rankedNode{config: nodeCfg, speedKbps: speedKbps, latencyMs: int(latencyMs.Int64)})
 	}
 
-	sort.Slice(nodes, func(i, j int) bool {
-		if prefs.Sort == "latency_asc" {
-			if nodes[i].latencyMs != nodes[j].latencyMs {
-				return nodes[i].latencyMs < nodes[j].latencyMs
-			}
-			return nodes[i].speedKbps > nodes[j].speedKbps
-		}
-		if nodes[i].speedKbps != nodes[j].speedKbps {
-			return nodes[i].speedKbps > nodes[j].speedKbps
-		}
-		return nodes[i].latencyMs < nodes[j].latencyMs
-	})
-
+	// Order is established by the SQL ORDER BY (orderClause), which correctly
+	// places dead nodes (NULL latency / 0 speed) last via NULLS LAST. A Go
+	// re-sort here would treat a dead node's NULL latency as 0 and wrongly hoist
+	// it to the top under latency_asc, so we keep the DB order as-is.
 	out := make([]map[string]any, len(nodes))
 	for i, n := range nodes {
 		out[i] = n.config

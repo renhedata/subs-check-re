@@ -146,4 +146,12 @@ func TestLoadJobProxiesIncludeDeadAndSort(t *testing.T) {
 	if g := proxyNames(got); len(g) != 2 || g[0] != "C" || g[1] != "A" {
 		t.Errorf("latency_asc exclude-dead: got %v", g)
 	}
+
+	// include dead, latency asc -> [C, A, B]: the dead node has NULL latency and
+	// must sort LAST (NULLS LAST), not first (regression: a Go re-sort treated
+	// NULL as 0 and hoisted it to the top).
+	got, _ = loadJobProxies(ctx, jobID, subID, "", defCfg, exportPrefs{IncludeDead: true, Sort: "latency_asc"})
+	if g := proxyNames(got); len(g) != 3 || g[0] != "C" || g[1] != "A" || g[2] != "B" {
+		t.Errorf("include-dead latency_asc: got %v", g)
+	}
 }
