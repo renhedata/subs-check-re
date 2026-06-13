@@ -64,10 +64,16 @@ export function ResultsSection({
 			: 0;
 	const peakSpeed = alive.reduce((max, r) => Math.max(max, r.speed_kbps), 0);
 
+	// All platform keys, deduped: the seeded default rules reuse builtin keys
+	// (youtube, grok, …), so a naive concat produces duplicate React keys.
+	const platformKeys = useMemo(
+		() => [...new Set<string>([...BUILTIN_PLATFORMS, ...rules.map((r) => r.key)])],
+		[rules],
+	);
+
 	// Unlock counts for chips: top platforms with at least one unlocked node.
 	const unlockCounts = useMemo(() => {
-		const keys: string[] = [...BUILTIN_PLATFORMS, ...rules.map((r) => r.key)];
-		return keys
+		return platformKeys
 			.map((key) => ({
 				key,
 				count: alive.filter((r) => nodeHasPlatform(r, key)).length,
@@ -75,7 +81,7 @@ export function ResultsSection({
 			.filter((e) => e.count > 0)
 			.sort((a, b) => b.count - a.count)
 			.slice(0, 4);
-	}, [alive, rules]);
+	}, [alive, platformKeys]);
 
 	const visible = useMemo(
 		() =>
@@ -163,7 +169,7 @@ export function ResultsSection({
 							Show nodes unlocking
 						</p>
 						<div className="flex flex-wrap gap-1.5">
-							{[...BUILTIN_PLATFORMS, ...rules.map((r) => r.key)].map((key) => (
+							{platformKeys.map((key) => (
 								<button
 									key={key}
 									type="button"

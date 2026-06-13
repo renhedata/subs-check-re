@@ -72,8 +72,11 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
 });
 
 function RootDocument({ children }: { children: ReactNode }) {
+	// suppressHydrationWarning on <html>: the inline theme script below sets the
+	// `dark` class before hydration, so the client class intentionally differs
+	// from the server-rendered markup.
 	return (
-		<html lang="en">
+		<html lang="en" suppressHydrationWarning>
 			<head>
 				{/* Inline theme detection — must run before first paint */}
 				<script
