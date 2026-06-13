@@ -2,6 +2,7 @@ package checker
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -13,6 +14,20 @@ import (
 	settingssvc "subs-check-re/services/settings"
 	subsvc "subs-check-re/services/subscription"
 )
+
+// exportPrefs are the per-subscription export options resolved from the
+// subscription record.
+type exportPrefs struct {
+	IncludeDead bool
+	Sort        string // "speed_desc" | "latency_asc"
+}
+
+func orderClause(s string) string {
+	if s == "latency_asc" {
+		return "latency_ms ASC NULLS LAST, speed_kbps DESC NULLS LAST"
+	}
+	return "speed_kbps DESC NULLS LAST, latency_ms ASC NULLS LAST"
+}
 
 // rankedNode is an internal carrier used to sort by speed/latency
 // before stripping down to []map[string]any.
@@ -129,7 +144,7 @@ func taggedName(name, country string, f unlockFlags, extra map[string]bool, spee
 
 // latestUsableProxies returns the alive, enabled nodes from the latest completed job
 // for the given subscription, with names tagged (NF/GPT/CL/YT+...) and sorted by speed.
-func latestUsableProxies(ctx context.Context, subscriptionID, userID string, cfg settingssvc.ExportTagConfig) ([]map[string]any, error) {
+func latestUsableProxies(ctx context.Context, subscriptionID, userID string, cfg settingssvc.ExportTagConfig, prefs exportPrefs) ([]map[string]any, error) {
 	var jobID string
 	if err := db.QueryRow(ctx, `
 		SELECT id FROM check_jobs
@@ -138,7 +153,7 @@ func latestUsableProxies(ctx context.Context, subscriptionID, userID string, cfg
 	`, subscriptionID, userID).Scan(&jobID); err != nil {
 		return nil, fmt.Errorf("no completed check found")
 	}
-	return loadJobProxies(ctx, jobID, subscriptionID, "", cfg)
+	return loadJobProxies(ctx, jobID, subscriptionID, "", cfg, prefs)
 }
 
 // latestUsableProxiesAcrossAllSubs aggregates alive nodes from the latest completed job
@@ -158,12 +173,10 @@ func latestUsableProxiesAcrossAllSubs(ctx context.Context, userID string, cfg se
 
 	type jobSub struct{ jobID, subscriptionID string }
 	var jobs []jobSub
-	subIDs := []string{}
 	for rows.Next() {
 		var js jobSub
 		if rows.Scan(&js.jobID, &js.subscriptionID) == nil {
 			jobs = append(jobs, js)
-			subIDs = append(subIDs, js.subscriptionID)
 		}
 	}
 	if err := rows.Err(); err != nil {
@@ -173,29 +186,27 @@ func latestUsableProxiesAcrossAllSubs(ctx context.Context, userID string, cfg se
 		return nil, nil
 	}
 
-	namesResp, err := subsvc.GetSubscriptionNames(ctx, &subsvc.GetSubscriptionNamesParams{
-		UserID: userID, IDs: subIDs,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("name lookup failed: %w", err)
-	}
-
 	var all []map[string]any
 	for _, js := range jobs {
-		subName := namesResp.Names[js.subscriptionID]
-		if subName == "" {
+		sub, err := subsvc.GetSubscriptionByID(ctx, &subsvc.GetByIDParams{ID: js.subscriptionID})
+		if err != nil || sub.Name == "" {
 			continue
 		}
-		proxies, _ := loadJobProxies(ctx, js.jobID, js.subscriptionID, subName, cfg)
+		prefs := exportPrefs{IncludeDead: sub.ExportIncludeDead, Sort: sub.ExportSort}
+		proxies, _ := loadJobProxies(ctx, js.jobID, js.subscriptionID, sub.Name, cfg, prefs)
 		all = append(all, proxies...)
 	}
 	return all, nil
 }
 
-// loadJobProxies returns the alive node configs for the given job, tagged + sorted by speed.
+// loadJobProxies returns the node configs for the given job, tagged + sorted per prefs.
 // If subNamePrefix is non-empty, each name is prefixed with "<subName>|" for cross-sub aggregation.
-func loadJobProxies(ctx context.Context, jobID, subscriptionID, subNamePrefix string, cfg settingssvc.ExportTagConfig) ([]map[string]any, error) {
-	rows, err := db.Query(ctx, `
+func loadJobProxies(ctx context.Context, jobID, subscriptionID, subNamePrefix string, cfg settingssvc.ExportTagConfig, prefs exportPrefs) ([]map[string]any, error) {
+	aliveClause := "cr.alive = true AND "
+	if prefs.IncludeDead {
+		aliveClause = ""
+	}
+	query := `
 		WITH r AS (
 			SELECT COALESCE(n.config, cr.node_config) AS config,
 			       COALESCE(n.name, cr.node_name) AS node_name,
@@ -216,13 +227,13 @@ func loadJobProxies(ctx context.Context, jobID, subscriptionID, subNamePrefix st
 			       cr.latency_ms
 			FROM check_results cr
 			LEFT JOIN nodes n ON n.id = cr.node_id
-			WHERE cr.job_id = $1 AND cr.alive = true AND COALESCE(n.enabled, true) = true
+			WHERE cr.job_id = $1 AND ` + aliveClause + `COALESCE(n.enabled, true) = true
 		)
 		SELECT config, node_name, netflix, youtube, youtube_premium, openai, claude, gemini, grok, disney, tiktok,
 		       country, extra_platforms, speed_kbps, latency_ms
 		FROM r
-		ORDER BY speed_kbps DESC NULLS LAST, latency_ms ASC NULLS LAST
-	`, jobID, subscriptionID)
+		ORDER BY ` + orderClause(prefs.Sort)
+	rows, err := db.Query(ctx, query, jobID, subscriptionID)
 	if err != nil {
 		return nil, err
 	}
@@ -231,12 +242,13 @@ func loadJobProxies(ctx context.Context, jobID, subscriptionID, subNamePrefix st
 	var nodes []rankedNode
 	for rows.Next() {
 		var (
-			configJSON                                                                     []byte
-			name                                                                           string
+			configJSON                                                                      []byte
+			name                                                                            string
 			netflix, youtube, youtubePremium, openai, claude, gemini, grok, disney, tiktok bool
-			country                                                                         string
-			extraJSON                                                                       []byte
-			speedKbps, latencyMs                                                           int
+			country                                                                          string
+			extraJSON                                                                        []byte
+			speedKbps                                                                        int
+			latencyMs                                                                        sql.NullInt64
 		)
 		if err := rows.Scan(&configJSON, &name,
 			&netflix, &youtube, &youtubePremium, &openai, &claude, &gemini, &grok, &disney, &tiktok,
@@ -266,10 +278,16 @@ func loadJobProxies(ctx context.Context, jobID, subscriptionID, subNamePrefix st
 		} else {
 			nodeCfg["name"] = tagged
 		}
-		nodes = append(nodes, rankedNode{config: nodeCfg, speedKbps: speedKbps, latencyMs: latencyMs})
+		nodes = append(nodes, rankedNode{config: nodeCfg, speedKbps: speedKbps, latencyMs: int(latencyMs.Int64)})
 	}
 
 	sort.Slice(nodes, func(i, j int) bool {
+		if prefs.Sort == "latency_asc" {
+			if nodes[i].latencyMs != nodes[j].latencyMs {
+				return nodes[i].latencyMs < nodes[j].latencyMs
+			}
+			return nodes[i].speedKbps > nodes[j].speedKbps
+		}
 		if nodes[i].speedKbps != nodes[j].speedKbps {
 			return nodes[i].speedKbps > nodes[j].speedKbps
 		}

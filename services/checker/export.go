@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	settingssvc "subs-check-re/services/settings"
+	subsvc "subs-check-re/services/subscription"
 )
 
 // Exporter renders the export response for a given (subscriptionID, userID)
@@ -161,6 +162,10 @@ func loadExportProxies(ctx context.Context, subID, userID string) ([]map[string]
 	if subID == "all" {
 		return latestUsableProxiesAcrossAllSubs(ctx, userID, *cfg)
 	}
-	return latestUsableProxies(ctx, subID, userID, *cfg)
+	prefs := exportPrefs{Sort: "speed_desc"}
+	if sub, err := subsvc.GetSubscriptionByID(ctx, &subsvc.GetByIDParams{ID: subID}); err == nil {
+		prefs = exportPrefs{IncludeDead: sub.ExportIncludeDead, Sort: sub.ExportSort}
+	}
+	return latestUsableProxies(ctx, subID, userID, *cfg, prefs)
 }
 
