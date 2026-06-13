@@ -53,7 +53,9 @@ function ExportTagsPage() {
 	// Filter custom rules against ALL built-in keys (incl. youtube_premium) so a
 	// seeded youtube_premium rule doesn't leak in as a bogus custom platform.
 	const allBuiltinSet = new Set<string>(BUILTIN_PLATFORMS);
-	const customKeys = rules.map((r) => r.key).filter((k) => !allBuiltinSet.has(k));
+	const customKeys = rules
+		.map((r) => r.key)
+		.filter((k) => !allBuiltinSet.has(k));
 
 	const setTag = (key: string, patch: Partial<PlatformTag>) =>
 		setTags((prev) => ({
