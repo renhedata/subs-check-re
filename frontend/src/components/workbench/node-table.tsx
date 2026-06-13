@@ -1,7 +1,9 @@
 import { ArrowDown, ArrowUp } from "lucide-react";
+import { useState } from "react";
 import { PlatformIcon, PlatformIconAny } from "@/components/platform-icons";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip } from "@/components/ui/tooltip";
+import { NodeDetailDialog } from "@/components/workbench/node-detail-dialog";
 import type { checker } from "@/lib/client.gen";
 import { formatBytes } from "@/lib/format";
 import { latencyTone, type SortDir, type SortKey } from "@/lib/nodeFilters";
@@ -155,6 +157,7 @@ export function NodeTable({
 	onToggleEnabled,
 }: NodeTableProps) {
 	const ruleByKey = Object.fromEntries(rules.map((r) => [r.key, r]));
+	const [detail, setDetail] = useState<NodeResult | null>(null);
 
 	return (
 		<>
@@ -169,9 +172,13 @@ export function NodeTable({
 						)}
 					>
 						<div className="flex items-center gap-2">
-							<span className="min-w-0 flex-1 truncate font-mono text-foreground text-xs">
+							<button
+								type="button"
+								onClick={() => setDetail(r)}
+								className="min-w-0 flex-1 truncate text-left font-mono text-foreground text-xs hover:text-primary"
+							>
 								{r.node_name}
-							</span>
+							</button>
 							<Badge tone={r.alive ? "success" : "danger"}>
 								{r.alive ? "alive" : "dead"}
 							</Badge>
@@ -266,7 +273,13 @@ export function NodeTable({
 										r.alive ? "text-foreground" : "text-muted-foreground/70",
 									)}
 								>
-									{r.node_name}
+									<button
+										type="button"
+										onClick={() => setDetail(r)}
+										className="truncate text-left hover:text-primary hover:underline"
+									>
+										{r.node_name}
+									</button>
 								</td>
 								<td className="px-3 py-1.5">
 									<Latency r={r} />
@@ -297,6 +310,13 @@ export function NodeTable({
 					</tbody>
 				</table>
 			</div>
+
+			<NodeDetailDialog
+				result={detail}
+				rules={rules}
+				open={!!detail}
+				onOpenChange={(o) => !o && setDetail(null)}
+			/>
 		</>
 	);
 }
