@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { client } from "../lib/client";
+import { client, isApiError } from "../lib/client";
 import type { checker } from "../lib/client.gen";
 import { queryKeys } from "./queryKeys";
 
@@ -17,6 +17,14 @@ export function useSchedulerHistory(
 				Offset: 0,
 			}),
 		enabled: (opts.enabled ?? true) && !!subscriptionId,
+		staleTime: 15_000,
+	});
+}
+
+export function useLatestJobs() {
+	return useQuery({
+		queryKey: queryKeys.latestJobs(),
+		queryFn: () => client.checker.LatestJobs(),
 		staleTime: 15_000,
 	});
 }
@@ -41,7 +49,12 @@ export function useResults(subscriptionId: string, jobId: string | null) {
 		queryKey: queryKeys.results(subscriptionId, jobId),
 		queryFn: () =>
 			client.checker.GetResults(subscriptionId, { JobID: jobId ?? "" }),
-		enabled: !!subscriptionId && !!jobId,
+		enabled: !!subscriptionId,
+		retry: (failureCount, err) => {
+			// 404 = no completed checks yet; don't hammer.
+			if (isApiError(err) && err.status === 404) return false;
+			return failureCount < 2;
+		},
 	});
 }
 
@@ -75,6 +88,7 @@ export function useTriggerCheck() {
 			),
 		onSuccess: (_data, vars) => {
 			qc.invalidateQueries({ queryKey: queryKeys.jobs(vars.subscriptionId) });
+			qc.invalidateQueries({ queryKey: queryKeys.latestJobs() });
 		},
 	});
 }
@@ -85,6 +99,7 @@ export function useCancelCheck(subscriptionId: string) {
 		mutationFn: (jobId: string) => client.checker.CancelCheck(jobId),
 		onSuccess: () => {
 			qc.invalidateQueries({ queryKey: queryKeys.jobs(subscriptionId) });
+			qc.invalidateQueries({ queryKey: queryKeys.latestJobs() });
 		},
 	});
 }

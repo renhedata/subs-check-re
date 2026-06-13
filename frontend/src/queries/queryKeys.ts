@@ -15,6 +15,7 @@ export const queryKeys = {
 	platformRules: () => ["platform-rules"] as const,
 	testNodes: () => ["test-nodes"] as const,
 	notifyChannels: () => ["notify-channels"] as const,
+	latestJobs: () => ["latest-jobs"] as const,
 	scheduler: () => ["scheduler"] as const,
 	schedulerHistory: (subscriptionId: string) =>
 		["scheduler-history", subscriptionId] as const,

@@ -25,3 +25,12 @@ export function useDeleteScheduledJob() {
 		onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.scheduler() }),
 	});
 }
+
+export function useSetScheduleEnabled() {
+	const qc = useQueryClient();
+	return useMutation({
+		mutationFn: (args: { id: string; enabled: boolean }) =>
+			client.scheduler.SetEnabled(args.id, { enabled: args.enabled }),
+		onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.scheduler() }),
+	});
+}
