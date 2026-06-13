@@ -46,12 +46,14 @@ export function RunCheckButton({
 					onStarted(resp.job_id);
 				},
 				onError: (e) => {
-					toast.error(isApiError(e) ? e.message : "Failed to start check");
 					// 409/412 = a check is already running (manual or scheduled).
 					// Refresh latest-jobs so the workbench effect attaches to it.
 					if (isApiError(e) && (e.status === 409 || e.status === 412)) {
+						toast.error("A check is already running for this subscription");
 						qc.invalidateQueries({ queryKey: queryKeys.latestJobs() });
+						return;
 					}
+					toast.error(isApiError(e) ? e.message : "Failed to start check");
 				},
 			},
 		);

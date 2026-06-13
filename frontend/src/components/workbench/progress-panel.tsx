@@ -110,9 +110,9 @@ export function ProgressPanel({
 					ref={logRef}
 					className="max-h-44 overflow-y-auto rounded-md bg-background/60 p-2"
 				>
-					{logEntries.map((e) => (
+					{logEntries.map((e, i) => (
 						<div
-							key={`${e.node_name ?? ""}-${e.progress ?? 0}`}
+							key={`${i}-${e.node_name ?? ""}`}
 							className="flex items-baseline gap-2 py-0.5 font-mono text-[11px] tabular-nums"
 						>
 							<span className={cn(e.alive ? "text-success" : "text-danger")}>

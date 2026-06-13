@@ -8,6 +8,7 @@ import {
 	PopoverTrigger,
 } from "@/components/ui/popover";
 import type { checker } from "@/lib/client.gen";
+import { cn } from "@/lib/utils";
 import { useLocalUnlock } from "@/queries";
 
 const PLATFORM_KEYS: (keyof checker.LocalUnlockResult)[] = [
@@ -76,8 +77,10 @@ export function UnlockStrip() {
 						return (
 							<span
 								key={k}
-								className="inline-flex items-center gap-1.5 rounded-md bg-secondary px-2 py-1"
-								style={{ opacity: available ? 1 : 0.35 }}
+								className={cn(
+									"inline-flex items-center gap-1.5 rounded-md bg-secondary px-2 py-1",
+									available ? "" : "opacity-35",
+								)}
 							>
 								<PlatformIcon platform={k as PlatformKey} size={14} showLabel />
 								{available ? (
