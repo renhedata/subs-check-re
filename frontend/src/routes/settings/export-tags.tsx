@@ -45,11 +45,15 @@ function ExportTagsPage() {
 		setTags(byKey);
 	}, [loaded, rules]);
 
+	// youtube_premium is a built-in but not a standalone tag — it renders as the
+	// "YT+" modifier on the youtube tag, so it never gets its own editable row.
 	const builtinKeys: string[] = BUILTIN_PLATFORMS.filter(
 		(k) => k !== "youtube_premium",
 	);
-	const builtinSet = new Set(builtinKeys);
-	const customKeys = rules.map((r) => r.key).filter((k) => !builtinSet.has(k));
+	// Filter custom rules against ALL built-in keys (incl. youtube_premium) so a
+	// seeded youtube_premium rule doesn't leak in as a bogus custom platform.
+	const allBuiltinSet = new Set<string>(BUILTIN_PLATFORMS);
+	const customKeys = rules.map((r) => r.key).filter((k) => !allBuiltinSet.has(k));
 
 	const setTag = (key: string, patch: Partial<PlatformTag>) =>
 		setTags((prev) => ({
