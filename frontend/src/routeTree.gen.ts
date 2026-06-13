@@ -19,6 +19,7 @@ import { Route as SubscriptionsIdRouteImport } from './routes/subscriptions/$id'
 import { Route as SettingsPlatformsRouteImport } from './routes/settings/platforms'
 import { Route as SettingsNotifyRouteImport } from './routes/settings/notify'
 import { Route as SettingsGeneralRouteImport } from './routes/settings/general'
+import { Route as SettingsExportTagsRouteImport } from './routes/settings/export-tags'
 import { Route as SettingsExportRouteImport } from './routes/settings/export'
 
 const SettingsRoute = SettingsRouteImport.update({
@@ -71,6 +72,11 @@ const SettingsGeneralRoute = SettingsGeneralRouteImport.update({
   path: '/general',
   getParentRoute: () => SettingsRoute,
 } as any)
+const SettingsExportTagsRoute = SettingsExportTagsRouteImport.update({
+  id: '/export-tags',
+  path: '/export-tags',
+  getParentRoute: () => SettingsRoute,
+} as any)
 const SettingsExportRoute = SettingsExportRouteImport.update({
   id: '/export',
   path: '/export',
@@ -83,6 +89,7 @@ export interface FileRoutesByFullPath {
   '/scheduler': typeof SchedulerRoute
   '/settings': typeof SettingsRouteWithChildren
   '/settings/export': typeof SettingsExportRoute
+  '/settings/export-tags': typeof SettingsExportTagsRoute
   '/settings/general': typeof SettingsGeneralRoute
   '/settings/notify': typeof SettingsNotifyRoute
   '/settings/platforms': typeof SettingsPlatformsRoute
@@ -95,6 +102,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/scheduler': typeof SchedulerRoute
   '/settings/export': typeof SettingsExportRoute
+  '/settings/export-tags': typeof SettingsExportTagsRoute
   '/settings/general': typeof SettingsGeneralRoute
   '/settings/notify': typeof SettingsNotifyRoute
   '/settings/platforms': typeof SettingsPlatformsRoute
@@ -109,6 +117,7 @@ export interface FileRoutesById {
   '/scheduler': typeof SchedulerRoute
   '/settings': typeof SettingsRouteWithChildren
   '/settings/export': typeof SettingsExportRoute
+  '/settings/export-tags': typeof SettingsExportTagsRoute
   '/settings/general': typeof SettingsGeneralRoute
   '/settings/notify': typeof SettingsNotifyRoute
   '/settings/platforms': typeof SettingsPlatformsRoute
@@ -124,6 +133,7 @@ export interface FileRouteTypes {
     | '/scheduler'
     | '/settings'
     | '/settings/export'
+    | '/settings/export-tags'
     | '/settings/general'
     | '/settings/notify'
     | '/settings/platforms'
@@ -136,6 +146,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/scheduler'
     | '/settings/export'
+    | '/settings/export-tags'
     | '/settings/general'
     | '/settings/notify'
     | '/settings/platforms'
@@ -149,6 +160,7 @@ export interface FileRouteTypes {
     | '/scheduler'
     | '/settings'
     | '/settings/export'
+    | '/settings/export-tags'
     | '/settings/general'
     | '/settings/notify'
     | '/settings/platforms'
@@ -238,6 +250,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsGeneralRouteImport
       parentRoute: typeof SettingsRoute
     }
+    '/settings/export-tags': {
+      id: '/settings/export-tags'
+      path: '/export-tags'
+      fullPath: '/settings/export-tags'
+      preLoaderRoute: typeof SettingsExportTagsRouteImport
+      parentRoute: typeof SettingsRoute
+    }
     '/settings/export': {
       id: '/settings/export'
       path: '/export'
@@ -250,6 +269,7 @@ declare module '@tanstack/react-router' {
 
 interface SettingsRouteChildren {
   SettingsExportRoute: typeof SettingsExportRoute
+  SettingsExportTagsRoute: typeof SettingsExportTagsRoute
   SettingsGeneralRoute: typeof SettingsGeneralRoute
   SettingsNotifyRoute: typeof SettingsNotifyRoute
   SettingsPlatformsRoute: typeof SettingsPlatformsRoute
@@ -258,6 +278,7 @@ interface SettingsRouteChildren {
 
 const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsExportRoute: SettingsExportRoute,
+  SettingsExportTagsRoute: SettingsExportTagsRoute,
   SettingsGeneralRoute: SettingsGeneralRoute,
   SettingsNotifyRoute: SettingsNotifyRoute,
   SettingsPlatformsRoute: SettingsPlatformsRoute,

@@ -105,8 +105,10 @@ function GeneralSettingsPage() {
 	}, [loaded, form]);
 
 	const onSubmit = (values: FormValues) => {
+		if (!loaded) return;
 		updateMut.mutate(
 			{
+				...loaded,
 				latency_test_url: values.latency_test_url,
 				speed_test_url: values.speed_test_url,
 				upload_test_url: values.upload_test_url,

@@ -910,6 +910,25 @@ export namespace settings {
     }
 
     /**
+     * ExportTagConfig controls the tags appended to node names in exports.
+     */
+    export interface ExportTagConfig {
+        "show_country": boolean
+        "show_speed": boolean
+        platforms: PlatformTag[]
+    }
+
+    /**
+     * PlatformTag is one platform's export-tag rule. Key is a built-in platform
+     * (netflix, openai, …) or a custom rule key (e.g. spotify).
+     */
+    export interface PlatformTag {
+        key: string
+        label: string
+        enabled: boolean
+    }
+
+    /**
      * UserSettings holds configurable per-user settings.
      */
     export interface UserSettings {
@@ -917,6 +936,7 @@ export namespace settings {
         "upload_test_url": string
         "latency_test_url": string
         "email_config": EmailConfig
+        "export_tags": ExportTagConfig
     }
 
     export class ServiceClient {
