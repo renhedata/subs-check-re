@@ -14,7 +14,7 @@ import {
 	Scripts,
 	useRouterState,
 } from "@tanstack/react-router";
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { MobileTabbar } from "@/components/mobile-tabbar";
 import { PlatformRulesProvider } from "@/components/platform-rules-context";
 import { Rail } from "@/components/rail";
@@ -94,7 +94,14 @@ function RootDocument({ children }: { children: ReactNode }) {
 
 function RootComponent() {
 	const { location } = useRouterState();
-	const authed = isAuthenticated() && location.pathname !== "/login";
+	// Auth lives in localStorage, which is unreadable during SSR. Gate the
+	// auth-dependent layout behind a mount flag so the server render and the
+	// first client render agree (both unauthenticated) — otherwise React throws
+	// a hydration mismatch when the client immediately knows the user is logged
+	// in. After mount we re-render with the real auth state.
+	const [mounted, setMounted] = useState(false);
+	useEffect(() => setMounted(true), []);
+	const authed = mounted && isAuthenticated() && location.pathname !== "/login";
 
 	return (
 		<RootDocument>
