@@ -1,5 +1,9 @@
-import { Loader2, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Switch } from "@/components/ui/switch";
 import type { checker } from "@/lib/client.gen";
 import { useDeleteRule, useUpdateRule } from "@/queries";
 import { RULE_TYPE_LABELS, type RuleType, TYPE_COLORS } from "./engine";
@@ -15,13 +19,17 @@ export function RuleCard({
 	onEdit: () => void;
 }) {
 	const ruleType = rule.rule_type as RuleType;
+	const [confirmOpen, setConfirmOpen] = useState(false);
 
 	const deleteMut = useDeleteRule();
 	const toggleMut = useUpdateRule();
 
 	const handleDelete = () =>
 		deleteMut.mutate(rule.id, {
-			onSuccess: () => toast.success("Rule deleted"),
+			onSuccess: () => {
+				toast.success("Rule deleted");
+				setConfirmOpen(false);
+			},
 			onError: () => toast.error("Failed to delete"),
 		});
 
@@ -45,23 +53,11 @@ export function RuleCard({
 
 	return (
 		<div className="flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-3">
-			<button
-				type="button"
-				onClick={() => handleToggle(!rule.enabled)}
+			<Switch
+				checked={rule.enabled}
+				onCheckedChange={(v) => handleToggle(v === true)}
 				disabled={toggleMut.isPending}
-				className={[
-					"relative h-5 w-9 flex-shrink-0 rounded-full transition-colors",
-					rule.enabled ? "bg-green-500" : "bg-muted",
-				].join(" ")}
-				aria-label="Toggle"
-			>
-				<span
-					className={[
-						"absolute top-0.5 left-0 h-4 w-4 rounded-full bg-white shadow transition-transform",
-						rule.enabled ? "translate-x-[18px]" : "translate-x-0.5",
-					].join(" ")}
-				/>
-			</button>
+			/>
 
 			<IconDisplay icon={rule.icon} name={rule.name} />
 
@@ -91,26 +87,28 @@ export function RuleCard({
 			</div>
 
 			<div className="flex items-center gap-1">
-				<button
-					type="button"
-					onClick={onEdit}
-					className="rounded px-2 py-1 text-muted-foreground text-xs hover:bg-secondary hover:text-foreground"
-				>
+				<Button variant="ghost" size="sm" onClick={onEdit}>
 					Edit
-				</button>
-				<button
-					type="button"
-					onClick={handleDelete}
-					disabled={deleteMut.isPending}
-					className="rounded p-1 text-muted-foreground hover:text-red-500 disabled:opacity-40"
+				</Button>
+				<Button
+					variant="ghost"
+					size="icon-sm"
+					aria-label="Delete rule"
+					className="text-muted-foreground hover:text-danger"
+					onClick={() => setConfirmOpen(true)}
 				>
-					{deleteMut.isPending ? (
-						<Loader2 size={12} className="animate-spin" />
-					) : (
-						<Trash2 size={12} />
-					)}
-				</button>
+					<Trash2 size={13} />
+				</Button>
 			</div>
+
+			<ConfirmDialog
+				open={confirmOpen}
+				onOpenChange={setConfirmOpen}
+				title={`Delete rule "${rule.name}"?`}
+				description="Nodes stop being tested against this platform on future checks."
+				pending={deleteMut.isPending}
+				onConfirm={handleDelete}
+			/>
 		</div>
 	);
 }

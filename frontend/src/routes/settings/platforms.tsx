@@ -1,9 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Loader2, Plus } from "lucide-react";
+import { Plus, Tv2 } from "lucide-react";
 import { useState } from "react";
 import { useMonacoSetup } from "@/components/platforms/engine";
 import { RuleCard } from "@/components/platforms/RuleCard";
 import { RuleEditorDialog } from "@/components/platforms/RuleEditorDialog";
+import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { checker } from "@/lib/client.gen";
 import { useRules } from "@/queries";
 
@@ -23,33 +26,30 @@ function PlatformsPage() {
 	const rules = data?.rules ?? [];
 
 	return (
-		<div className="max-w-2xl space-y-5">
+		<div className="space-y-5">
 			<div className="flex items-center justify-between">
-				<h1 className="font-semibold text-foreground text-lg">
-					Platform Detection Rules
-				</h1>
-				<button
-					type="button"
+				<p className="text-muted-foreground text-xs">
+					Rules run during each proxy check. Built-in rules are seeded on first
+					visit. Custom keys store results in{" "}
+					<code className="rounded bg-secondary px-1 font-mono">
+						extra_platforms
+					</code>
+					.
+				</p>
+				<Button
+					variant="success"
+					size="sm"
 					onClick={() => setAddOpen(true)}
-					className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-white"
-					style={{ background: "var(--color-btn-success)" }}
+					className="shrink-0"
 				>
 					<Plus size={13} /> Add Rule
-				</button>
+				</Button>
 			</div>
 
-			<p className="text-muted-foreground text-xs">
-				Rules run during each proxy check. Built-in rules are seeded on first
-				visit. Custom keys store results in{" "}
-				<code className="rounded bg-secondary px-1 font-mono">
-					extra_platforms
-				</code>
-				.
-			</p>
-
 			{isLoading ? (
-				<div className="flex justify-center py-8">
-					<Loader2 size={18} className="animate-spin text-muted-foreground" />
+				<div className="space-y-2">
+					<Skeleton className="h-12 w-full" />
+					<Skeleton className="h-12 w-full" />
 				</div>
 			) : (
 				<div className="space-y-2">
@@ -61,9 +61,13 @@ function PlatformsPage() {
 						/>
 					))}
 					{rules.length === 0 && (
-						<p className="py-6 text-center text-muted-foreground text-sm">
-							No rules yet.
-						</p>
+						<div className="rounded-lg border border-border">
+							<EmptyState
+								icon={Tv2}
+								title="No rules yet"
+								description="Add a detection rule to test custom platforms during checks."
+							/>
+						</div>
 					)}
 				</div>
 			)}
