@@ -19,14 +19,24 @@ var db = sqldb.NewDatabase("subscription", sqldb.DatabaseConfig{
 
 // Subscription represents a proxy subscription link.
 type Subscription struct {
-	ID        string     `json:"id"`
-	UserID    string     `json:"user_id"`
-	Name      string     `json:"name"`
-	URL       string     `json:"url"`
-	Enabled   bool       `json:"enabled"`
-	CronExpr  *string    `json:"cron_expr"`
-	CreatedAt time.Time  `json:"created_at"`
-	LastRunAt *time.Time `json:"last_run_at"`
+	ID                string     `json:"id"`
+	UserID            string     `json:"user_id"`
+	Name              string     `json:"name"`
+	URL               string     `json:"url"`
+	Enabled           bool       `json:"enabled"`
+	CronExpr          *string    `json:"cron_expr"`
+	CreatedAt         time.Time  `json:"created_at"`
+	LastRunAt         *time.Time `json:"last_run_at"`
+	ExportIncludeDead bool       `json:"export_include_dead"`
+	ExportSort        string     `json:"export_sort"`
+}
+
+// normalizeExportSort guards the export_sort enum, defaulting unknown values.
+func normalizeExportSort(s string) string {
+	if s == "latency_asc" {
+		return "latency_asc"
+	}
+	return "speed_desc"
 }
 
 // ListResponse is the response for GET /subscriptions.
@@ -40,7 +50,7 @@ type ListResponse struct {
 func List(ctx context.Context) (*ListResponse, error) {
 	uid := encauth.Data().(*authsvc.UserClaims).UserID
 	rows, err := db.Query(ctx, `
-		SELECT id, user_id, name, url, enabled, cron_expr, created_at, last_run_at
+		SELECT id, user_id, name, url, enabled, cron_expr, created_at, last_run_at, export_include_dead, export_sort
 		FROM subscriptions WHERE user_id = $1 ORDER BY created_at DESC
 	`, uid)
 	if err != nil {
@@ -52,7 +62,7 @@ func List(ctx context.Context) (*ListResponse, error) {
 	for rows.Next() {
 		var s Subscription
 		if err := rows.Scan(&s.ID, &s.UserID, &s.Name, &s.URL, &s.Enabled,
-			&s.CronExpr, &s.CreatedAt, &s.LastRunAt); err != nil {
+			&s.CronExpr, &s.CreatedAt, &s.LastRunAt, &s.ExportIncludeDead, &s.ExportSort); err != nil {
 			return nil, errs.B().Code(errs.Internal).Msg("scan failed").Err()
 		}
 		subs = append(subs, s)
@@ -65,9 +75,11 @@ func List(ctx context.Context) (*ListResponse, error) {
 
 // CreateParams is the request body for POST /subscriptions.
 type CreateParams struct {
-	Name     string  `json:"name"`
-	URL      string  `json:"url"`
-	CronExpr *string `json:"cron_expr"`
+	Name              string  `json:"name"`
+	URL               string  `json:"url"`
+	CronExpr          *string `json:"cron_expr"`
+	ExportIncludeDead bool    `json:"export_include_dead"`
+	ExportSort        string  `json:"export_sort"`
 }
 
 // Create adds a new subscription for the current user.
@@ -79,31 +91,36 @@ func Create(ctx context.Context, p *CreateParams) (*Subscription, error) {
 	}
 	uid := encauth.Data().(*authsvc.UserClaims).UserID
 	id := uuid.New().String()
+	sort := normalizeExportSort(p.ExportSort)
 	_, err := db.Exec(ctx, `
-		INSERT INTO subscriptions (id, user_id, name, url, cron_expr, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6)
-	`, id, uid, p.Name, p.URL, p.CronExpr, time.Now())
+		INSERT INTO subscriptions (id, user_id, name, url, cron_expr, created_at, export_include_dead, export_sort)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+	`, id, uid, p.Name, p.URL, p.CronExpr, time.Now(), p.ExportIncludeDead, sort)
 	if err != nil {
 		return nil, errs.B().Code(errs.Internal).Msg("failed to create subscription").Err()
 	}
 	return &Subscription{
-		ID:       id,
-		UserID:   uid,
-		Name:     p.Name,
-		URL:      p.URL,
-		Enabled:  true,
-		CronExpr: p.CronExpr,
+		ID:                id,
+		UserID:            uid,
+		Name:              p.Name,
+		URL:               p.URL,
+		Enabled:           true,
+		CronExpr:          p.CronExpr,
+		ExportIncludeDead: p.ExportIncludeDead,
+		ExportSort:        sort,
 	}, nil
 }
 
 // UpdateParams is the request body for PUT /subscriptions/:id.
 // Use ClearCronExpr=true to remove the cron schedule (set cron_expr to NULL).
 type UpdateParams struct {
-	Name          *string `json:"name"`
-	URL           *string `json:"url"`
-	Enabled       *bool   `json:"enabled"`
-	CronExpr      *string `json:"cron_expr"`
-	ClearCronExpr bool    `json:"clear_cron_expr"`
+	Name              *string `json:"name"`
+	URL               *string `json:"url"`
+	Enabled           *bool   `json:"enabled"`
+	CronExpr          *string `json:"cron_expr"`
+	ClearCronExpr     bool    `json:"clear_cron_expr"`
+	ExportIncludeDead *bool   `json:"export_include_dead"`
+	ExportSort        *string `json:"export_sort"`
 }
 
 // Update modifies a subscription owned by the current user.
@@ -126,23 +143,30 @@ func Update(ctx context.Context, id string, p *UpdateParams) (*Subscription, err
 		cronExprSQL = p.CronExpr
 	}
 
+	var exportSortSQL any
+	if p.ExportSort != nil {
+		exportSortSQL = normalizeExportSort(*p.ExportSort)
+	}
+
 	_, err := db.Exec(ctx, `
 		UPDATE subscriptions SET
-			name      = COALESCE($2, name),
-			url       = COALESCE($3, url),
-			enabled   = COALESCE($4, enabled),
-			cron_expr = CASE WHEN $6::boolean THEN NULL ELSE COALESCE($5, cron_expr) END
+			name                = COALESCE($2, name),
+			url                 = COALESCE($3, url),
+			enabled             = COALESCE($4, enabled),
+			cron_expr           = CASE WHEN $6::boolean THEN NULL ELSE COALESCE($5, cron_expr) END,
+			export_include_dead = COALESCE($7, export_include_dead),
+			export_sort         = COALESCE($8, export_sort)
 		WHERE id = $1
-	`, id, p.Name, p.URL, p.Enabled, cronExprSQL, p.ClearCronExpr)
+	`, id, p.Name, p.URL, p.Enabled, cronExprSQL, p.ClearCronExpr, p.ExportIncludeDead, exportSortSQL)
 	if err != nil {
 		return nil, errs.B().Code(errs.Internal).Msg("update failed").Err()
 	}
 
 	var s Subscription
 	if err := db.QueryRow(ctx, `
-		SELECT id, user_id, name, url, enabled, cron_expr, created_at, last_run_at
+		SELECT id, user_id, name, url, enabled, cron_expr, created_at, last_run_at, export_include_dead, export_sort
 		FROM subscriptions WHERE id = $1
-	`, id).Scan(&s.ID, &s.UserID, &s.Name, &s.URL, &s.Enabled, &s.CronExpr, &s.CreatedAt, &s.LastRunAt); err != nil {
+	`, id).Scan(&s.ID, &s.UserID, &s.Name, &s.URL, &s.Enabled, &s.CronExpr, &s.CreatedAt, &s.LastRunAt, &s.ExportIncludeDead, &s.ExportSort); err != nil {
 		return nil, errs.B().Code(errs.Internal).Msg("fetch after update failed").Err()
 	}
 	return &s, nil
@@ -179,9 +203,9 @@ func GetSubscription(ctx context.Context, id string) (*Subscription, error) {
 	uid := encauth.Data().(*authsvc.UserClaims).UserID
 	var s Subscription
 	err := db.QueryRow(ctx, `
-		SELECT id, user_id, name, url, enabled, cron_expr, created_at, last_run_at
+		SELECT id, user_id, name, url, enabled, cron_expr, created_at, last_run_at, export_include_dead, export_sort
 		FROM subscriptions WHERE id = $1 AND user_id = $2
-	`, id, uid).Scan(&s.ID, &s.UserID, &s.Name, &s.URL, &s.Enabled, &s.CronExpr, &s.CreatedAt, &s.LastRunAt)
+	`, id, uid).Scan(&s.ID, &s.UserID, &s.Name, &s.URL, &s.Enabled, &s.CronExpr, &s.CreatedAt, &s.LastRunAt, &s.ExportIncludeDead, &s.ExportSort)
 	if err != nil {
 		return nil, errs.B().Code(errs.NotFound).Msg("subscription not found").Err()
 	}
@@ -202,9 +226,9 @@ type GetByIDParams struct {
 func GetSubscriptionByID(ctx context.Context, p *GetByIDParams) (*Subscription, error) {
 	var s Subscription
 	err := db.QueryRow(ctx, `
-		SELECT id, user_id, name, url, enabled, cron_expr, created_at, last_run_at
+		SELECT id, user_id, name, url, enabled, cron_expr, created_at, last_run_at, export_include_dead, export_sort
 		FROM subscriptions WHERE id = $1
-	`, p.ID).Scan(&s.ID, &s.UserID, &s.Name, &s.URL, &s.Enabled, &s.CronExpr, &s.CreatedAt, &s.LastRunAt)
+	`, p.ID).Scan(&s.ID, &s.UserID, &s.Name, &s.URL, &s.Enabled, &s.CronExpr, &s.CreatedAt, &s.LastRunAt, &s.ExportIncludeDead, &s.ExportSort)
 	if err != nil {
 		return nil, errs.B().Code(errs.NotFound).Msg("subscription not found").Err()
 	}

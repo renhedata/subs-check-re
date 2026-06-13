@@ -74,6 +74,8 @@ export function SubscriptionDialog({
 						enabled,
 						cron_expr: sub.cron_expr ?? "",
 						clear_cron_expr: false,
+						export_include_dead: sub.export_include_dead ?? false,
+						export_sort: sub.export_sort ?? "speed_desc",
 					},
 				},
 				{
@@ -86,7 +88,7 @@ export function SubscriptionDialog({
 			);
 		} else {
 			createMut.mutate(
-				{ name, url, cron_expr: "" },
+				{ name, url, cron_expr: "", export_include_dead: false, export_sort: "speed_desc" },
 				{
 					onSuccess: () => {
 						toast.success("Subscription added");

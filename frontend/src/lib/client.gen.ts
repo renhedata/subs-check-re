@@ -999,6 +999,8 @@ export namespace subscription {
         name: string
         url: string
         "cron_expr": string
+        "export_include_dead": boolean
+        "export_sort": string
     }
 
     /**
@@ -1027,6 +1029,8 @@ export namespace subscription {
         "cron_expr": string
         "created_at": string
         "last_run_at": string
+        "export_include_dead": boolean
+        "export_sort": string
     }
 
     /**
@@ -1039,6 +1043,8 @@ export namespace subscription {
         enabled: boolean
         "cron_expr": string
         "clear_cron_expr": boolean
+        "export_include_dead": boolean
+        "export_sort": string
     }
 
     export class ServiceClient {
