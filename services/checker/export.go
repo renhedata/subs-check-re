@@ -148,11 +148,17 @@ func (routerOSExporter) Export(ctx context.Context, w http.ResponseWriter, subID
 	return renderRouterOS(w, servers, opts.ListName)
 }
 
-// loadExportProxies routes single-vs-all to the right loader.
+// loadExportProxies fetches the per-user export tag config once, then routes
+// single-vs-all to the right loader.
 func loadExportProxies(ctx context.Context, subID, userID string) ([]map[string]any, error) {
-	if subID == "all" {
-		return latestUsableProxiesAcrossAllSubs(ctx, userID)
+	cfg, err := settingssvc.GetExportTagsForUser(ctx, userID)
+	if err != nil || cfg == nil {
+		d := settingssvc.ExportTagConfig{ShowSpeed: true}
+		cfg = &d
 	}
-	return latestUsableProxies(ctx, subID, userID)
+	if subID == "all" {
+		return latestUsableProxiesAcrossAllSubs(ctx, userID, *cfg)
+	}
+	return latestUsableProxies(ctx, subID, userID, *cfg)
 }
 

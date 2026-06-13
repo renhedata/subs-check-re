@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
+	settingssvc "subs-check-re/services/settings"
 	subsvc "subs-check-re/services/subscription"
 )
 
@@ -21,9 +22,114 @@ type rankedNode struct {
 	latencyMs int
 }
 
+// unlockFlags carries a node's built-in platform unlock booleans.
+type unlockFlags struct {
+	Netflix        bool
+	YouTube        bool
+	YouTubePremium bool
+	OpenAI         bool
+	Claude         bool
+	Gemini         bool
+	Grok           bool
+	Disney         bool
+	TikTok         bool
+}
+
+// builtinUnlocked maps a built-in platform key to whether this node unlocked it.
+func (f unlockFlags) builtinUnlocked(key string) bool {
+	switch key {
+	case "netflix":
+		return f.Netflix
+	case "youtube":
+		return f.YouTube
+	case "openai":
+		return f.OpenAI
+	case "claude":
+		return f.Claude
+	case "gemini":
+		return f.Gemini
+	case "grok":
+		return f.Grok
+	case "disney":
+		return f.Disney
+	case "tiktok":
+		return f.TikTok
+	default:
+		return false
+	}
+}
+
+// taggedName appends country / platform / speed tags to a node name per cfg.
+// Order: country, built-in platforms (cfg order), custom extra_platforms
+// (sorted by key), speed. Returns the bare name when no tags apply.
+func taggedName(name, country string, f unlockFlags, extra map[string]bool, speedKbps int, cfg settingssvc.ExportTagConfig) string {
+	tags := []string{}
+
+	if cfg.ShowCountry && country != "" {
+		tags = append(tags, country)
+	}
+
+	builtin := map[string]bool{
+		"netflix": true, "youtube": true, "openai": true, "claude": true,
+		"gemini": true, "grok": true, "disney": true, "tiktok": true,
+	}
+	cfgByKey := map[string]settingssvc.PlatformTag{}
+	for _, p := range cfg.Platforms {
+		cfgByKey[p.Key] = p
+	}
+
+	for _, p := range cfg.Platforms {
+		if !builtin[p.Key] || !p.Enabled {
+			continue
+		}
+		if !f.builtinUnlocked(p.Key) {
+			continue
+		}
+		if p.Key == "youtube" && f.YouTubePremium {
+			tags = append(tags, p.Label+"+")
+		} else {
+			tags = append(tags, p.Label)
+		}
+	}
+
+	keys := make([]string, 0, len(extra))
+	for k, v := range extra {
+		if v {
+			keys = append(keys, k)
+		}
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		if builtin[k] {
+			continue
+		}
+		if p, ok := cfgByKey[k]; ok {
+			if !p.Enabled {
+				continue
+			}
+			tags = append(tags, p.Label)
+		} else {
+			tags = append(tags, k)
+		}
+	}
+
+	if cfg.ShowSpeed && speedKbps > 0 {
+		if speedKbps >= 1024 {
+			tags = append(tags, fmt.Sprintf("%.1fMB", float64(speedKbps)/1024))
+		} else {
+			tags = append(tags, fmt.Sprintf("%dKB", speedKbps))
+		}
+	}
+
+	if len(tags) == 0 {
+		return name
+	}
+	return name + "|" + strings.Join(tags, "|")
+}
+
 // latestUsableProxies returns the alive, enabled nodes from the latest completed job
 // for the given subscription, with names tagged (NF/GPT/CL/YT+...) and sorted by speed.
-func latestUsableProxies(ctx context.Context, subscriptionID, userID string) ([]map[string]any, error) {
+func latestUsableProxies(ctx context.Context, subscriptionID, userID string, cfg settingssvc.ExportTagConfig) ([]map[string]any, error) {
 	var jobID string
 	if err := db.QueryRow(ctx, `
 		SELECT id FROM check_jobs
@@ -32,13 +138,13 @@ func latestUsableProxies(ctx context.Context, subscriptionID, userID string) ([]
 	`, subscriptionID, userID).Scan(&jobID); err != nil {
 		return nil, fmt.Errorf("no completed check found")
 	}
-	return loadJobProxies(ctx, jobID, subscriptionID, "")
+	return loadJobProxies(ctx, jobID, subscriptionID, "", cfg)
 }
 
 // latestUsableProxiesAcrossAllSubs aggregates alive nodes from the latest completed job
 // of every subscription owned by the user; each node's name is prefixed with its
 // subscription name so they remain disambiguated in clients.
-func latestUsableProxiesAcrossAllSubs(ctx context.Context, userID string) ([]map[string]any, error) {
+func latestUsableProxiesAcrossAllSubs(ctx context.Context, userID string, cfg settingssvc.ExportTagConfig) ([]map[string]any, error) {
 	rows, err := db.Query(ctx, `
 		SELECT DISTINCT ON (subscription_id) id AS job_id, subscription_id
 		FROM check_jobs
@@ -80,7 +186,7 @@ func latestUsableProxiesAcrossAllSubs(ctx context.Context, userID string) ([]map
 		if subName == "" {
 			continue
 		}
-		proxies, _ := loadJobProxies(ctx, js.jobID, js.subscriptionID, subName)
+		proxies, _ := loadJobProxies(ctx, js.jobID, js.subscriptionID, subName, cfg)
 		all = append(all, proxies...)
 	}
 	return all, nil
@@ -88,12 +194,13 @@ func latestUsableProxiesAcrossAllSubs(ctx context.Context, userID string) ([]map
 
 // loadJobProxies returns the alive node configs for the given job, tagged + sorted by speed.
 // If subNamePrefix is non-empty, each name is prefixed with "<subName>|" for cross-sub aggregation.
-func loadJobProxies(ctx context.Context, jobID, subscriptionID, subNamePrefix string) ([]map[string]any, error) {
+func loadJobProxies(ctx context.Context, jobID, subscriptionID, subNamePrefix string, cfg settingssvc.ExportTagConfig) ([]map[string]any, error) {
 	rows, err := db.Query(ctx, `
 		WITH r AS (
 			SELECT COALESCE(n.config, cr.node_config) AS config,
 			       COALESCE(n.name, cr.node_name) AS node_name,
 			       cr.netflix, cr.youtube, cr.youtube_premium, cr.openai, cr.claude, cr.gemini, cr.grok, cr.disney, cr.tiktok,
+			       cr.country, cr.extra_platforms,
 			       CASE WHEN cr.speed_kbps > 0 THEN cr.speed_kbps
 			            ELSE COALESCE((
 			                SELECT cr2.speed_kbps
@@ -112,7 +219,7 @@ func loadJobProxies(ctx context.Context, jobID, subscriptionID, subNamePrefix st
 			WHERE cr.job_id = $1 AND cr.alive = true AND COALESCE(n.enabled, true) = true
 		)
 		SELECT config, node_name, netflix, youtube, youtube_premium, openai, claude, gemini, grok, disney, tiktok,
-		       speed_kbps, latency_ms
+		       country, extra_platforms, speed_kbps, latency_ms
 		FROM r
 		ORDER BY speed_kbps DESC NULLS LAST, latency_ms ASC NULLS LAST
 	`, jobID, subscriptionID)
@@ -127,27 +234,39 @@ func loadJobProxies(ctx context.Context, jobID, subscriptionID, subNamePrefix st
 			configJSON                                                                     []byte
 			name                                                                           string
 			netflix, youtube, youtubePremium, openai, claude, gemini, grok, disney, tiktok bool
+			country                                                                         string
+			extraJSON                                                                       []byte
 			speedKbps, latencyMs                                                           int
 		)
 		if err := rows.Scan(&configJSON, &name,
 			&netflix, &youtube, &youtubePremium, &openai, &claude, &gemini, &grok, &disney, &tiktok,
+			&country, &extraJSON,
 			&speedKbps, &latencyMs); err != nil {
 			continue
 		}
 		if len(configJSON) == 0 {
 			continue
 		}
-		var cfg map[string]any
-		if json.Unmarshal(configJSON, &cfg) != nil {
+		var nodeCfg map[string]any
+		if json.Unmarshal(configJSON, &nodeCfg) != nil {
 			continue
 		}
-		tagged := taggedName(name, netflix, youtube, youtubePremium, openai, claude, gemini, grok, disney, tiktok, speedKbps)
-		if subNamePrefix != "" {
-			cfg["name"] = subNamePrefix + "|" + tagged
-		} else {
-			cfg["name"] = tagged
+		var extra map[string]bool
+		if len(extraJSON) > 0 {
+			_ = json.Unmarshal(extraJSON, &extra)
 		}
-		nodes = append(nodes, rankedNode{config: cfg, speedKbps: speedKbps, latencyMs: latencyMs})
+		tagged := taggedName(name, country,
+			unlockFlags{
+				Netflix: netflix, YouTube: youtube, YouTubePremium: youtubePremium,
+				OpenAI: openai, Claude: claude, Gemini: gemini, Grok: grok,
+				Disney: disney, TikTok: tiktok,
+			}, extra, speedKbps, cfg)
+		if subNamePrefix != "" {
+			nodeCfg["name"] = subNamePrefix + "|" + tagged
+		} else {
+			nodeCfg["name"] = tagged
+		}
+		nodes = append(nodes, rankedNode{config: nodeCfg, speedKbps: speedKbps, latencyMs: latencyMs})
 	}
 
 	sort.Slice(nodes, func(i, j int) bool {
@@ -222,47 +341,4 @@ func logExport(ctx context.Context, subscriptionID, userID, ip string) {
 		INSERT INTO export_logs (id, subscription_id, user_id, ip, requested_at)
 		VALUES ($1, $2, $3, $4, $5)
 	`, uuid.New().String(), subscriptionID, userID, ip, time.Now())
-}
-
-// taggedName appends platform unlock tags (NF, GPT, CL, YT+, …) and a speed tag (e.g. "10.5MB")
-// to a node name. The original name is returned unchanged when no tags apply.
-func taggedName(name string, netflix, youtube, youtubePremium, openai, claude, gemini, grok, disney, tiktok bool, speedKbps int) string {
-	tags := []string{}
-	if netflix {
-		tags = append(tags, "NF")
-	}
-	if openai {
-		tags = append(tags, "GPT")
-	}
-	if gemini {
-		tags = append(tags, "GM")
-	}
-	if claude {
-		tags = append(tags, "CL")
-	}
-	if grok {
-		tags = append(tags, "GK")
-	}
-	if youtubePremium {
-		tags = append(tags, "YT+")
-	} else if youtube {
-		tags = append(tags, "YT")
-	}
-	if disney {
-		tags = append(tags, "D+")
-	}
-	if tiktok {
-		tags = append(tags, "TK")
-	}
-	if speedKbps > 0 {
-		if speedKbps >= 1024 {
-			tags = append(tags, fmt.Sprintf("%.1fMB", float64(speedKbps)/1024))
-		} else {
-			tags = append(tags, fmt.Sprintf("%dKB", speedKbps))
-		}
-	}
-	if len(tags) == 0 {
-		return name
-	}
-	return name + "|" + strings.Join(tags, "|")
 }
