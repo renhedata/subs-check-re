@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	"encore.dev/beta/auth"
 	"encore.dev/et"
@@ -89,5 +90,66 @@ func TestCreateInvalidCron(t *testing.T) {
 	})
 	if err == nil {
 		t.Error("expected error for invalid cron expression")
+	}
+}
+
+func TestSetEnabledTogglesRowAndCronEntry(t *testing.T) {
+	svc, err := initService()
+	if err != nil {
+		t.Fatalf("initService: %v", err)
+	}
+	ctx := withAuth()
+	subID := "toggle-sub-" + fmt.Sprint(time.Now().UnixNano())
+	jobID := "toggle-job-" + fmt.Sprint(time.Now().UnixNano())
+	if _, err := db.Exec(context.Background(), `
+		INSERT INTO scheduled_jobs (id, subscription_id, user_id, cron_expr, enabled, created_at)
+		VALUES ($1, $2, 'test-user-id', '0 3 * * *', true, NOW())
+		ON CONFLICT (subscription_id) DO NOTHING
+	`, jobID, subID); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	svc.registerCron(subID, "0 3 * * *", defaultCheckOptions())
+
+	if _, err := svc.SetEnabled(ctx, jobID, &SetEnabledParams{Enabled: false}); err != nil {
+		t.Fatalf("disable: %v", err)
+	}
+	var enabled bool
+	if err := db.QueryRow(context.Background(),
+		`SELECT enabled FROM scheduled_jobs WHERE id=$1`, jobID).Scan(&enabled); err != nil {
+		t.Fatalf("query: %v", err)
+	}
+	if enabled {
+		t.Error("row should be disabled")
+	}
+	svc.mu.Lock()
+	_, registered := svc.entries[subID]
+	svc.mu.Unlock()
+	if registered {
+		t.Error("cron entry should be removed on disable")
+	}
+
+	if _, err := svc.SetEnabled(ctx, jobID, &SetEnabledParams{Enabled: true}); err != nil {
+		t.Fatalf("enable: %v", err)
+	}
+	if err := db.QueryRow(context.Background(),
+		`SELECT enabled FROM scheduled_jobs WHERE id=$1`, jobID).Scan(&enabled); err != nil {
+		t.Fatalf("query: %v", err)
+	}
+	if !enabled {
+		t.Error("row should be enabled")
+	}
+	svc.mu.Lock()
+	_, registered = svc.entries[subID]
+	svc.mu.Unlock()
+	if !registered {
+		t.Error("cron entry should be registered on enable")
+	}
+}
+
+func TestSetEnabledRejectsForeignJob(t *testing.T) {
+	svc, _ := initService()
+	ctx := withAuth()
+	if _, err := svc.SetEnabled(ctx, "no-such-job-id", &SetEnabledParams{Enabled: false}); err == nil {
+		t.Error("expected NotFound for unknown/foreign job id")
 	}
 }

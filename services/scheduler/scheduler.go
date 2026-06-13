@@ -139,13 +139,15 @@ func defaultCheckOptions() checkersvc.CheckOptions {
 
 // ScheduledJob represents a cron schedule entry.
 type ScheduledJob struct {
-	ID             string    `json:"id"`
-	SubscriptionID string    `json:"subscription_id"`
-	CronExpr       string    `json:"cron_expr"`
-	Enabled        bool      `json:"enabled"`
-	SpeedTest      bool      `json:"speed_test"`
-	MediaApps      []string  `json:"media_apps"`
-	CreatedAt      time.Time `json:"created_at"`
+	ID              string    `json:"id"`
+	SubscriptionID  string    `json:"subscription_id"`
+	CronExpr        string    `json:"cron_expr"`
+	Enabled         bool      `json:"enabled"`
+	SpeedTest       bool      `json:"speed_test"`
+	UploadSpeedTest bool      `json:"upload_speed_test"`
+	MediaApps       []string  `json:"media_apps"`
+	Debug           bool      `json:"debug"`
+	CreatedAt       time.Time `json:"created_at"`
 }
 
 // ListResponse is the response for GET /scheduler.
@@ -193,7 +195,9 @@ func (s *Service) List(ctx context.Context) (*ListResponse, error) {
 			opts = defaultCheckOptions()
 		}
 		j.SpeedTest = opts.SpeedTest
+		j.UploadSpeedTest = opts.UploadSpeedTest
 		j.MediaApps = opts.MediaApps
+		j.Debug = opts.Debug
 		jobs = append(jobs, j)
 	}
 	if jobs == nil {
@@ -244,12 +248,14 @@ func (s *Service) Create(ctx context.Context, p *CreateParams) (*ScheduledJob, e
 	s.registerCron(p.SubscriptionID, p.CronExpr, opts)
 
 	return &ScheduledJob{
-		ID:             id,
-		SubscriptionID: p.SubscriptionID,
-		CronExpr:       p.CronExpr,
-		Enabled:        true,
-		SpeedTest:      opts.SpeedTest,
-		MediaApps:      opts.MediaApps,
+		ID:              id,
+		SubscriptionID:  p.SubscriptionID,
+		CronExpr:        p.CronExpr,
+		Enabled:         true,
+		SpeedTest:       opts.SpeedTest,
+		UploadSpeedTest: opts.UploadSpeedTest,
+		MediaApps:       opts.MediaApps,
+		Debug:           opts.Debug,
 	}, nil
 }
 
@@ -272,4 +278,48 @@ func (s *Service) Delete(ctx context.Context, id string) (*DeleteResponse, error
 
 	s.removeCron(subID)
 	return &DeleteResponse{OK: true}, nil
+}
+
+// SetEnabledParams is the request body for PATCH /scheduler/:id.
+type SetEnabledParams struct {
+	Enabled bool `json:"enabled"`
+}
+
+// SetEnabled pauses or resumes a scheduled job without deleting it.
+//
+//encore:api auth method=PATCH path=/scheduler/:id
+func (s *Service) SetEnabled(ctx context.Context, id string, p *SetEnabledParams) (*ScheduledJob, error) {
+	claims := encauth.Data().(*authsvc.UserClaims)
+
+	var j ScheduledJob
+	var optsJSON []byte
+	if err := db.QueryRow(ctx, `
+		SELECT id, subscription_id, cron_expr, created_at, COALESCE(options_json, '{}')
+		FROM scheduled_jobs WHERE id = $1 AND user_id = $2
+	`, id, claims.UserID).Scan(&j.ID, &j.SubscriptionID, &j.CronExpr, &j.CreatedAt, &optsJSON); err != nil {
+		return nil, errs.B().Code(errs.NotFound).Msg("scheduled job not found").Err()
+	}
+
+	if _, err := db.Exec(ctx,
+		`UPDATE scheduled_jobs SET enabled = $2 WHERE id = $1`, id, p.Enabled); err != nil {
+		return nil, errs.B().Code(errs.Internal).Msg("update failed").Err()
+	}
+
+	var opts checkersvc.CheckOptions
+	if err := json.Unmarshal(optsJSON, &opts); err != nil {
+		opts = defaultCheckOptions()
+	}
+
+	if p.Enabled {
+		s.registerCron(j.SubscriptionID, j.CronExpr, opts)
+	} else {
+		s.removeCron(j.SubscriptionID)
+	}
+
+	j.Enabled = p.Enabled
+	j.SpeedTest = opts.SpeedTest
+	j.UploadSpeedTest = opts.UploadSpeedTest
+	j.MediaApps = opts.MediaApps
+	j.Debug = opts.Debug
+	return &j, nil
 }
