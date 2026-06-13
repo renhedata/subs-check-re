@@ -36,23 +36,23 @@ function DebugStepView({ step }: { step: DebugStep }) {
 					style={{
 						background:
 							step.type === "error"
-								? "var(--color-badge-danger-bg)"
+								? "var(--danger-muted)"
 								: step.type === "http_request" || step.type === "http_response"
-									? "var(--color-badge-info-bg)"
+									? "var(--info-muted)"
 									: step.type === "variable"
-										? "var(--color-badge-success-bg)"
+										? "var(--success-muted)"
 										: step.type === "condition"
-											? "var(--color-badge-warning-bg)"
+											? "var(--warning-muted)"
 											: "transparent",
 						color:
 							step.type === "error"
 								? "var(--destructive)"
 								: step.type === "http_request" || step.type === "http_response"
-									? "var(--color-badge-info)"
+									? "var(--info)"
 									: step.type === "variable"
-										? "var(--color-badge-success)"
+										? "var(--success)"
 										: step.type === "condition"
-											? "var(--legacy-warning)"
+											? "var(--warning)"
 											: "var(--muted-foreground)",
 					}}
 				>
@@ -119,11 +119,9 @@ function DebugPlatformEntry({ trace }: { trace: DebugTrace }) {
 					className="ml-auto rounded px-1.5 py-0.5 font-medium text-[10px]"
 					style={{
 						background: trace.result
-							? "var(--color-badge-success-bg)"
-							: "var(--color-badge-danger-bg)",
-						color: trace.result
-							? "var(--color-badge-success)"
-							: "var(--color-badge-danger)",
+							? "var(--success-muted)"
+							: "var(--danger-muted)",
+						color: trace.result ? "var(--success)" : "var(--danger)",
 					}}
 				>
 					{trace.result ? "✓ UNLOCKED" : "✗ BLOCKED"}

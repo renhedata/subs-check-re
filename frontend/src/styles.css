@@ -47,17 +47,6 @@
 
 	--color-dimmed: #6e7781;
 	--color-code: #1f2328;
-	--color-btn-success: #1f883d;
-	--legacy-success: #1a7f37;
-	--legacy-warning: #9a6700;
-	--color-badge-info-bg: #ddf4ff;
-	--color-badge-info: #0969da;
-	--color-badge-success-bg: #dafbe1;
-	--color-badge-success: #1a7f37;
-	--color-badge-danger-bg: #ffd7d9;
-	--color-badge-danger: #d1242f;
-	--color-badge-ai-bg: #dafbe1;
-	--color-badge-ai: #1a7f37;
 	--color-active-bg: rgba(9, 105, 218, 0.1);
 	--color-active-border: rgba(9, 105, 218, 0.4);
 	--color-progress: linear-gradient(90deg, #0550ae, #0969da);
@@ -104,17 +93,6 @@
 
 	--color-dimmed: #6e7681;
 	--color-code: #c9d1d9;
-	--color-btn-success: #238636;
-	--legacy-success: #3fb950;
-	--legacy-warning: #d29922;
-	--color-badge-info-bg: #1a2a3a;
-	--color-badge-info: #58a6ff;
-	--color-badge-success-bg: #1a4731;
-	--color-badge-success: #3fb950;
-	--color-badge-danger-bg: #3d1a1a;
-	--color-badge-danger: #f85149;
-	--color-badge-ai-bg: #1a3a1a;
-	--color-badge-ai: #3fb950;
 	--color-active-bg: rgba(31, 111, 235, 0.13);
 	--color-active-border: rgba(31, 111, 235, 0.27);
 	--color-progress: linear-gradient(90deg, #1f6feb, #58a6ff);

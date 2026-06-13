@@ -1,6 +1,7 @@
 import { BookOpen, Loader2, Play, X } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 import { client } from "@/lib/client";
 import type { checker } from "@/lib/client.gen";
 import { useTheme } from "@/lib/theme";
@@ -211,18 +212,17 @@ export function RuleEditorDialog({
 						{testing ? "Running…" : "Test"}
 					</button>
 
-					<button
-						type="button"
+					<Button
+						variant="success"
+						size="sm"
 						onClick={handleSave}
 						disabled={saveMut.isPending || !canSave}
-						className="flex h-7 items-center gap-1.5 rounded px-3 text-sm text-white disabled:opacity-50"
-						style={{ background: "var(--color-btn-success)" }}
 					>
 						{saveMut.isPending && (
 							<Loader2 size={11} className="animate-spin" />
 						)}
 						{isEdit ? "Save" : "Create"}
-					</button>
+					</Button>
 
 					<button
 						type="button"
