@@ -84,6 +84,9 @@ type NodeResult struct {
 	UploadSpeedKbps int    `json:"upload_speed_kbps"`
 	Country         string `json:"country"`
 	IP              string `json:"ip"`
+	Server          string `json:"server"`
+	Port            int    `json:"port"`
+	Config          string `json:"config"`
 	Netflix        bool            `json:"netflix"`
 	YouTube        bool            `json:"youtube"`
 	YouTubePremium bool            `json:"youtube_premium"`
@@ -527,6 +530,9 @@ func GetResults(ctx context.Context, subscriptionID string, p *GetResultsParams)
 			       COALESCE(n.name, cr.node_name) AS node_name,
 			       COALESCE(n.type, cr.node_type) AS node_type,
 			       COALESCE(n.enabled, true) AS enabled,
+			       COALESCE(n.server, '') AS server,
+			       COALESCE(n.port, 0) AS port,
+			       COALESCE(COALESCE(n.config, cr.node_config)::text, '') AS config,
 			       cr.alive, cr.latency_ms,
 			       CASE WHEN cr.speed_kbps > 0 THEN cr.speed_kbps
 			            ELSE COALESCE((
@@ -573,6 +579,7 @@ func GetResults(ctx context.Context, subscriptionID string, p *GetResultsParams)
 		var extraJSON []byte
 		if err := rows.Scan(
 			&r.NodeID, &r.NodeName, &r.NodeType, &r.Enabled,
+			&r.Server, &r.Port, &r.Config,
 			&r.Alive, &r.LatencyMs, &r.SpeedKbps, &r.UploadSpeedKbps, &r.Country, &r.IP,
 			&r.Netflix, &r.YouTube, &r.YouTubePremium, &r.OpenAI, &r.Claude, &r.Gemini, &r.Grok, &r.Disney, &r.TikTok,
 			&extraJSON, &r.TrafficBytes,

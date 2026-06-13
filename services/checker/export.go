@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	settingssvc "subs-check-re/services/settings"
+	subsvc "subs-check-re/services/subscription"
 )
 
 // Exporter renders the export response for a given (subscriptionID, userID)
@@ -148,11 +149,23 @@ func (routerOSExporter) Export(ctx context.Context, w http.ResponseWriter, subID
 	return renderRouterOS(w, servers, opts.ListName)
 }
 
-// loadExportProxies routes single-vs-all to the right loader.
+// loadExportProxies fetches the per-user export tag config once, then routes
+// single-vs-all to the right loader.
 func loadExportProxies(ctx context.Context, subID, userID string) ([]map[string]any, error) {
-	if subID == "all" {
-		return latestUsableProxiesAcrossAllSubs(ctx, userID)
+	cfg, err := settingssvc.GetExportTagsForUser(ctx, userID)
+	if err != nil || cfg == nil {
+		// On a settings-service error, fall back to full defaults so export
+		// names stay consistent (not just the speed tag).
+		d := settingssvc.DefaultExportTags()
+		cfg = &d
 	}
-	return latestUsableProxies(ctx, subID, userID)
+	if subID == "all" {
+		return latestUsableProxiesAcrossAllSubs(ctx, userID, *cfg)
+	}
+	prefs := exportPrefs{Sort: "speed_desc"}
+	if sub, err := subsvc.GetSubscriptionByID(ctx, &subsvc.GetByIDParams{ID: subID}); err == nil {
+		prefs = exportPrefs{IncludeDead: sub.ExportIncludeDead, Sort: sub.ExportSort}
+	}
+	return latestUsableProxies(ctx, subID, userID, *cfg, prefs)
 }
 

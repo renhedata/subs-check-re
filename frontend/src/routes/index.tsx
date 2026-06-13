@@ -97,6 +97,8 @@ function WorkbenchPage() {
 					enabled: !selected.enabled,
 					cron_expr: selected.cron_expr ?? "",
 					clear_cron_expr: false,
+					export_include_dead: selected.export_include_dead ?? false,
+					export_sort: selected.export_sort ?? "speed_desc",
 				},
 			},
 			{

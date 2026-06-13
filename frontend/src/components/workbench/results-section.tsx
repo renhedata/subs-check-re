@@ -67,7 +67,9 @@ export function ResultsSection({
 	// All platform keys, deduped: the seeded default rules reuse builtin keys
 	// (youtube, grok, …), so a naive concat produces duplicate React keys.
 	const platformKeys = useMemo(
-		() => [...new Set<string>([...BUILTIN_PLATFORMS, ...rules.map((r) => r.key)])],
+		() => [
+			...new Set<string>([...BUILTIN_PLATFORMS, ...rules.map((r) => r.key)]),
+		],
 		[rules],
 	);
 

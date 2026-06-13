@@ -362,6 +362,9 @@ export namespace checker {
         "upload_speed_kbps": number
         country: string
         ip: string
+        server: string
+        port: number
+        config: string
         netflix: boolean
         youtube: boolean
         "youtube_premium": boolean
@@ -907,6 +910,25 @@ export namespace settings {
     }
 
     /**
+     * ExportTagConfig controls the tags appended to node names in exports.
+     */
+    export interface ExportTagConfig {
+        "show_country": boolean
+        "show_speed": boolean
+        platforms: PlatformTag[]
+    }
+
+    /**
+     * PlatformTag is one platform's export-tag rule. Key is a built-in platform
+     * (netflix, openai, …) or a custom rule key (e.g. spotify).
+     */
+    export interface PlatformTag {
+        key: string
+        label: string
+        enabled: boolean
+    }
+
+    /**
      * UserSettings holds configurable per-user settings.
      */
     export interface UserSettings {
@@ -914,6 +936,7 @@ export namespace settings {
         "upload_test_url": string
         "latency_test_url": string
         "email_config": EmailConfig
+        "export_tags": ExportTagConfig
     }
 
     export class ServiceClient {
@@ -976,6 +999,8 @@ export namespace subscription {
         name: string
         url: string
         "cron_expr": string
+        "export_include_dead": boolean
+        "export_sort": string
     }
 
     /**
@@ -1004,6 +1029,8 @@ export namespace subscription {
         "cron_expr": string
         "created_at": string
         "last_run_at": string
+        "export_include_dead": boolean
+        "export_sort": string
     }
 
     /**
@@ -1016,6 +1043,8 @@ export namespace subscription {
         enabled: boolean
         "cron_expr": string
         "clear_cron_expr": boolean
+        "export_include_dead": boolean
+        "export_sort": string
     }
 
     export class ServiceClient {
