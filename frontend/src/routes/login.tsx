@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Loader2, Lock } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,102 +22,116 @@ function LoginPage() {
 
 	const loginMut = useLogin();
 	const registerMut = useRegister();
-	const loading = loginMut.isPending || registerMut.isPending;
+	const pending = loginMut.isPending || registerMut.isPending;
 
-	async function handleSubmit(e: React.FormEvent) {
+	function submit(e: React.FormEvent) {
 		e.preventDefault();
-		try {
-			if (mode === "register") {
-				await registerMut.mutateAsync({ username, password });
-				toast.success("Account created — please log in");
-				setMode("login");
-			} else {
-				const resp = await loginMut.mutateAsync({
-					username,
-					password,
-					remember,
-				});
-				setToken(resp.token, remember);
-				navigate({ to: "/" });
-			}
-		} catch (err) {
-			toast.error(isApiError(err) ? err.message : "Something went wrong");
+		if (!username || !password) return;
+		const onError = (err: unknown) =>
+			toast.error(
+				isApiError(err)
+					? err.message
+					: mode === "login"
+						? "Login failed"
+						: "Registration failed",
+			);
+		if (mode === "login") {
+			loginMut.mutate(
+				{ username, password, remember },
+				{
+					onSuccess: (resp) => {
+						setToken(resp.token, remember);
+						navigate({ to: "/" });
+					},
+					onError,
+				},
+			);
+		} else {
+			registerMut.mutate(
+				{ username, password },
+				{
+					onSuccess: () => {
+						toast.success("Account created — please sign in");
+						setMode("login");
+					},
+					onError,
+				},
+			);
 		}
 	}
 
 	return (
-		<div
-			className="w-full max-w-sm rounded-lg border p-6"
-			style={{ background: "#161b22", borderColor: "#30363d" }}
-		>
-			<div className="mb-6 flex items-center gap-2">
-				<Lock size={16} strokeWidth={1.5} style={{ color: "#58a6ff" }} />
-				<h1 className="font-semibold text-[#f0f6fc] text-base">
-					{mode === "login" ? "Sign in" : "Create account"}
+		<div className="w-full max-w-sm px-4">
+			<form
+				onSubmit={submit}
+				className="rounded-xl border border-border bg-card p-6 shadow-[var(--shadow-popover)]"
+			>
+				<div className="mx-auto mb-3 flex size-10 items-center justify-center rounded-xl bg-primary font-bold text-lg text-primary-foreground">
+					S
+				</div>
+				<h1 className="text-center font-semibold text-[15px] text-foreground">
+					subs-check
 				</h1>
-			</div>
-
-			<form onSubmit={handleSubmit} className="space-y-4">
-				<div className="space-y-1.5">
-					<Label htmlFor="username" className="text-[#8b949e] text-xs">
-						Username
-					</Label>
-					<Input
-						id="username"
-						value={username}
-						onChange={(e) => setUsername(e.target.value)}
-						required
-						className="h-8 text-sm"
-					/>
-				</div>
-				<div className="space-y-1.5">
-					<Label htmlFor="password" className="text-[#8b949e] text-xs">
-						Password
-					</Label>
-					<Input
-						id="password"
-						type="password"
-						value={password}
-						onChange={(e) => setPassword(e.target.value)}
-						required
-						className="h-8 text-sm"
-					/>
-				</div>
-				{mode === "login" && (
-					<label className="flex cursor-pointer items-center gap-2">
-						<Checkbox
-							checked={remember}
-							onCheckedChange={(v) => setRemember(v === true)}
-						/>
-						<span className="text-[#8b949e] text-xs">Remember me</span>
-					</label>
-				)}
-				<button
-					type="submit"
-					disabled={loading}
-					className="flex w-full items-center justify-center gap-2 rounded-md py-2 font-medium text-sm text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-					style={{ background: "#238636" }}
-				>
-					{loading ? (
-						<Loader2 size={14} className="animate-spin" />
-					) : mode === "login" ? (
-						"Sign in"
-					) : (
-						"Register"
-					)}
-				</button>
-
-				<p className="text-center text-xs" style={{ color: "#8b949e" }}>
-					{mode === "login" ? "No account? " : "Have an account? "}
-					<button
-						type="button"
-						className="underline transition-colors hover:text-[#f0f6fc]"
-						style={{ color: "#58a6ff" }}
-						onClick={() => setMode(mode === "login" ? "register" : "login")}
-					>
-						{mode === "login" ? "Register" : "Sign in"}
-					</button>
+				<p className="mt-0.5 mb-5 text-center text-muted-foreground text-xs">
+					{mode === "login" ? "Sign in to your account" : "Create an account"}
 				</p>
+
+				<div className="space-y-3">
+					<div className="space-y-1.5">
+						<Label htmlFor="username" className="text-xs">
+							Username
+						</Label>
+						<Input
+							id="username"
+							value={username}
+							autoComplete="username"
+							onChange={(e) => setUsername(e.target.value)}
+						/>
+					</div>
+					<div className="space-y-1.5">
+						<Label htmlFor="password" className="text-xs">
+							Password
+						</Label>
+						<Input
+							id="password"
+							type="password"
+							value={password}
+							autoComplete={
+								mode === "login" ? "current-password" : "new-password"
+							}
+							onChange={(e) => setPassword(e.target.value)}
+						/>
+					</div>
+					{mode === "login" ? (
+						<label className="flex cursor-pointer items-center gap-2 text-muted-foreground text-xs">
+							<Checkbox
+								checked={remember}
+								onCheckedChange={(v) => setRemember(v === true)}
+							/>
+							Remember me
+						</label>
+					) : null}
+				</div>
+
+				<Button
+					type="submit"
+					variant="success"
+					className="mt-5 w-full"
+					loading={pending}
+					disabled={!username || !password}
+				>
+					{mode === "login" ? "Sign in" : "Create account"}
+				</Button>
+
+				<button
+					type="button"
+					onClick={() => setMode(mode === "login" ? "register" : "login")}
+					className="mt-4 w-full text-center text-primary text-xs hover:underline"
+				>
+					{mode === "login"
+						? "Create an account"
+						: "Already have an account? Sign in"}
+				</button>
 			</form>
 		</div>
 	);
