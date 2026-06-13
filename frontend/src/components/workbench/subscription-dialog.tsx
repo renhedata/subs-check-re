@@ -11,6 +11,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
 import { isApiError } from "@/lib/client";
 import type { subscription } from "@/lib/client.gen";
 import { useCreateSubscription, useUpdateSubscription } from "@/queries";
@@ -41,6 +48,8 @@ export function SubscriptionDialog({
 	const [url, setUrl] = useState("");
 	const [enabled, setEnabled] = useState(true);
 	const [urlError, setUrlError] = useState<string | null>(null);
+	const [includeDead, setIncludeDead] = useState(false);
+	const [exportSort, setExportSort] = useState("speed_desc");
 
 	// Re-seed form whenever the dialog opens for a different target.
 	useEffect(() => {
@@ -48,6 +57,8 @@ export function SubscriptionDialog({
 			setName(sub?.name ?? "");
 			setUrl(sub?.url ?? "");
 			setEnabled(sub?.enabled ?? true);
+			setIncludeDead(sub?.export_include_dead ?? false);
+			setExportSort(sub?.export_sort ?? "speed_desc");
 			setUrlError(null);
 		}
 	}, [open, sub]);
@@ -74,8 +85,8 @@ export function SubscriptionDialog({
 						enabled,
 						cron_expr: sub.cron_expr ?? "",
 						clear_cron_expr: false,
-						export_include_dead: sub.export_include_dead ?? false,
-						export_sort: sub.export_sort ?? "speed_desc",
+						export_include_dead: includeDead,
+						export_sort: exportSort,
 					},
 				},
 				{
@@ -88,7 +99,13 @@ export function SubscriptionDialog({
 			);
 		} else {
 			createMut.mutate(
-				{ name, url, cron_expr: "", export_include_dead: false, export_sort: "speed_desc" },
+				{
+					name,
+					url,
+					cron_expr: "",
+					export_include_dead: includeDead,
+					export_sort: exportSort,
+				},
 				{
 					onSuccess: () => {
 						toast.success("Subscription added");
@@ -150,6 +167,32 @@ export function SubscriptionDialog({
 							Enabled
 						</label>
 					) : null}
+					<div className="space-y-1.5">
+						<Label htmlFor="sub-sort" className="text-xs">
+							Export order
+						</Label>
+						<Select
+							value={exportSort}
+							onValueChange={(v) => v && setExportSort(v)}
+						>
+							<SelectTrigger id="sub-sort" className="w-full">
+								<SelectValue />
+							</SelectTrigger>
+							<SelectContent>
+								<SelectItem value="speed_desc">
+									Download speed (high→low)
+								</SelectItem>
+								<SelectItem value="latency_asc">Latency (low→high)</SelectItem>
+							</SelectContent>
+						</Select>
+					</div>
+					<label className="flex cursor-pointer items-center gap-2 text-sm">
+						<Checkbox
+							checked={includeDead}
+							onCheckedChange={(v) => setIncludeDead(v === true)}
+						/>
+						Include dead nodes in export
+					</label>
 				</div>
 
 				<DialogFooter>
