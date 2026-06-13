@@ -41,23 +41,23 @@ func GetLocalUnlock(ctx context.Context) (*LocalUnlockResult, error) {
 	for _, r := range results {
 		switch r.key {
 		case "netflix":
-			res.Netflix = r.ok
+			res.Netflix = r.outcome.Unlocked
 		case "youtube":
-			res.YouTube = r.ok
+			res.YouTube = r.outcome.Unlocked
 		case "youtube_premium":
-			res.YouTubePremium = r.ok
+			res.YouTubePremium = r.outcome.Unlocked
 		case "openai":
-			res.OpenAI = r.ok
+			res.OpenAI = r.outcome.Unlocked
 		case "claude":
-			res.Claude = r.ok
+			res.Claude = r.outcome.Unlocked
 		case "gemini":
-			res.Gemini = r.ok
+			res.Gemini = r.outcome.Unlocked
 		case "grok":
-			res.Grok = r.ok
+			res.Grok = r.outcome.Unlocked
 		case "disney":
-			res.Disney = r.ok
+			res.Disney = r.outcome.Unlocked
 		case "tiktok":
-			res.TikTok = r.ok
+			res.TikTok = r.outcome.Unlocked
 		}
 	}
 
@@ -70,8 +70,8 @@ func GetLocalUnlock(ctx context.Context) (*LocalUnlockResult, error) {
 }
 
 type ruleResult struct {
-	key string
-	ok  bool
+	key     string
+	outcome PlatformOutcome
 }
 
 // runDefaultRulesAgainst evaluates the seeded default rules against the given HTTP client.
@@ -86,15 +86,15 @@ func runDefaultRulesAgainst(ctx context.Context, client *http.Client) []ruleResu
 			defer func() { _ = recover() }()
 			defJSON, err := json.Marshal(d.def)
 			if err != nil {
-				out <- ruleResult{key: d.key, ok: false}
+				out <- ruleResult{key: d.key, outcome: PlatformOutcome{}}
 				return
 			}
 			rule := &PlatformRule{
 				RuleType:   d.ruleType,
 				Definition: defJSON,
 			}
-			ok, _ := runRule(ctx, client, rule, nil)
-			out <- ruleResult{key: d.key, ok: ok}
+			outcome, _ := runRule(ctx, client, rule, nil)
+			out <- ruleResult{key: d.key, outcome: outcome}
 		}(dr)
 	}
 	wg.Wait()

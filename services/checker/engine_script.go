@@ -12,13 +12,13 @@ import (
 
 // runJSRule runs a JS or TS script rule using goja.
 // Scripts receive an `http_get(url, opts?)` function and must return a bool value.
-func runJSRule(ctx context.Context, client *http.Client, ruleType string, defRaw json.RawMessage, dr *DebugRecorder) (bool, error) {
+func runJSRule(ctx context.Context, client *http.Client, ruleType string, defRaw json.RawMessage, dr *DebugRecorder) (PlatformOutcome, error) {
 	var def ScriptDef
 	if err := json.Unmarshal(defRaw, &def); err != nil {
 		if dr != nil {
 			dr.Error(err)
 		}
-		return false, err
+		return PlatformOutcome{}, err
 	}
 
 	code := def.Prelude + "\n" + def.Code
@@ -29,7 +29,7 @@ func runJSRule(ctx context.Context, client *http.Client, ruleType string, defRaw
 			if dr != nil {
 				dr.Error(err)
 			}
-			return false, fmt.Errorf("typescript transpile error: %w", err)
+			return PlatformOutcome{}, fmt.Errorf("typescript transpile error: %w", err)
 		}
 	}
 
@@ -43,7 +43,7 @@ func runJSRule(ctx context.Context, client *http.Client, ruleType string, defRaw
 		if dr != nil {
 			dr.Error(err)
 		}
-		return false, err
+		return PlatformOutcome{}, err
 	}
 
 	// Inject console.log
@@ -67,13 +67,13 @@ func runJSRule(ctx context.Context, client *http.Client, ruleType string, defRaw
 		if dr != nil {
 			dr.Error(err)
 		}
-		return false, fmt.Errorf("script error: %w", err)
+		return PlatformOutcome{}, fmt.Errorf("script error: %w", err)
 	}
 	result := val.ToBoolean()
 	if dr != nil {
 		dr.Variable("return_value", result)
 	}
-	return result, nil
+	return boolOutcome(result), nil
 }
 
 // httpGetResult is the object returned to scripts by http_get().

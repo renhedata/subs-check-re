@@ -25,7 +25,8 @@ func evaluateRuleForNode(ctx context.Context, userID, ruleType string, definitio
 	}
 
 	rule := &PlatformRule{RuleType: ruleType, Definition: definition}
-	ok, err := runRule(ctx, httpClient, rule, dr)
+	outcome, err := runRule(ctx, httpClient, rule, dr)
+	ok := outcome.Unlocked
 	ms := time.Since(start).Milliseconds()
 
 	trace := &DebugTrace{Platform: ruleType, Result: ok, Steps: dr.Steps}

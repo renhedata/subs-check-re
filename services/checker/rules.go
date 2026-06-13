@@ -27,6 +27,21 @@ var builtinKeys = map[string]bool{
 	"tiktok":          true,
 }
 
+// PlatformOutcome is the result of evaluating one platform rule for one node.
+type PlatformOutcome struct {
+	Unlocked bool   `json:"unlocked"`
+	Status   string `json:"status"`
+	Region   string `json:"region,omitempty"`
+}
+
+// boolOutcome normalizes a bare boolean rule result into a PlatformOutcome.
+func boolOutcome(ok bool) PlatformOutcome {
+	if ok {
+		return PlatformOutcome{Unlocked: true, Status: "Yes"}
+	}
+	return PlatformOutcome{Unlocked: false, Status: "No"}
+}
+
 // ConditionDef defines an HTTP-based condition check.
 type ConditionDef struct {
 	URL                 string            `json:"url"`

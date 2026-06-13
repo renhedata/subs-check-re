@@ -348,12 +348,12 @@ func checkNode(ctx context.Context, nodeID string, mapping map[string]any, speed
 			if opts.Debug && result.Debug != nil {
 				if rd, ok := ruleRecorders[k]; ok {
 					result.Debug.Traces = append(result.Debug.Traces, DebugTrace{
-						Platform: k, Result: v, Steps: rd.Steps,
+						Platform: k, Result: v.Unlocked, Steps: rd.Steps,
 					})
 				}
 			}
 			if !builtinKeys[k] {
-				extra[k] = v
+				extra[k] = v.Unlocked
 			}
 		}
 		if len(extra) > 0 {
@@ -364,29 +364,29 @@ func checkNode(ctx context.Context, nodeID string, mapping map[string]any, speed
 		// or deleted the rule for a key, that platform simply isn't checked — there's
 		// no Go fallback. Default rules are seeded into platform_rules on first ListRules.
 		if hasApp(opts, "netflix") {
-			result.Netflix = ruleResults["netflix"]
+			result.Netflix = ruleResults["netflix"].Unlocked
 		}
 		if hasApp(opts, "youtube") {
-			result.YouTube = ruleResults["youtube"]
-			result.YouTubePremium = ruleResults["youtube_premium"]
+			result.YouTube = ruleResults["youtube"].Unlocked
+			result.YouTubePremium = ruleResults["youtube_premium"].Unlocked
 		}
 		if hasApp(opts, "openai") {
-			result.OpenAI = ruleResults["openai"]
+			result.OpenAI = ruleResults["openai"].Unlocked
 		}
 		if hasApp(opts, "claude") {
-			result.Claude = ruleResults["claude"]
+			result.Claude = ruleResults["claude"].Unlocked
 		}
 		if hasApp(opts, "gemini") {
-			result.Gemini = ruleResults["gemini"]
+			result.Gemini = ruleResults["gemini"].Unlocked
 		}
 		if hasApp(opts, "grok") {
-			result.Grok = ruleResults["grok"]
+			result.Grok = ruleResults["grok"].Unlocked
 		}
 		if hasApp(opts, "disney") {
-			result.Disney = ruleResults["disney"]
+			result.Disney = ruleResults["disney"].Unlocked
 		}
 		if hasApp(opts, "tiktok") {
-			result.TikTok = ruleResults["tiktok"]
+			result.TikTok = ruleResults["tiktok"].Unlocked
 		}
 	}
 
