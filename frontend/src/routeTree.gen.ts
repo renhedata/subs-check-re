@@ -9,15 +9,22 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SchedulerRouteImport } from './routes/scheduler'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as SubscriptionsIndexRouteImport } from './routes/subscriptions/index'
+import { Route as SettingsIndexRouteImport } from './routes/settings/index'
 import { Route as SubscriptionsIdRouteImport } from './routes/subscriptions/$id'
 import { Route as SettingsPlatformsRouteImport } from './routes/settings/platforms'
 import { Route as SettingsNotifyRouteImport } from './routes/settings/notify'
 import { Route as SettingsGeneralRouteImport } from './routes/settings/general'
 
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SchedulerRoute = SchedulerRouteImport.update({
   id: '/scheduler',
   path: '/scheduler',
@@ -38,35 +45,42 @@ const SubscriptionsIndexRoute = SubscriptionsIndexRouteImport.update({
   path: '/subscriptions/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SettingsIndexRoute = SettingsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => SettingsRoute,
+} as any)
 const SubscriptionsIdRoute = SubscriptionsIdRouteImport.update({
   id: '/subscriptions/$id',
   path: '/subscriptions/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SettingsPlatformsRoute = SettingsPlatformsRouteImport.update({
-  id: '/settings/platforms',
-  path: '/settings/platforms',
-  getParentRoute: () => rootRouteImport,
+  id: '/platforms',
+  path: '/platforms',
+  getParentRoute: () => SettingsRoute,
 } as any)
 const SettingsNotifyRoute = SettingsNotifyRouteImport.update({
-  id: '/settings/notify',
-  path: '/settings/notify',
-  getParentRoute: () => rootRouteImport,
+  id: '/notify',
+  path: '/notify',
+  getParentRoute: () => SettingsRoute,
 } as any)
 const SettingsGeneralRoute = SettingsGeneralRouteImport.update({
-  id: '/settings/general',
-  path: '/settings/general',
-  getParentRoute: () => rootRouteImport,
+  id: '/general',
+  path: '/general',
+  getParentRoute: () => SettingsRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/scheduler': typeof SchedulerRoute
+  '/settings': typeof SettingsRouteWithChildren
   '/settings/general': typeof SettingsGeneralRoute
   '/settings/notify': typeof SettingsNotifyRoute
   '/settings/platforms': typeof SettingsPlatformsRoute
   '/subscriptions/$id': typeof SubscriptionsIdRoute
+  '/settings/': typeof SettingsIndexRoute
   '/subscriptions/': typeof SubscriptionsIndexRoute
 }
 export interface FileRoutesByTo {
@@ -77,6 +91,7 @@ export interface FileRoutesByTo {
   '/settings/notify': typeof SettingsNotifyRoute
   '/settings/platforms': typeof SettingsPlatformsRoute
   '/subscriptions/$id': typeof SubscriptionsIdRoute
+  '/settings': typeof SettingsIndexRoute
   '/subscriptions': typeof SubscriptionsIndexRoute
 }
 export interface FileRoutesById {
@@ -84,10 +99,12 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/scheduler': typeof SchedulerRoute
+  '/settings': typeof SettingsRouteWithChildren
   '/settings/general': typeof SettingsGeneralRoute
   '/settings/notify': typeof SettingsNotifyRoute
   '/settings/platforms': typeof SettingsPlatformsRoute
   '/subscriptions/$id': typeof SubscriptionsIdRoute
+  '/settings/': typeof SettingsIndexRoute
   '/subscriptions/': typeof SubscriptionsIndexRoute
 }
 export interface FileRouteTypes {
@@ -96,10 +113,12 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/scheduler'
+    | '/settings'
     | '/settings/general'
     | '/settings/notify'
     | '/settings/platforms'
     | '/subscriptions/$id'
+    | '/settings/'
     | '/subscriptions/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -110,16 +129,19 @@ export interface FileRouteTypes {
     | '/settings/notify'
     | '/settings/platforms'
     | '/subscriptions/$id'
+    | '/settings'
     | '/subscriptions'
   id:
     | '__root__'
     | '/'
     | '/login'
     | '/scheduler'
+    | '/settings'
     | '/settings/general'
     | '/settings/notify'
     | '/settings/platforms'
     | '/subscriptions/$id'
+    | '/settings/'
     | '/subscriptions/'
   fileRoutesById: FileRoutesById
 }
@@ -127,15 +149,20 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   LoginRoute: typeof LoginRoute
   SchedulerRoute: typeof SchedulerRoute
-  SettingsGeneralRoute: typeof SettingsGeneralRoute
-  SettingsNotifyRoute: typeof SettingsNotifyRoute
-  SettingsPlatformsRoute: typeof SettingsPlatformsRoute
+  SettingsRoute: typeof SettingsRouteWithChildren
   SubscriptionsIdRoute: typeof SubscriptionsIdRoute
   SubscriptionsIndexRoute: typeof SubscriptionsIndexRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/scheduler': {
       id: '/scheduler'
       path: '/scheduler'
@@ -164,6 +191,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SubscriptionsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/settings/': {
+      id: '/settings/'
+      path: '/'
+      fullPath: '/settings/'
+      preLoaderRoute: typeof SettingsIndexRouteImport
+      parentRoute: typeof SettingsRoute
+    }
     '/subscriptions/$id': {
       id: '/subscriptions/$id'
       path: '/subscriptions/$id'
@@ -173,35 +207,51 @@ declare module '@tanstack/react-router' {
     }
     '/settings/platforms': {
       id: '/settings/platforms'
-      path: '/settings/platforms'
+      path: '/platforms'
       fullPath: '/settings/platforms'
       preLoaderRoute: typeof SettingsPlatformsRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof SettingsRoute
     }
     '/settings/notify': {
       id: '/settings/notify'
-      path: '/settings/notify'
+      path: '/notify'
       fullPath: '/settings/notify'
       preLoaderRoute: typeof SettingsNotifyRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof SettingsRoute
     }
     '/settings/general': {
       id: '/settings/general'
-      path: '/settings/general'
+      path: '/general'
       fullPath: '/settings/general'
       preLoaderRoute: typeof SettingsGeneralRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof SettingsRoute
     }
   }
 }
+
+interface SettingsRouteChildren {
+  SettingsGeneralRoute: typeof SettingsGeneralRoute
+  SettingsNotifyRoute: typeof SettingsNotifyRoute
+  SettingsPlatformsRoute: typeof SettingsPlatformsRoute
+  SettingsIndexRoute: typeof SettingsIndexRoute
+}
+
+const SettingsRouteChildren: SettingsRouteChildren = {
+  SettingsGeneralRoute: SettingsGeneralRoute,
+  SettingsNotifyRoute: SettingsNotifyRoute,
+  SettingsPlatformsRoute: SettingsPlatformsRoute,
+  SettingsIndexRoute: SettingsIndexRoute,
+}
+
+const SettingsRouteWithChildren = SettingsRoute._addFileChildren(
+  SettingsRouteChildren,
+)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   LoginRoute: LoginRoute,
   SchedulerRoute: SchedulerRoute,
-  SettingsGeneralRoute: SettingsGeneralRoute,
-  SettingsNotifyRoute: SettingsNotifyRoute,
-  SettingsPlatformsRoute: SettingsPlatformsRoute,
+  SettingsRoute: SettingsRouteWithChildren,
   SubscriptionsIdRoute: SubscriptionsIdRoute,
   SubscriptionsIndexRoute: SubscriptionsIndexRoute,
 }
