@@ -160,27 +160,49 @@ Extend/add (shadcn conventions):
 - Form validation → react-hook-form + zod, inline errors.
 - API errors → toast with the server message; 401 → existing redirect-to-login flow.
 
-## Backend Touchpoint (the only one)
+## Backend Touchpoints
 
-Extend `GET /subscriptions` response items with a nullable `latest_job` summary:
+Two small endpoints (amended from the original "extend GET /subscriptions" wording:
+Encore services own separate databases, and subscription→checker would be an import
+cycle, so the summary lives on the checker service instead).
+
+### 1. `GET /check-summaries` (checker service)
+
+Returns the latest check job per subscription for the current user:
 
 ```json
 {
-  "id": "…", "name": "…", "url": "…", "enabled": true, "cron_expr": "…",
-  "latest_job": {
-    "id": "…",
-    "status": "completed",
-    "alive": 86,
-    "total": 120,
-    "avg_latency_ms": 42,
-    "finished_at": "2026-06-12T03:42:00Z"
+  "jobs": {
+    "<subscription_id>": {
+      "id": "…",
+      "status": "completed",
+      "available": 86,
+      "total": 120,
+      "avg_latency_ms": 42,
+      "created_at": "2026-06-12T03:40:00Z",
+      "finished_at": "2026-06-12T03:42:00Z"
+    }
   }
 }
 ```
 
-One SQL join (latest `check_jobs` row per subscription; alive count and average latency aggregated from `check_results`). Powers the list column summaries and Scheduler's "Last check". Avoids N+1 requests from the frontend. Regenerate the typed client afterwards.
+One `DISTINCT ON (subscription_id)` query over `check_jobs` plus an alive-only
+latency average from `check_results`. Powers the workbench list column and the
+Scheduler "Last check" column. The frontend zips this with `GET /subscriptions`
+(two requests, no N+1).
 
-No other backend changes. SSE protocol, auth, check semantics unchanged. The `/check/:jobId/progress` endpoint stays public raw (EventSource cannot send auth headers).
+### 2. `PATCH /scheduler/:id` (scheduler service)
+
+`SetEnabled { enabled: bool }` — pauses/resumes a schedule without deleting it
+(drives the Scheduler tab's Enabled switch). Updates `scheduled_jobs.enabled`
+and registers/removes the in-memory cron entry.
+
+Scheduler **edit** needs no new endpoint: `scheduler.Create` already upserts on
+`subscription_id`.
+
+No other backend changes. SSE protocol, auth, check semantics unchanged. The
+`/check/:jobId/progress` endpoint stays public raw (EventSource cannot send
+auth headers).
 
 ## Out of Scope
 
@@ -188,7 +210,7 @@ No other backend changes. SSE protocol, auth, check semantics unchanged. The `/c
 - New check features, node operations beyond existing enable/disable
 - Multi-user/admin features
 - Charts or historical trend visualizations
-- Backend changes beyond the `latest_job` field
+- Backend changes beyond the two endpoints above
 
 ## Risks & Mitigations
 
