@@ -362,6 +362,9 @@ export namespace checker {
         "upload_speed_kbps": number
         country: string
         ip: string
+        server: string
+        port: number
+        config: string
         netflix: boolean
         youtube: boolean
         "youtube_premium": boolean
