@@ -5,13 +5,11 @@ export const Route = createFileRoute("/settings")({
 	component: SettingsLayout,
 });
 
-// Export API tab will be added by Task 19; type-widened to string to avoid
-// routeTree.gen.ts errors until that route exists.
-const TABS: Array<{ to: string; label: string }> = [
-	{ to: "/settings/general", label: "General" },
-	{ to: "/settings/notify", label: "Notifications" },
-	{ to: "/settings/platforms", label: "Platform Rules" },
-	{ to: "/settings/export", label: "Export API" },
+const TABS = [
+	{ to: "/settings/general" as const, label: "General" },
+	{ to: "/settings/notify" as const, label: "Notifications" },
+	{ to: "/settings/platforms" as const, label: "Platform Rules" },
+	{ to: "/settings/export" as const, label: "Export API" },
 ];
 
 function SettingsLayout() {
@@ -23,8 +21,7 @@ function SettingsLayout() {
 					{TABS.map((tab) => (
 						<Link
 							key={tab.to}
-							// biome-ignore lint/suspicious/noExplicitAny: export route added Task 19
-							to={tab.to as any}
+							to={tab.to}
 							activeProps={{
 								className: "border-primary font-medium text-foreground",
 							}}

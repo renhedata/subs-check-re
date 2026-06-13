@@ -19,6 +19,7 @@ import { Route as SubscriptionsIdRouteImport } from './routes/subscriptions/$id'
 import { Route as SettingsPlatformsRouteImport } from './routes/settings/platforms'
 import { Route as SettingsNotifyRouteImport } from './routes/settings/notify'
 import { Route as SettingsGeneralRouteImport } from './routes/settings/general'
+import { Route as SettingsExportRouteImport } from './routes/settings/export'
 
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
@@ -70,12 +71,18 @@ const SettingsGeneralRoute = SettingsGeneralRouteImport.update({
   path: '/general',
   getParentRoute: () => SettingsRoute,
 } as any)
+const SettingsExportRoute = SettingsExportRouteImport.update({
+  id: '/export',
+  path: '/export',
+  getParentRoute: () => SettingsRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/scheduler': typeof SchedulerRoute
   '/settings': typeof SettingsRouteWithChildren
+  '/settings/export': typeof SettingsExportRoute
   '/settings/general': typeof SettingsGeneralRoute
   '/settings/notify': typeof SettingsNotifyRoute
   '/settings/platforms': typeof SettingsPlatformsRoute
@@ -87,6 +94,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/scheduler': typeof SchedulerRoute
+  '/settings/export': typeof SettingsExportRoute
   '/settings/general': typeof SettingsGeneralRoute
   '/settings/notify': typeof SettingsNotifyRoute
   '/settings/platforms': typeof SettingsPlatformsRoute
@@ -100,6 +108,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/scheduler': typeof SchedulerRoute
   '/settings': typeof SettingsRouteWithChildren
+  '/settings/export': typeof SettingsExportRoute
   '/settings/general': typeof SettingsGeneralRoute
   '/settings/notify': typeof SettingsNotifyRoute
   '/settings/platforms': typeof SettingsPlatformsRoute
@@ -114,6 +123,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/scheduler'
     | '/settings'
+    | '/settings/export'
     | '/settings/general'
     | '/settings/notify'
     | '/settings/platforms'
@@ -125,6 +135,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/scheduler'
+    | '/settings/export'
     | '/settings/general'
     | '/settings/notify'
     | '/settings/platforms'
@@ -137,6 +148,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/scheduler'
     | '/settings'
+    | '/settings/export'
     | '/settings/general'
     | '/settings/notify'
     | '/settings/platforms'
@@ -226,10 +238,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsGeneralRouteImport
       parentRoute: typeof SettingsRoute
     }
+    '/settings/export': {
+      id: '/settings/export'
+      path: '/export'
+      fullPath: '/settings/export'
+      preLoaderRoute: typeof SettingsExportRouteImport
+      parentRoute: typeof SettingsRoute
+    }
   }
 }
 
 interface SettingsRouteChildren {
+  SettingsExportRoute: typeof SettingsExportRoute
   SettingsGeneralRoute: typeof SettingsGeneralRoute
   SettingsNotifyRoute: typeof SettingsNotifyRoute
   SettingsPlatformsRoute: typeof SettingsPlatformsRoute
@@ -237,6 +257,7 @@ interface SettingsRouteChildren {
 }
 
 const SettingsRouteChildren: SettingsRouteChildren = {
+  SettingsExportRoute: SettingsExportRoute,
   SettingsGeneralRoute: SettingsGeneralRoute,
   SettingsNotifyRoute: SettingsNotifyRoute,
   SettingsPlatformsRoute: SettingsPlatformsRoute,
