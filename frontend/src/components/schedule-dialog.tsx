@@ -60,9 +60,11 @@ export function ScheduleDialog({
 			setOpts({
 				...DEFAULT_CHECK_OPTIONS,
 				speed_test: editing?.speed_test ?? true,
+				upload_speed_test: editing?.upload_speed_test ?? false,
 				media_apps: editing?.media_apps ?? [
 					...DEFAULT_CHECK_OPTIONS.media_apps,
 				],
+				debug: editing?.debug ?? false,
 			});
 		}
 	}, [open, editing]);

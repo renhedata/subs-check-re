@@ -139,13 +139,15 @@ func defaultCheckOptions() checkersvc.CheckOptions {
 
 // ScheduledJob represents a cron schedule entry.
 type ScheduledJob struct {
-	ID             string    `json:"id"`
-	SubscriptionID string    `json:"subscription_id"`
-	CronExpr       string    `json:"cron_expr"`
-	Enabled        bool      `json:"enabled"`
-	SpeedTest      bool      `json:"speed_test"`
-	MediaApps      []string  `json:"media_apps"`
-	CreatedAt      time.Time `json:"created_at"`
+	ID              string    `json:"id"`
+	SubscriptionID  string    `json:"subscription_id"`
+	CronExpr        string    `json:"cron_expr"`
+	Enabled         bool      `json:"enabled"`
+	SpeedTest       bool      `json:"speed_test"`
+	UploadSpeedTest bool      `json:"upload_speed_test"`
+	MediaApps       []string  `json:"media_apps"`
+	Debug           bool      `json:"debug"`
+	CreatedAt       time.Time `json:"created_at"`
 }
 
 // ListResponse is the response for GET /scheduler.
@@ -193,7 +195,9 @@ func (s *Service) List(ctx context.Context) (*ListResponse, error) {
 			opts = defaultCheckOptions()
 		}
 		j.SpeedTest = opts.SpeedTest
+		j.UploadSpeedTest = opts.UploadSpeedTest
 		j.MediaApps = opts.MediaApps
+		j.Debug = opts.Debug
 		jobs = append(jobs, j)
 	}
 	if jobs == nil {
@@ -244,12 +248,14 @@ func (s *Service) Create(ctx context.Context, p *CreateParams) (*ScheduledJob, e
 	s.registerCron(p.SubscriptionID, p.CronExpr, opts)
 
 	return &ScheduledJob{
-		ID:             id,
-		SubscriptionID: p.SubscriptionID,
-		CronExpr:       p.CronExpr,
-		Enabled:        true,
-		SpeedTest:      opts.SpeedTest,
-		MediaApps:      opts.MediaApps,
+		ID:              id,
+		SubscriptionID:  p.SubscriptionID,
+		CronExpr:        p.CronExpr,
+		Enabled:         true,
+		SpeedTest:       opts.SpeedTest,
+		UploadSpeedTest: opts.UploadSpeedTest,
+		MediaApps:       opts.MediaApps,
+		Debug:           opts.Debug,
 	}, nil
 }
 
@@ -312,6 +318,8 @@ func (s *Service) SetEnabled(ctx context.Context, id string, p *SetEnabledParams
 
 	j.Enabled = p.Enabled
 	j.SpeedTest = opts.SpeedTest
+	j.UploadSpeedTest = opts.UploadSpeedTest
 	j.MediaApps = opts.MediaApps
+	j.Debug = opts.Debug
 	return &j, nil
 }

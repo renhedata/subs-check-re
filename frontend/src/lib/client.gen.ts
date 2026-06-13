@@ -821,7 +821,9 @@ export namespace scheduler {
         "cron_expr": string
         enabled: boolean
         "speed_test": boolean
+        "upload_speed_test": boolean
         "media_apps": string[]
+        debug: boolean
         "created_at": string
     }
 
