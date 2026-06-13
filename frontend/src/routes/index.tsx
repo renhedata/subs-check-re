@@ -106,7 +106,7 @@ function DashboardPage() {
 					label="Active"
 					icon={CheckCircle}
 					value={enabled}
-					valueColor="var(--color-success)"
+					valueColor="var(--legacy-success)"
 					sub={`of ${subs.length} total`}
 					loading={isLoading}
 				/>
@@ -248,7 +248,9 @@ function CopyIconButton({ text }: { text: string }) {
 				setTimeout(() => setCopied(false), 1500);
 			}}
 			className="flex-shrink-0 rounded p-1 transition-colors hover:bg-white/5"
-			style={{ color: copied ? "var(--color-success)" : "var(--color-dimmed)" }}
+			style={{
+				color: copied ? "var(--legacy-success)" : "var(--color-dimmed)",
+			}}
 		>
 			{copied ? <Check size={11} /> : <Copy size={11} />}
 		</button>

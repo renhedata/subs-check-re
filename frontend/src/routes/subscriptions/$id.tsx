@@ -38,8 +38,8 @@ export const Route = createFileRoute("/subscriptions/$id")({
 });
 
 function latencyColor(ms: number): string {
-	if (ms < 50) return "var(--color-success)";
-	if (ms <= 200) return "var(--color-warning)";
+	if (ms < 50) return "var(--legacy-success)";
+	if (ms <= 200) return "var(--legacy-warning)";
 	return "var(--destructive)";
 }
 
@@ -275,7 +275,7 @@ function SubscriptionDetailPage() {
 										className="flex-shrink-0"
 										style={{
 											color: entry.alive
-												? "var(--color-success)"
+												? "var(--legacy-success)"
 												: "var(--destructive)",
 										}}
 									>
@@ -308,7 +308,7 @@ function SubscriptionDetailPage() {
 									{entry.alive && entry.upload_speed_kbps ? (
 										<span
 											className="flex-shrink-0"
-											style={{ color: "var(--color-warning)" }}
+											style={{ color: "var(--legacy-warning)" }}
 										>
 											↑
 											{entry.upload_speed_kbps >= 1024
@@ -386,7 +386,9 @@ function CopyButton({ text }: { text: string }) {
 				setTimeout(() => setCopied(false), 1500);
 			}}
 			className="flex-shrink-0 rounded p-1 transition-colors hover:bg-secondary"
-			style={{ color: copied ? "var(--color-success)" : "var(--color-dimmed)" }}
+			style={{
+				color: copied ? "var(--legacy-success)" : "var(--color-dimmed)",
+			}}
 		>
 			{copied ? <Check size={12} /> : <Copy size={12} />}
 		</button>

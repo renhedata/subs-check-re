@@ -13,8 +13,8 @@ interface Props {
 }
 
 function latencyColor(ms: number): string {
-	if (ms < 50) return "var(--color-success)";
-	if (ms <= 200) return "var(--color-warning)";
+	if (ms < 50) return "var(--legacy-success)";
+	if (ms <= 200) return "var(--legacy-warning)";
 	return "var(--destructive)";
 }
 
@@ -33,7 +33,7 @@ function StatusBadge({ alive }: { alive: boolean }) {
 		>
 			<span
 				className="h-1.5 w-1.5 rounded-full"
-				style={{ background: "var(--color-success)" }}
+				style={{ background: "var(--legacy-success)" }}
 			/>
 			alive
 		</span>
@@ -178,7 +178,7 @@ function NodeCard({
 				</CardField>
 				<CardField label="↑ Upload">
 					{r.alive && r.upload_speed_kbps ? (
-						<span style={{ color: "var(--color-warning)" }}>
+						<span style={{ color: "var(--legacy-warning)" }}>
 							{formatSpeed(r.upload_speed_kbps)}
 						</span>
 					) : (
@@ -311,7 +311,7 @@ export function NodeTable({ results, rules = [], onToggleEnabled }: Props) {
 								</td>
 								<td className="px-3 py-2 text-xs">
 									{r.alive && r.upload_speed_kbps ? (
-										<span style={{ color: "var(--color-warning)" }}>
+										<span style={{ color: "var(--legacy-warning)" }}>
 											{formatSpeed(r.upload_speed_kbps)}
 										</span>
 									) : (

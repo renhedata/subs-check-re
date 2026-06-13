@@ -60,7 +60,7 @@ function cronToLabel(cron: string): string {
 }
 
 function statusColor(status: CheckJob["status"]): string {
-	if (status === "completed") return "var(--color-success)";
+	if (status === "completed") return "var(--legacy-success)";
 	if (status === "failed") return "var(--destructive)";
 	return "var(--primary)";
 }

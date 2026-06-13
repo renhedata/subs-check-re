@@ -519,7 +519,7 @@ function ChannelRow({
 						<CheckCircle2
 							size={14}
 							strokeWidth={1.5}
-							style={{ color: "var(--color-success)" }}
+							style={{ color: "var(--legacy-success)" }}
 						/>
 					) : (
 						<XCircle

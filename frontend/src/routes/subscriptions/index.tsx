@@ -323,7 +323,7 @@ function SubRow({
 						className="h-2 w-2 flex-shrink-0 rounded-full"
 						style={{
 							background: sub.last_run_at
-								? "var(--color-success)"
+								? "var(--legacy-success)"
 								: "var(--border)",
 						}}
 					/>

@@ -52,7 +52,7 @@ function DebugStepView({ step }: { step: DebugStep }) {
 									: step.type === "variable"
 										? "var(--color-badge-success)"
 										: step.type === "condition"
-											? "var(--color-warning)"
+											? "var(--legacy-warning)"
 											: "var(--muted-foreground)",
 					}}
 				>
