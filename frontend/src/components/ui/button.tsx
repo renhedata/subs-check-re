@@ -1,5 +1,6 @@
 import { Button as ButtonPrimitive } from "@base-ui/react/button";
 import { cva, type VariantProps } from "class-variance-authority";
+import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
@@ -16,6 +17,10 @@ const buttonVariants = cva(
 					"hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:hover:bg-muted/50",
 				destructive:
 					"bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:focus-visible:ring-destructive/40 dark:hover:bg-destructive/30",
+				"destructive-solid":
+					"bg-danger text-white hover:bg-danger/90 focus-visible:ring-danger/30",
+				success:
+					"bg-solid-success text-white hover:bg-solid-success/90 focus-visible:ring-success/30",
 				link: "text-primary underline-offset-4 hover:underline",
 			},
 			size: {
@@ -43,14 +48,22 @@ function Button({
 	className,
 	variant = "default",
 	size = "default",
+	loading = false,
+	disabled,
+	children,
 	...props
-}: ButtonPrimitive.Props & VariantProps<typeof buttonVariants>) {
+}: ButtonPrimitive.Props &
+	VariantProps<typeof buttonVariants> & { loading?: boolean }) {
 	return (
 		<ButtonPrimitive
 			data-slot="button"
 			className={cn(buttonVariants({ variant, size, className }))}
+			disabled={disabled || loading}
 			{...props}
-		/>
+		>
+			{loading ? <Spinner className="size-3.5" /> : null}
+			{children}
+		</ButtonPrimitive>
 	);
 }
 
