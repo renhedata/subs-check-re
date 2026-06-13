@@ -75,7 +75,7 @@ function ExportTagsPage() {
 			if (t?.enabled && sample.has(k)) parts.push(t.label || k);
 		}
 		if (showSpeed) parts.push("10.5MB");
-		return parts.join("｜");
+		return parts.join("|");
 	}
 
 	function save() {

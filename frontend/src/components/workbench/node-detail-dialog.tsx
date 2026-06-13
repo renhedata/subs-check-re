@@ -7,7 +7,7 @@ import {
 	DialogTitle,
 } from "@/components/ui/dialog";
 import type { checker } from "@/lib/client.gen";
-import { formatBytes } from "@/lib/format";
+import { formatBytes, formatSpeed } from "@/lib/format";
 import { BUILTIN_PLATFORMS, latencyTone } from "@/lib/nodeFilters";
 import { cn } from "@/lib/utils";
 
@@ -35,10 +35,6 @@ function Row({
 			</span>
 		</div>
 	);
-}
-
-function formatSpeed(kbps: number): string {
-	return kbps >= 1024 ? `${(kbps / 1024).toFixed(1)} MB/s` : `${kbps} KB/s`;
 }
 
 function platformRows(

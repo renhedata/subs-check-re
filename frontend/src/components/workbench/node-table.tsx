@@ -5,16 +5,12 @@ import { Badge } from "@/components/ui/badge";
 import { Tooltip } from "@/components/ui/tooltip";
 import { NodeDetailDialog } from "@/components/workbench/node-detail-dialog";
 import type { checker } from "@/lib/client.gen";
-import { formatBytes } from "@/lib/format";
+import { formatBytes, formatSpeed } from "@/lib/format";
 import { latencyTone, type SortDir, type SortKey } from "@/lib/nodeFilters";
 import { cn } from "@/lib/utils";
 
 type NodeResult = checker.NodeResult;
 type PlatformRule = checker.PlatformRule;
-
-function formatSpeed(kbps: number): string {
-	return kbps >= 1024 ? `${(kbps / 1024).toFixed(1)} MB/s` : `${kbps} KB/s`;
-}
 
 const toneText: Record<string, string> = {
 	success: "text-success",

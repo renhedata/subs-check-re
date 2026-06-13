@@ -41,7 +41,7 @@ func (f unlockFlags) builtinUnlocked(key string) bool {
 	case "netflix":
 		return f.Netflix
 	case "youtube":
-		return f.YouTube
+		return f.YouTube || f.YouTubePremium
 	case "openai":
 		return f.OpenAI
 	case "claude":

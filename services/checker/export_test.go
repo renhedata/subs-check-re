@@ -7,6 +7,29 @@ import (
 	settingssvc "subs-check-re/services/settings"
 )
 
+func TestTaggedNameDefaultConfigFullOrder(t *testing.T) {
+	// All built-ins unlocked under the real defaults must reproduce the exact
+	// legacy export name (order + labels), with premium rendering YT+.
+	flags := unlockFlags{
+		Netflix: true, YouTube: true, YouTubePremium: true, OpenAI: true,
+		Claude: true, Gemini: true, Grok: true, Disney: true, TikTok: true,
+	}
+	got := taggedName("N", "HK", flags, nil, 1536, settingssvc.DefaultExportTags())
+	if got != "N|NF|GPT|GM|CL|GK|YT+|D+|TK|1.5MB" {
+		t.Errorf("default full order: got %q", got)
+	}
+}
+
+func TestTaggedNamePremiumOnlyEmitsTag(t *testing.T) {
+	// A node flagged premium but not basic youtube must still emit the tag
+	// (the two unlock checks hit different URLs and can disagree).
+	flags := unlockFlags{YouTubePremium: true}
+	got := taggedName("N", "", flags, nil, 0, settingssvc.DefaultExportTags())
+	if got != "N|YT+" {
+		t.Errorf("premium-only: got %q", got)
+	}
+}
+
 func legacyCfg() settingssvc.ExportTagConfig {
 	return settingssvc.ExportTagConfig{
 		ShowCountry: false,

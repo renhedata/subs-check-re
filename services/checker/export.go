@@ -153,7 +153,9 @@ func (routerOSExporter) Export(ctx context.Context, w http.ResponseWriter, subID
 func loadExportProxies(ctx context.Context, subID, userID string) ([]map[string]any, error) {
 	cfg, err := settingssvc.GetExportTagsForUser(ctx, userID)
 	if err != nil || cfg == nil {
-		d := settingssvc.ExportTagConfig{ShowSpeed: true}
+		// On a settings-service error, fall back to full defaults so export
+		// names stay consistent (not just the speed tag).
+		d := settingssvc.DefaultExportTags()
 		cfg = &d
 	}
 	if subID == "all" {

@@ -44,6 +44,12 @@ type ExportTagConfig struct {
 	Platforms   []PlatformTag `json:"platforms"`
 }
 
+// DefaultExportTags is the exported default config, for callers (e.g. the
+// checker export path) that need a safe fallback on a settings lookup error.
+func DefaultExportTags() ExportTagConfig {
+	return defaultExportTags()
+}
+
 // defaultExportTags reproduces the legacy taggedName behavior: built-in short
 // tags, speed on, country off.
 func defaultExportTags() ExportTagConfig {
