@@ -29,14 +29,6 @@ func orderClause(s string) string {
 	return "speed_kbps DESC NULLS LAST, latency_ms ASC NULLS LAST"
 }
 
-// rankedNode is an internal carrier used to sort by speed/latency
-// before stripping down to []map[string]any.
-type rankedNode struct {
-	config    map[string]any
-	speedKbps int
-	latencyMs int
-}
-
 // unlockFlags carries a node's built-in platform unlock booleans.
 type unlockFlags struct {
 	Netflix        bool
@@ -239,7 +231,7 @@ func loadJobProxies(ctx context.Context, jobID, subscriptionID, subNamePrefix st
 	}
 	defer rows.Close()
 
-	var nodes []rankedNode
+	var out []map[string]any
 	for rows.Next() {
 		var (
 			configJSON                                                                      []byte
@@ -278,17 +270,13 @@ func loadJobProxies(ctx context.Context, jobID, subscriptionID, subNamePrefix st
 		} else {
 			nodeCfg["name"] = tagged
 		}
-		nodes = append(nodes, rankedNode{config: nodeCfg, speedKbps: speedKbps, latencyMs: int(latencyMs.Int64)})
+		out = append(out, nodeCfg)
 	}
 
 	// Order is established by the SQL ORDER BY (orderClause), which correctly
 	// places dead nodes (NULL latency / 0 speed) last via NULLS LAST. A Go
 	// re-sort here would treat a dead node's NULL latency as 0 and wrongly hoist
 	// it to the top under latency_asc, so we keep the DB order as-is.
-	out := make([]map[string]any, len(nodes))
-	for i, n := range nodes {
-		out[i] = n.config
-	}
 	return out, nil
 }
 
