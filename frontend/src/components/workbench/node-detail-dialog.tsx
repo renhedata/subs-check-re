@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/dialog";
 import type { checker } from "@/lib/client.gen";
 import { formatBytes, formatSpeed } from "@/lib/format";
+import { countryToFlag } from "@/lib/countryToFlag";
 import { BUILTIN_PLATFORMS, latencyTone } from "@/lib/nodeFilters";
 import { cn } from "@/lib/utils";
 
@@ -40,19 +41,31 @@ function Row({
 function platformRows(
 	r: NodeResult,
 	rules: PlatformRule[],
-): Array<{ key: string; label: string; unlocked: boolean }> {
+): Array<{ key: string; label: string; unlocked: boolean; status: string; region: string }> {
 	const ruleByKey = Object.fromEntries(rules.map((x) => [x.key, x]));
-	const builtin = BUILTIN_PLATFORMS.map((key) => ({
-		key,
-		label: PLATFORM_META[key as PlatformKey]?.label ?? key,
-		unlocked: (r as unknown as Record<string, boolean>)[key] === true,
-	}));
-	const extra = Object.entries(r.extra_platforms ?? {}).map(([key, v]) => ({
-		key,
-		label: ruleByKey[key]?.name ?? key,
-		unlocked: v === true,
-	}));
-	return [...builtin, ...extra];
+	const platforms = r.platforms ?? {};
+	const seen = new Set<string>();
+	const rows = BUILTIN_PLATFORMS.map((key) => {
+		seen.add(key);
+		const o = platforms[key];
+		return {
+			key,
+			label: PLATFORM_META[key as PlatformKey]?.label ?? key,
+			unlocked: o?.unlocked === true,
+			status: o?.status ?? "",
+			region: o?.region ?? "",
+		};
+	});
+	const extra = Object.entries(platforms)
+		.filter(([key]) => !seen.has(key))
+		.map(([key, o]) => ({
+			key,
+			label: ruleByKey[key]?.name ?? key,
+			unlocked: o?.unlocked === true,
+			status: o?.status ?? "",
+			region: o?.region ?? "",
+		}));
+	return [...rows, ...extra];
 }
 
 function prettyConfig(raw: string): string {
@@ -133,19 +146,31 @@ export function NodeDetailDialog({
 								<p className="mb-1.5 font-medium text-[11px] text-muted-foreground uppercase tracking-[0.4px]">
 									Platforms
 								</p>
-								<div className="flex flex-wrap gap-1.5">
+								<div className="flex flex-col gap-1">
 									{platformRows(result, rules).map((p) => (
-										<span
+										<div
 											key={p.key}
-											className={cn(
-												"inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs",
-												p.unlocked
-													? "border-success-line bg-success-muted text-success"
-													: "border-border text-muted-foreground",
-											)}
+											className="flex items-center justify-between gap-2 text-xs"
 										>
-											{p.unlocked ? "✓" : "✗"} {p.label}
-										</span>
+											<span className="truncate text-foreground">{p.label}</span>
+											<span className="flex shrink-0 items-center gap-1.5">
+												{p.region ? (
+													<span className="text-muted-foreground">
+														{countryToFlag(p.region)} {p.region}
+													</span>
+												) : null}
+												<span
+													className={cn(
+														"inline-flex items-center rounded-full border px-2 py-0.5",
+														p.unlocked
+															? "border-success-line bg-success-muted text-success"
+															: "border-border text-muted-foreground",
+													)}
+												>
+													{p.status || (p.unlocked ? "Yes" : "No")}
+												</span>
+											</span>
+										</div>
 									))}
 								</div>
 							</section>
