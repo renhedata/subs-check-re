@@ -14,6 +14,7 @@ import (
 func loadJobSummary(ctx context.Context, jobID string) (*JobDetailedSummary, error) {
 	s := &JobDetailedSummary{
 		JobID:     jobID,
+		Platforms: PlatformUnlockSummary{},
 		Countries: map[string]int{},
 		TopNodes:  []TopNode{},
 	}
@@ -56,23 +57,26 @@ func resolveSubscriptionName(ctx context.Context, userID, subID string) string {
 }
 
 func loadPlatformCounts(ctx context.Context, jobID string, p *PlatformUnlockSummary) {
-	_ = db.QueryRow(ctx, `
-		SELECT
-			COALESCE(SUM(CASE WHEN netflix THEN 1 ELSE 0 END), 0),
-			COALESCE(SUM(CASE WHEN youtube THEN 1 ELSE 0 END), 0),
-			COALESCE(SUM(CASE WHEN youtube_premium THEN 1 ELSE 0 END), 0),
-			COALESCE(SUM(CASE WHEN openai THEN 1 ELSE 0 END), 0),
-			COALESCE(SUM(CASE WHEN claude THEN 1 ELSE 0 END), 0),
-			COALESCE(SUM(CASE WHEN gemini THEN 1 ELSE 0 END), 0),
-			COALESCE(SUM(CASE WHEN grok THEN 1 ELSE 0 END), 0),
-			COALESCE(SUM(CASE WHEN disney THEN 1 ELSE 0 END), 0),
-			COALESCE(SUM(CASE WHEN tiktok THEN 1 ELSE 0 END), 0)
-		FROM check_results WHERE job_id=$1 AND alive=true
-	`, jobID).Scan(
-		&p.Netflix, &p.YouTube, &p.YouTubePremium,
-		&p.OpenAI, &p.Claude, &p.Gemini,
-		&p.Grok, &p.Disney, &p.TikTok,
-	)
+	if *p == nil {
+		*p = PlatformUnlockSummary{}
+	}
+	rows, err := db.Query(ctx, `
+		SELECT key, COUNT(*)
+		FROM check_results cr, jsonb_each(cr.platforms) AS e(key, val)
+		WHERE cr.job_id = $1 AND cr.alive = true AND (val->>'unlocked')::boolean
+		GROUP BY key
+	`, jobID)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var key string
+		var n int
+		if rows.Scan(&key, &n) == nil {
+			(*p)[key] = n
+		}
+	}
 }
 
 func loadSpeedStats(ctx context.Context, jobID string, s *JobDetailedSummary) {
