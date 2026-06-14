@@ -26,18 +26,8 @@ var db = sqldb.NewDatabase("checker", sqldb.DatabaseConfig{
 
 // --- PubSub ---
 
-// PlatformUnlockSummary holds how many nodes unlocked each streaming platform.
-type PlatformUnlockSummary struct {
-	Netflix        int `json:"netflix"`
-	YouTube        int `json:"youtube"`
-	YouTubePremium int `json:"youtube_premium"`
-	OpenAI         int `json:"openai"`
-	Claude         int `json:"claude"`
-	Gemini         int `json:"gemini"`
-	Grok           int `json:"grok"`
-	Disney         int `json:"disney"`
-	TikTok         int `json:"tiktok"`
-}
+// PlatformUnlockSummary maps each platform key to how many nodes unlocked it.
+type PlatformUnlockSummary map[string]int
 
 // JobCompletedEvent is published when a check job finishes.
 type JobCompletedEvent struct {
@@ -87,17 +77,8 @@ type NodeResult struct {
 	Server          string `json:"server"`
 	Port            int    `json:"port"`
 	Config          string `json:"config"`
-	Netflix        bool            `json:"netflix"`
-	YouTube        bool            `json:"youtube"`
-	YouTubePremium bool            `json:"youtube_premium"`
-	OpenAI         bool            `json:"openai"`
-	Claude         bool            `json:"claude"`
-	Gemini         bool            `json:"gemini"`
-	Grok           bool            `json:"grok"`
-	Disney         bool            `json:"disney"`
-	TikTok         bool            `json:"tiktok"`
-	ExtraPlatforms map[string]bool `json:"extra_platforms"`
-	TrafficBytes   int64           `json:"traffic_bytes"`
+	Platforms    map[string]PlatformOutcome `json:"platforms"`
+	TrafficBytes int64                      `json:"traffic_bytes"`
 }
 
 // ResultsResponse is returned by GET /check/:subscriptionID/results.
@@ -160,7 +141,11 @@ type CheckOptions struct {
 func defaultCheckOptions() CheckOptions {
 	return CheckOptions{
 		SpeedTest: true,
-		MediaApps: []string{"openai", "claude", "gemini", "grok", "netflix", "youtube", "disney", "tiktok"},
+		MediaApps: []string{
+			"netflix", "youtube", "youtube_premium", "openai", "chatgpt_ios",
+			"claude", "gemini", "grok", "disney", "tiktok",
+			"bilibili_cn", "bilibili_hkmctw", "bahamut", "spotify", "prime_video",
+		},
 	}
 }
 
@@ -179,15 +164,6 @@ func applyOptionDefaults(o *CheckOptions) {
 // exists for the subscription).
 func isActiveJobConflict(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "idx_check_jobs_one_active")
-}
-
-func hasApp(opts CheckOptions, app string) bool {
-	for _, a := range opts.MediaApps {
-		if a == app {
-			return true
-		}
-	}
-	return false
 }
 
 // TriggerParams is the optional request body for POST /check/:subscriptionID.
@@ -559,8 +535,7 @@ func GetResults(ctx context.Context, subscriptionID string, p *GetResultsParams)
 			            ), 0)
 			       END AS upload_speed_kbps,
 			       cr.country, cr.ip,
-			       cr.netflix, cr.youtube, cr.youtube_premium, cr.openai, cr.claude, cr.gemini, cr.grok, cr.disney, cr.tiktok,
-			       cr.extra_platforms, cr.traffic_bytes
+			       cr.platforms, cr.traffic_bytes
 			FROM check_results cr
 			LEFT JOIN nodes n ON n.id = cr.node_id
 			WHERE cr.job_id = $1
@@ -576,18 +551,20 @@ func GetResults(ctx context.Context, subscriptionID string, p *GetResultsParams)
 	var results []NodeResult
 	for rows.Next() {
 		var r NodeResult
-		var extraJSON []byte
+		var platformsJSON []byte
 		if err := rows.Scan(
 			&r.NodeID, &r.NodeName, &r.NodeType, &r.Enabled,
 			&r.Server, &r.Port, &r.Config,
 			&r.Alive, &r.LatencyMs, &r.SpeedKbps, &r.UploadSpeedKbps, &r.Country, &r.IP,
-			&r.Netflix, &r.YouTube, &r.YouTubePremium, &r.OpenAI, &r.Claude, &r.Gemini, &r.Grok, &r.Disney, &r.TikTok,
-			&extraJSON, &r.TrafficBytes,
+			&platformsJSON, &r.TrafficBytes,
 		); err != nil {
 			return nil, errs.B().Code(errs.Internal).Msg("scan failed").Err()
 		}
-		if len(extraJSON) > 0 {
-			_ = json.Unmarshal(extraJSON, &r.ExtraPlatforms)
+		if len(platformsJSON) > 0 {
+			_ = json.Unmarshal(platformsJSON, &r.Platforms)
+		}
+		if r.Platforms == nil {
+			r.Platforms = map[string]PlatformOutcome{}
 		}
 		results = append(results, r)
 	}

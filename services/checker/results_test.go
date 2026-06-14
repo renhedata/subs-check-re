@@ -38,10 +38,8 @@ func TestGetResultsReturnsServerPortConfig(t *testing.T) {
 		t.Fatalf("seed node: %v", err)
 	}
 	if _, err := db.Exec(ctx, `
-		INSERT INTO check_results (id, job_id, node_id, node_name, node_type, alive, latency_ms, country, ip,
-		                           netflix, youtube, youtube_premium, openai, claude, gemini, grok, disney, tiktok)
-		VALUES ($1,$2,$3,'N1','vmess',true,42,'HK','1.2.3.4',
-		        false,false,false,false,false,false,false,false,false)
+		INSERT INTO check_results (id, job_id, node_id, node_name, node_type, alive, latency_ms, country, ip)
+		VALUES ($1,$2,$3,'N1','vmess',true,42,'HK','1.2.3.4')
 	`, uuid.New().String(), jobID, nodeID); err != nil {
 		t.Fatalf("seed result: %v", err)
 	}
