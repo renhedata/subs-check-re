@@ -96,7 +96,11 @@ export function DetailHeader({
 						>
 							<SelectValue />
 						</SelectTrigger>
-						<SelectContent>
+						<SelectContent
+							align="start"
+							alignItemWithTrigger={false}
+							className="w-auto min-w-56"
+						>
 							<SelectItem value="latest">Latest result</SelectItem>
 							{jobs.map((j) => (
 								<SelectItem key={j.id} value={j.id}>
