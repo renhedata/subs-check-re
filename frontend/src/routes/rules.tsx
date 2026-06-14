@@ -59,6 +59,11 @@ function RulesPage() {
 		setDraft(false);
 		setSelectedId(null);
 	};
+	// After a save, stay on (or jump to) the saved rule instead of closing.
+	const handleSaved = (id: string) => {
+		setDraft(false);
+		setSelectedId(id);
+	};
 
 	if (isLoading) {
 		return (
@@ -94,12 +99,17 @@ function RulesPage() {
 					].join(" ")}
 				>
 					{draft ? (
-						<RuleInspector onClose={close} onMobileBack={close} />
+						<RuleInspector
+							onClose={close}
+							onSaved={handleSaved}
+							onMobileBack={close}
+						/>
 					) : selected ? (
 						<RuleInspector
 							key={selected.id}
 							rule={selected}
 							onClose={close}
+							onSaved={handleSaved}
 							onMobileBack={close}
 						/>
 					) : (

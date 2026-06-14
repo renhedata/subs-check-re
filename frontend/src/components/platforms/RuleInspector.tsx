@@ -29,14 +29,23 @@ import { ScriptEditorArea } from "./ScriptEditorArea";
 type PlatformRule = checker.PlatformRule;
 type TestRuleResult = checker.TestRuleResult;
 
+// The script languages (js/ts/tengo/lua) all share the { prelude, code } def
+// shape; only "condition" has a different shape. Switching within a shape keeps
+// the def; switching across shapes stashes it so it can be restored on return.
+type DefShape = "condition" | "script";
+const shapeOf = (t: RuleType): DefShape =>
+	t === "condition" ? "condition" : "script";
+
 export function RuleInspector({
 	rule,
 	onClose,
+	onSaved,
 	onMobileBack,
 }: {
 	// rule === undefined => draft (create); else edit
 	rule?: PlatformRule;
 	onClose: () => void;
+	onSaved: (ruleId: string) => void;
 	onMobileBack?: () => void;
 }) {
 	const isEdit = !!rule;
@@ -53,6 +62,11 @@ export function RuleInspector({
 	const [def, setDef] = useState<Record<string, unknown>>(
 		(rule?.definition as Record<string, unknown>) ?? defaultDef("js"),
 	);
+	// Remembers the def for the shape not currently being edited, so toggling
+	// between a script language and condition (and back) doesn't lose work.
+	const [defStash, setDefStash] = useState<
+		Partial<Record<DefShape, Record<string, unknown>>>
+	>({});
 	const [activeTab, setActiveTab] = useState<"prelude" | "code">("code");
 	const [testResult, setTestResult] = useState<TestRuleResult | null>(null);
 	const [testing, setTesting] = useState(false);
@@ -68,8 +82,17 @@ export function RuleInspector({
 	const saving = createMut.isPending || updateMut.isPending;
 
 	function changeType(t: RuleType) {
+		if (t === ruleType) return;
+		const from = shapeOf(ruleType);
+		const to = shapeOf(t);
+		if (from !== to) {
+			// Crossing def shapes: stash the current def under its shape and
+			// restore the target shape's stashed def (or a blank one).
+			setDefStash((prev) => ({ ...prev, [from]: def }));
+			setDef(defStash[to] ?? defaultDef(t));
+		}
+		// Same shape (script→script): keep the def; only the interpreter changes.
 		setRuleType(t);
-		setDef(defaultDef(t));
 		setTestResult(null);
 	}
 
@@ -105,12 +128,6 @@ export function RuleInspector({
 	}
 
 	function save() {
-		const onSuccess = () => {
-			toast.success(isEdit ? "Rule saved" : "Rule created");
-			onClose();
-		};
-		const onError = () =>
-			toast.error(isEdit ? "Failed to save" : "Failed to create");
 		if (isEdit && rule) {
 			updateMut.mutate(
 				{
@@ -124,7 +141,14 @@ export function RuleInspector({
 						sort_order: rule.sort_order,
 					},
 				},
-				{ onSuccess, onError },
+				{
+					// Stay on the rule after saving instead of closing the inspector.
+					onSuccess: () => {
+						toast.success("Rule saved");
+						onSaved(rule.id);
+					},
+					onError: () => toast.error("Failed to save"),
+				},
 			);
 		} else {
 			createMut.mutate(
@@ -137,7 +161,14 @@ export function RuleInspector({
 					definition: def as never,
 					sort_order: 1000,
 				},
-				{ onSuccess, onError },
+				{
+					// Switch from draft to editing the freshly created rule.
+					onSuccess: (created) => {
+						toast.success("Rule created");
+						onSaved(created.id);
+					},
+					onError: () => toast.error("Failed to create"),
+				},
 			);
 		}
 	}
