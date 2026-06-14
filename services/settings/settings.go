@@ -65,6 +65,11 @@ func defaultExportTags() ExportTagConfig {
 			{Key: "youtube", Label: "YT", Enabled: true},
 			{Key: "disney", Label: "D+", Enabled: true},
 			{Key: "tiktok", Label: "TK", Enabled: true},
+			{Key: "spotify", Label: "SP", Enabled: true},
+			{Key: "prime_video", Label: "PV", Enabled: true},
+			{Key: "bahamut", Label: "BH", Enabled: true},
+			{Key: "bilibili_cn", Label: "B站", Enabled: true},
+			{Key: "bilibili_hkmctw", Label: "B站港", Enabled: true},
 		},
 	}
 }
