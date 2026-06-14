@@ -2,6 +2,7 @@ import { BookOpen, Loader2, Play, X } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { client } from "@/lib/client";
 import type { checker } from "@/lib/client.gen";
 import { useTheme } from "@/lib/theme";
@@ -131,8 +132,8 @@ export function RuleEditorDialog({
 	const canSave = name.trim() && (isEdit || key.trim());
 
 	return (
-		<div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/70 p-0 md:p-4">
-			<div className="flex h-full max-h-screen w-full max-w-none flex-col rounded-none border border-border bg-card shadow-2xl md:h-auto md:max-h-[94vh] md:max-w-5xl md:rounded-xl">
+		<Sheet open onOpenChange={(open) => { if (!open) onClose(); }}>
+			<SheetContent className="sm:max-w-2xl p-0 flex flex-col overflow-hidden">
 				<div className="flex flex-wrap items-center gap-2 border-border border-b px-4 py-2.5">
 					<input
 						value={name}
@@ -272,7 +273,7 @@ export function RuleEditorDialog({
 						</div>
 					)}
 				</div>
-			</div>
-		</div>
+			</SheetContent>
+		</Sheet>
 	);
 }
