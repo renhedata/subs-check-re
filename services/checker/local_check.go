@@ -13,17 +13,9 @@ import (
 
 // LocalUnlockResult holds platform accessibility from the server's own network.
 type LocalUnlockResult struct {
-	Netflix        bool   `json:"netflix"`
-	YouTube        bool   `json:"youtube"`
-	YouTubePremium bool   `json:"youtube_premium"`
-	OpenAI         bool   `json:"openai"`
-	Claude         bool   `json:"claude"`
-	Gemini         bool   `json:"gemini"`
-	Grok           bool   `json:"grok"`
-	Disney         bool   `json:"disney"`
-	TikTok         bool   `json:"tiktok"`
-	IP             string `json:"ip"`
-	Country        string `json:"country"`
+	Platforms map[string]PlatformOutcome `json:"platforms"`
+	IP        string                     `json:"ip"`
+	Country   string                     `json:"country"`
 }
 
 // GetLocalUnlock checks which streaming/AI platforms are accessible from the server's own network.
@@ -37,30 +29,10 @@ func GetLocalUnlock(ctx context.Context) (*LocalUnlockResult, error) {
 
 	results := runDefaultRulesAgainst(checkCtx, client)
 
-	var res LocalUnlockResult
+	res := LocalUnlockResult{Platforms: map[string]PlatformOutcome{}}
 	for _, r := range results {
-		switch r.key {
-		case "netflix":
-			res.Netflix = r.outcome.Unlocked
-		case "youtube":
-			res.YouTube = r.outcome.Unlocked
-		case "youtube_premium":
-			res.YouTubePremium = r.outcome.Unlocked
-		case "openai":
-			res.OpenAI = r.outcome.Unlocked
-		case "claude":
-			res.Claude = r.outcome.Unlocked
-		case "gemini":
-			res.Gemini = r.outcome.Unlocked
-		case "grok":
-			res.Grok = r.outcome.Unlocked
-		case "disney":
-			res.Disney = r.outcome.Unlocked
-		case "tiktok":
-			res.TikTok = r.outcome.Unlocked
-		}
+		res.Platforms[r.key] = r.outcome
 	}
-
 	res.IP, res.Country = getProxyInfo(checkCtx, client)
 
 	if err := checkCtx.Err(); err != nil {
