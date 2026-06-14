@@ -7,7 +7,6 @@ import {
 	PopoverContent,
 	PopoverTrigger,
 } from "@/components/ui/popover";
-import type { checker } from "@/lib/client.gen";
 import { cn } from "@/lib/utils";
 import { useLocalUnlock } from "@/queries";
 
@@ -73,7 +72,9 @@ export function UnlockStrip() {
 				</p>
 				<div className="flex flex-wrap gap-2">
 					{PLATFORM_KEYS.map((k) => {
-						const available = data ? data.platforms?.[k]?.unlocked === true : false;
+						const available = data
+							? data.platforms?.[k]?.unlocked === true
+							: false;
 						return (
 							<span
 								key={k}

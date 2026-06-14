@@ -7,8 +7,8 @@ import {
 	DialogTitle,
 } from "@/components/ui/dialog";
 import type { checker } from "@/lib/client.gen";
-import { formatBytes, formatSpeed } from "@/lib/format";
 import { countryToFlag } from "@/lib/countryToFlag";
+import { formatBytes, formatSpeed } from "@/lib/format";
 import { BUILTIN_PLATFORMS, latencyTone } from "@/lib/nodeFilters";
 import { cn } from "@/lib/utils";
 
@@ -41,7 +41,13 @@ function Row({
 function platformRows(
 	r: NodeResult,
 	rules: PlatformRule[],
-): Array<{ key: string; label: string; unlocked: boolean; status: string; region: string }> {
+): Array<{
+	key: string;
+	label: string;
+	unlocked: boolean;
+	status: string;
+	region: string;
+}> {
 	const ruleByKey = Object.fromEntries(rules.map((x) => [x.key, x]));
 	const platforms = r.platforms ?? {};
 	const seen = new Set<string>();
@@ -152,7 +158,9 @@ export function NodeDetailDialog({
 											key={p.key}
 											className="flex items-center justify-between gap-2 text-xs"
 										>
-											<span className="truncate text-foreground">{p.label}</span>
+											<span className="truncate text-foreground">
+												{p.label}
+											</span>
 											<span className="flex shrink-0 items-center gap-1.5">
 												{p.region ? (
 													<span className="text-muted-foreground">
