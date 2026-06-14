@@ -335,15 +335,7 @@ export namespace checker {
      * LocalUnlockResult holds platform accessibility from the server's own network.
      */
     export interface LocalUnlockResult {
-        netflix: boolean
-        youtube: boolean
-        "youtube_premium": boolean
-        openai: boolean
-        claude: boolean
-        gemini: boolean
-        grok: boolean
-        disney: boolean
-        tiktok: boolean
+        platforms: { [key: string]: PlatformOutcome }
         ip: string
         country: string
     }
@@ -365,16 +357,7 @@ export namespace checker {
         server: string
         port: number
         config: string
-        netflix: boolean
-        youtube: boolean
-        "youtube_premium": boolean
-        openai: boolean
-        claude: boolean
-        gemini: boolean
-        grok: boolean
-        disney: boolean
-        tiktok: boolean
-        "extra_platforms": { [key: string]: boolean }
+        platforms: { [key: string]: PlatformOutcome }
         "traffic_bytes": number
     }
 
@@ -385,6 +368,15 @@ export namespace checker {
         id: string
         name: string
         type: string
+    }
+
+    /**
+     * PlatformOutcome is the result of evaluating one platform rule for one node.
+     */
+    export interface PlatformOutcome {
+        unlocked: boolean
+        status: string
+        region: string
     }
 
     /**
