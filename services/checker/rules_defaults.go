@@ -152,6 +152,38 @@ return {unlocked:false,status:"Failed",region:""};
 `}},
 }
 
+// defaultRuleByKey returns the seed rule for a key.
+func defaultRuleByKey(key string) (defaultRule, bool) {
+	for _, d := range defaultRules {
+		if d.key == key {
+			return d, true
+		}
+	}
+	return defaultRule{}, false
+}
+
+// syncDefaultRules upserts the built-in (is_default=true) rules for a user so
+// existing users receive new platforms and updated detection logic. User-authored
+// rules (is_default=false) are never touched. NOTE: this overwrites manual edits
+// to built-in rules — to persist edits, clone to a custom key (is_default=false).
+func syncDefaultRules(ctx context.Context, userID string) error {
+	now := time.Now()
+	for _, dr := range defaultRules {
+		defJSON, _ := json.Marshal(dr.def)
+		if _, err := db.Exec(ctx, `
+			INSERT INTO platform_rules (id, user_id, name, key, icon, enabled, rule_type, definition, is_default, sort_order, created_at, updated_at)
+			VALUES ($1,$2,$3,$4,$5,true,$6,$7,true,$8,$9,$9)
+			ON CONFLICT (user_id, key) DO UPDATE SET
+			  name=EXCLUDED.name, icon=EXCLUDED.icon, rule_type=EXCLUDED.rule_type,
+			  definition=EXCLUDED.definition, sort_order=EXCLUDED.sort_order, updated_at=EXCLUDED.updated_at
+			WHERE platform_rules.is_default = true
+		`, uuid.New().String(), userID, dr.name, dr.key, dr.icon, dr.ruleType, defJSON, dr.sortOrder, now); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // seedDefaultRules inserts the built-in platform rules for a new user.
 func seedDefaultRules(ctx context.Context, userID string) error {
 	now := time.Now()

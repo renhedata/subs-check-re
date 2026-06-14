@@ -147,18 +147,12 @@ func ListRules(ctx context.Context) (*ListRulesResponse, error) {
 	claims := encauth.Data().(*authsvc.UserClaims)
 	userID := claims.UserID
 
+	if err := syncDefaultRules(ctx, userID); err != nil {
+		return nil, errs.B().Code(errs.Internal).Msg("failed to sync default rules").Err()
+	}
 	rules, err := loadUserRules(ctx, userID)
 	if err != nil {
 		return nil, errs.B().Code(errs.Internal).Msg("failed to load rules").Err()
-	}
-	if len(rules) == 0 {
-		if seedErr := seedDefaultRules(ctx, userID); seedErr != nil {
-			return nil, errs.B().Code(errs.Internal).Msg("failed to seed default rules").Err()
-		}
-		rules, err = loadUserRules(ctx, userID)
-		if err != nil {
-			return nil, errs.B().Code(errs.Internal).Msg("failed to load rules after seed").Err()
-		}
 	}
 	return &ListRulesResponse{Rules: rules}, nil
 }
