@@ -16,7 +16,7 @@ UPDATE check_results SET platforms = (
            jsonb_build_object('unlocked', (ep.value)::boolean,
                               'status', CASE WHEN (ep.value)::boolean THEN 'Yes' ELSE 'No' END,
                               'region', '')
-    FROM jsonb_each(COALESCE(extra_platforms, '{}'::jsonb)) AS ep
+    FROM jsonb_each(CASE WHEN jsonb_typeof(extra_platforms) = 'object' THEN extra_platforms ELSE '{}'::jsonb END) AS ep
   ) merged
 );
 
