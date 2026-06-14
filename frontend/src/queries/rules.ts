@@ -45,6 +45,15 @@ export function useDeleteRule() {
 	});
 }
 
+export function useResetRule() {
+	const qc = useQueryClient();
+	return useMutation({
+		mutationFn: (id: string) => client.checker.ResetRule(id),
+		onSuccess: () =>
+			qc.invalidateQueries({ queryKey: queryKeys.platformRules() }),
+	});
+}
+
 export function useTestRule() {
 	return useMutation({
 		mutationFn: (p: checker.TestRuleParams) => client.checker.TestRule(p),
