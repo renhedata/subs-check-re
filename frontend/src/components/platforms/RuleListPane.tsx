@@ -45,8 +45,14 @@ function RuleRow({
 	selected: boolean;
 	onSelect: (id: string) => void;
 }) {
-	const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-		useSortable({ id: rule.id });
+	const {
+		attributes,
+		listeners,
+		setNodeRef,
+		transform,
+		transition,
+		isDragging,
+	} = useSortable({ id: rule.id });
 	return (
 		<button
 			type="button"
@@ -187,8 +193,18 @@ export function RuleListPane({
 				</button>
 			</div>
 			<div className="flex-1 overflow-y-auto p-1.5">
-				<Group label="Built-in" rules={builtin} selectedId={selectedId} onSelect={onSelect} />
-				<Group label="Custom" rules={custom} selectedId={selectedId} onSelect={onSelect} />
+				<Group
+					label="Built-in"
+					rules={builtin}
+					selectedId={selectedId}
+					onSelect={onSelect}
+				/>
+				<Group
+					label="Custom"
+					rules={custom}
+					selectedId={selectedId}
+					onSelect={onSelect}
+				/>
 				{filtered.length === 0 && (
 					<p className="px-2 py-6 text-center text-muted-foreground text-xs">
 						No matching rules.

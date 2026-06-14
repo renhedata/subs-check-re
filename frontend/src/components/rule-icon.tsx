@@ -103,7 +103,10 @@ export function RuleIcon({
 }
 
 // usePlatformDisplay resolves a platform key to its rule-defined icon + label.
-export function usePlatformDisplay(key: string): { icon: string; label: string } {
+export function usePlatformDisplay(key: string): {
+	icon: string;
+	label: string;
+} {
 	const rules = usePlatformRules();
 	const rule = rules.get(key);
 	return { icon: rule?.icon ?? "", label: rule?.name ?? key };
@@ -121,5 +124,7 @@ export function RulePlatformIcon({
 	showLabel?: boolean;
 }) {
 	const { icon, label } = usePlatformDisplay(platformKey);
-	return <RuleIcon icon={icon} label={label} size={size} showLabel={showLabel} />;
+	return (
+		<RuleIcon icon={icon} label={label} size={size} showLabel={showLabel} />
+	);
 }

@@ -83,7 +83,11 @@ export function IconPickerPopover({
 				style={{ width: size, height: size }}
 				aria-label="Change icon"
 			>
-				<RuleIcon icon={value} label={name || "?"} size={Math.round(size * 0.55)} />
+				<RuleIcon
+					icon={value}
+					label={name || "?"}
+					size={Math.round(size * 0.55)}
+				/>
 				<span className="absolute -right-1 -bottom-1 flex size-4 items-center justify-center rounded-full border border-border bg-popover text-[9px] text-muted-foreground">
 					✎
 				</span>

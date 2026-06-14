@@ -170,7 +170,7 @@ export function IconPickerInput({
 						<button
 							type="button"
 							onClick={() => fileRef.current?.click()}
-							className="rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-secondary"
+							className="rounded border border-border px-2 py-1 text-muted-foreground text-xs hover:bg-secondary"
 						>
 							Upload SVG/PNG
 						</button>
@@ -179,7 +179,7 @@ export function IconPickerInput({
 								key={s.prefix}
 								type="button"
 								onClick={() => setQuery(`${s.label} `)}
-								className="rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-secondary"
+								className="rounded border border-border px-2 py-1 text-muted-foreground text-xs hover:bg-secondary"
 							>
 								{s.label}
 							</button>

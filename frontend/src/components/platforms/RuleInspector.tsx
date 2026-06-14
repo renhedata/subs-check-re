@@ -222,7 +222,7 @@ export function RuleInspector({
 						type="button"
 						onClick={() => setShowDocs((d) => !d)}
 						className={cn(
-							"hidden h-7 items-center gap-1 rounded-md border px-2 text-[11px] transition-colors xl:flex",
+							"hidden h-7 items-center gap-1 rounded-md border px-2 text-[11px] transition-colors lg:flex",
 							showDocs
 								? "border-primary/40 text-primary"
 								: "border-border text-muted-foreground hover:bg-secondary",
@@ -316,7 +316,7 @@ export function RuleInspector({
 					</div>
 				</div>
 				{showDocs && (
-					<div className="hidden w-80 shrink-0 overflow-y-auto border-border border-l xl:block">
+					<div className="hidden w-80 shrink-0 overflow-y-auto border-border border-l lg:block">
 						<DocsPanel ruleType={ruleType} />
 					</div>
 				)}

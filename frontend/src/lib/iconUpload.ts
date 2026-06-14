@@ -1,10 +1,5 @@
 export const ICON_MAX_BYTES = 32 * 1024;
-const ALLOWED = [
-	"image/svg+xml",
-	"image/png",
-	"image/jpeg",
-	"image/webp",
-];
+const ALLOWED = ["image/svg+xml", "image/png", "image/jpeg", "image/webp"];
 
 // validateIconFile returns an error message, or null if the file is acceptable.
 export function validateIconFile(file: File): string | null {
