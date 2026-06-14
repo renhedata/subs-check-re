@@ -175,8 +175,8 @@ func syncDefaultRules(ctx context.Context, userID string) error {
 			VALUES ($1,$2,$3,$4,$5,true,$6,$7,true,$8,$9,$9)
 			ON CONFLICT (user_id, key) DO UPDATE SET
 			  name=EXCLUDED.name, icon=EXCLUDED.icon, rule_type=EXCLUDED.rule_type,
-			  definition=EXCLUDED.definition, sort_order=EXCLUDED.sort_order, updated_at=EXCLUDED.updated_at
-			WHERE platform_rules.is_default = true
+			  definition=EXCLUDED.definition, updated_at=EXCLUDED.updated_at
+			WHERE platform_rules.is_default = true AND platform_rules.customized = false
 		`, uuid.New().String(), userID, dr.name, dr.key, dr.icon, dr.ruleType, defJSON, dr.sortOrder, now); err != nil {
 			return err
 		}

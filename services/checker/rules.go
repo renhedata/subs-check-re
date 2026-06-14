@@ -3,6 +3,7 @@ package checker
 import (
 	"context"
 	"encoding/json"
+	"reflect"
 	"strings"
 	"time"
 
@@ -68,6 +69,7 @@ type PlatformRule struct {
 	RuleType   string          `json:"rule_type"`
 	Definition json.RawMessage `json:"definition"`
 	IsDefault  bool            `json:"is_default"`
+	Customized bool            `json:"customized"`
 	SortOrder  int             `json:"sort_order"`
 	CreatedAt  time.Time       `json:"created_at"`
 	UpdatedAt  time.Time       `json:"updated_at"`
@@ -191,6 +193,7 @@ func CreateRule(ctx context.Context, p *CreateRuleParams) (*PlatformRule, error)
 		RuleType:   p.RuleType,
 		Definition: p.Definition,
 		IsDefault:  false,
+		Customized: false,
 		SortOrder:  p.SortOrder,
 		CreatedAt:  now,
 		UpdatedAt:  now,
@@ -210,11 +213,29 @@ func UpdateRule(ctx context.Context, ruleId string, p *UpdateRuleParams) (*Platf
 	now := time.Now()
 	defJSON, _ := json.Marshal(p.Definition)
 
+	// Determine customized: a built-in becomes customized when its content
+	// diverges from the seed (enable-toggle / reorder alone don't count).
+	var isDefault bool
+	var ruleKey string
+	if err := db.QueryRow(ctx,
+		`SELECT is_default, key FROM platform_rules WHERE id=$1 AND user_id=$2`,
+		ruleId, claims.UserID).Scan(&isDefault, &ruleKey); err != nil {
+		return nil, errs.B().Code(errs.NotFound).Msg("rule not found").Err()
+	}
+	customized := false
+	if isDefault {
+		if seed, ok := defaultRuleByKey(ruleKey); ok {
+			customized = !ruleContentMatchesSeed(p.Name, p.Icon, p.RuleType, defJSON, seed)
+		} else {
+			customized = true
+		}
+	}
+
 	result, err := db.Exec(ctx, `
 		UPDATE platform_rules
-		SET name=$3, icon=$4, enabled=$5, rule_type=$6, definition=$7, sort_order=$8, updated_at=$9
+		SET name=$3, icon=$4, enabled=$5, rule_type=$6, definition=$7, sort_order=$8, customized=$9, updated_at=$10
 		WHERE id=$1 AND user_id=$2
-	`, ruleId, claims.UserID, p.Name, p.Icon, p.Enabled, p.RuleType, defJSON, p.SortOrder, now)
+	`, ruleId, claims.UserID, p.Name, p.Icon, p.Enabled, p.RuleType, defJSON, p.SortOrder, customized, now)
 	if err != nil {
 		return nil, errs.B().Code(errs.Internal).Msg("failed to update rule").Err()
 	}
@@ -226,11 +247,11 @@ func UpdateRule(ctx context.Context, ruleId string, p *UpdateRuleParams) (*Platf
 	var rule PlatformRule
 	var rawDef []byte
 	if err := db.QueryRow(ctx,
-		`SELECT id, user_id, name, key, icon, enabled, rule_type, definition, is_default, sort_order, created_at, updated_at
+		`SELECT id, user_id, name, key, icon, enabled, rule_type, definition, is_default, customized, sort_order, created_at, updated_at
 		 FROM platform_rules WHERE id=$1`,
 		ruleId,
 	).Scan(&rule.ID, &rule.UserID, &rule.Name, &rule.Key, &rule.Icon, &rule.Enabled, &rule.RuleType,
-		&rawDef, &rule.IsDefault, &rule.SortOrder, &rule.CreatedAt, &rule.UpdatedAt); err != nil {
+		&rawDef, &rule.IsDefault, &rule.Customized, &rule.SortOrder, &rule.CreatedAt, &rule.UpdatedAt); err != nil {
 		return nil, errs.B().Code(errs.Internal).Msg("failed to read updated rule").Err()
 	}
 	rule.Definition = rawDef
@@ -252,6 +273,60 @@ func DeleteRule(ctx context.Context, ruleId string) error {
 		return errs.B().Code(errs.NotFound).Msg("rule not found").Err()
 	}
 	return nil
+}
+
+// ruleContentMatchesSeed reports whether a rule's editable content equals the seed.
+func ruleContentMatchesSeed(name, icon, ruleType string, def json.RawMessage, seed defaultRule) bool {
+	if name != seed.name || icon != seed.icon || ruleType != seed.ruleType {
+		return false
+	}
+	seedJSON, _ := json.Marshal(seed.def)
+	var a, b any
+	if json.Unmarshal(seedJSON, &a) != nil || json.Unmarshal(def, &b) != nil {
+		return false
+	}
+	return reflect.DeepEqual(a, b)
+}
+
+// ResetRule restores a built-in rule to its seeded default and clears the
+// customized flag. The enabled state is preserved.
+//
+//encore:api auth method=POST path=/platform-rule-reset/:ruleId
+func ResetRule(ctx context.Context, ruleId string) (*PlatformRule, error) {
+	claims := encauth.Data().(*authsvc.UserClaims)
+
+	var isDefault bool
+	var ruleKey string
+	if err := db.QueryRow(ctx,
+		`SELECT is_default, key FROM platform_rules WHERE id=$1 AND user_id=$2`,
+		ruleId, claims.UserID).Scan(&isDefault, &ruleKey); err != nil {
+		return nil, errs.B().Code(errs.NotFound).Msg("rule not found").Err()
+	}
+	seed, ok := defaultRuleByKey(ruleKey)
+	if !isDefault || !ok {
+		return nil, errs.B().Code(errs.InvalidArgument).Msg("not a built-in rule").Err()
+	}
+	defJSON, _ := json.Marshal(seed.def)
+	if _, err := db.Exec(ctx, `
+		UPDATE platform_rules
+		SET name=$3, icon=$4, rule_type=$5, definition=$6, sort_order=$7, customized=false, updated_at=$8
+		WHERE id=$1 AND user_id=$2
+	`, ruleId, claims.UserID, seed.name, seed.icon, seed.ruleType, defJSON, seed.sortOrder, time.Now()); err != nil {
+		return nil, errs.B().Code(errs.Internal).Msg("failed to reset rule").Err()
+	}
+
+	var rule PlatformRule
+	var rawDef []byte
+	if err := db.QueryRow(ctx,
+		`SELECT id, user_id, name, key, icon, enabled, rule_type, definition, is_default, customized, sort_order, created_at, updated_at
+		 FROM platform_rules WHERE id=$1`,
+		ruleId,
+	).Scan(&rule.ID, &rule.UserID, &rule.Name, &rule.Key, &rule.Icon, &rule.Enabled, &rule.RuleType,
+		&rawDef, &rule.IsDefault, &rule.Customized, &rule.SortOrder, &rule.CreatedAt, &rule.UpdatedAt); err != nil {
+		return nil, errs.B().Code(errs.Internal).Msg("failed to read reset rule").Err()
+	}
+	rule.Definition = rawDef
+	return &rule, nil
 }
 
 // TestRule runs a rule definition and returns verbose debug output.
@@ -302,7 +377,7 @@ func ListTestNodes(ctx context.Context) (*ListTestNodesResponse, error) {
 // loadUserRules fetches all platform rules for a user ordered by sort_order.
 func loadUserRules(ctx context.Context, userID string) ([]*PlatformRule, error) {
 	rows, err := db.Query(ctx,
-		`SELECT id, user_id, name, key, icon, enabled, rule_type, definition, is_default, sort_order, created_at, updated_at
+		`SELECT id, user_id, name, key, icon, enabled, rule_type, definition, is_default, customized, sort_order, created_at, updated_at
 		 FROM platform_rules WHERE user_id=$1 ORDER BY sort_order, created_at`,
 		userID,
 	)
@@ -316,7 +391,7 @@ func loadUserRules(ctx context.Context, userID string) ([]*PlatformRule, error) 
 		var r PlatformRule
 		var rawDef []byte
 		if err := rows.Scan(&r.ID, &r.UserID, &r.Name, &r.Key, &r.Icon, &r.Enabled, &r.RuleType,
-			&rawDef, &r.IsDefault, &r.SortOrder, &r.CreatedAt, &r.UpdatedAt); err != nil {
+			&rawDef, &r.IsDefault, &r.Customized, &r.SortOrder, &r.CreatedAt, &r.UpdatedAt); err != nil {
 			return nil, err
 		}
 		r.Definition = rawDef

@@ -392,6 +392,7 @@ export namespace checker {
         "rule_type": string
         definition: JSONValue
         "is_default": boolean
+        customized: boolean
         "sort_order": number
         "created_at": string
         "updated_at": string
@@ -482,6 +483,7 @@ export namespace checker {
             this.ListJobs = this.ListJobs.bind(this)
             this.ListRules = this.ListRules.bind(this)
             this.ListTestNodes = this.ListTestNodes.bind(this)
+            this.ResetRule = this.ResetRule.bind(this)
             this.SetNodeEnabled = this.SetNodeEnabled.bind(this)
             this.TestRule = this.TestRule.bind(this)
             this.TriggerCheck = this.TriggerCheck.bind(this)
@@ -532,8 +534,8 @@ export namespace checker {
         }
 
         /**
-         * GetLocalUnlock checks which streaming/AI platforms are accessible from the server's own network.
-         * It runs the seeded default rules (see rules_defaults.go) against a plain HTTP client — no proxy.
+         * GetLocalUnlock checks which platforms are accessible from the server's own
+         * network, running the current user's ENABLED rules (not the hardcoded defaults).
          */
         public async GetLocalUnlock(): Promise<LocalUnlockResult> {
             // Now make the actual call to the API
@@ -605,6 +607,16 @@ export namespace checker {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("GET", `/platform-rules/test-nodes`)
             return await resp.json() as ListTestNodesResponse
+        }
+
+        /**
+         * ResetRule restores a built-in rule to its seeded default and clears the
+         * customized flag. The enabled state is preserved.
+         */
+        public async ResetRule(ruleId: string): Promise<PlatformRule> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("POST", `/platform-rule-reset/${encodeURIComponent(ruleId)}`)
+            return await resp.json() as PlatformRule
         }
 
         /**
