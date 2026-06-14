@@ -30,11 +30,11 @@ function PlatformsPage() {
 			<div className="flex items-center justify-between">
 				<p className="text-muted-foreground text-xs">
 					Rules run during each proxy check. Built-in rules are seeded on first
-					visit. Custom keys store results in{" "}
+					visit. Each rule's result is stored in{" "}
 					<code className="rounded bg-secondary px-1 font-mono">
-						extra_platforms
+						platforms
 					</code>
-					.
+					, keyed by rule key.
 				</p>
 				<Button
 					variant="success"
