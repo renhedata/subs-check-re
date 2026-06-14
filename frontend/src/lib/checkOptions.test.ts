@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
 	DEFAULT_CHECK_OPTIONS,
+	hasStoredCheckOptions,
 	loadCheckOptions,
+	reconcileMediaApps,
 	saveCheckOptions,
 } from "./checkOptions";
 
@@ -42,5 +44,24 @@ describe("checkOptions persistence", () => {
 		const s = fakeStorage();
 		s.setItem("check-options:sub1", "{nope");
 		expect(loadCheckOptions("sub1", s)).toEqual(DEFAULT_CHECK_OPTIONS);
+	});
+});
+
+describe("checkOptions rule reconciliation", () => {
+	it("hasStoredCheckOptions reflects whether prefs were saved", () => {
+		const s = fakeStorage();
+		expect(hasStoredCheckOptions("sub1", s)).toBe(false);
+		saveCheckOptions("sub1", DEFAULT_CHECK_OPTIONS, s);
+		expect(hasStoredCheckOptions("sub1", s)).toBe(true);
+	});
+
+	it("reconcileMediaApps drops keys not in the available set", () => {
+		expect(
+			reconcileMediaApps(
+				["netflix", "gone", "disney"],
+				["netflix", "disney", "max"],
+			),
+		).toEqual(["netflix", "disney"]);
+		expect(reconcileMediaApps([], ["netflix"])).toEqual([]);
 	});
 });

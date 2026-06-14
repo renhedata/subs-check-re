@@ -68,3 +68,22 @@ export function saveCheckOptions(
 		// Quota/security errors are non-fatal; next run just uses defaults.
 	}
 }
+
+export function hasStoredCheckOptions(
+	subscriptionId: string,
+	storage: Storage = localStorage,
+): boolean {
+	try {
+		return storage.getItem(keyFor(subscriptionId)) !== null;
+	} catch {
+		return false;
+	}
+}
+
+export function reconcileMediaApps(
+	mediaApps: string[],
+	availableKeys: string[],
+): string[] {
+	const allowed = new Set(availableKeys);
+	return mediaApps.filter((k) => allowed.has(k));
+}
