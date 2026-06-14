@@ -1,9 +1,11 @@
 import { Icon as IconifyIcon } from "@iconify/react";
 import {
 	SiAnthropic,
+	SiBilibili,
 	SiGooglegemini,
 	SiNetflix,
 	SiOpenai,
+	SiSpotify,
 	SiTiktok,
 	SiYoutube,
 } from "react-icons/si";
@@ -18,7 +20,13 @@ type PlatformKey =
 	| "gemini"
 	| "grok"
 	| "disney"
-	| "tiktok";
+	| "tiktok"
+	| "chatgpt_ios"
+	| "bilibili_cn"
+	| "bilibili_hkmctw"
+	| "bahamut"
+	| "spotify"
+	| "prime_video";
 
 interface IconProps {
 	size?: number;
@@ -45,6 +53,30 @@ function GrokIcon({ size = 14, color = "#808080" }: IconProps) {
 	);
 }
 
+// Bahamut Anime icon (no brand glyph in Simple Icons — letter badge).
+function BahamutIcon({ size = 14, color = "#FF7800" }: IconProps) {
+	return (
+		<span
+			className="inline-flex items-center justify-center rounded font-bold text-white"
+			style={{ width: size, height: size, background: color, fontSize: Math.round(size * 0.7) }}
+		>
+			巴
+		</span>
+	);
+}
+
+// Prime Video icon (Simple Icons has no Amazon Prime Video glyph — letter badge).
+function PrimeVideoIcon({ size = 14, color = "#00A8E1" }: IconProps) {
+	return (
+		<span
+			className="inline-flex items-center justify-center rounded font-bold text-white"
+			style={{ width: size, height: size, background: color, fontSize: Math.round(size * 0.6) }}
+		>
+			P
+		</span>
+	);
+}
+
 interface PlatformMeta {
 	icon: React.ComponentType<IconProps>;
 	color: string;
@@ -59,12 +91,18 @@ const PLATFORM_META: Record<PlatformKey, PlatformMeta> = {
 		color: "#FF0000",
 		label: "YouTube Premium",
 	},
-	openai: { icon: SiOpenai, color: "#412991", label: "OpenAI" },
+	openai: { icon: SiOpenai, color: "#412991", label: "ChatGPT Web" },
 	claude: { icon: SiAnthropic, color: "#D97757", label: "Claude" },
 	gemini: { icon: SiGooglegemini, color: "#8E75B2", label: "Gemini" },
 	grok: { icon: GrokIcon, color: "#808080", label: "Grok" },
 	disney: { icon: DisneyPlusIcon, color: "#113CCF", label: "Disney+" },
 	tiktok: { icon: SiTiktok, color: "#00F2EA", label: "TikTok" },
+	chatgpt_ios: { icon: SiOpenai, color: "#10A37F", label: "ChatGPT iOS" },
+	bilibili_cn: { icon: SiBilibili, color: "#00A1D6", label: "哔哩哔哩大陆" },
+	bilibili_hkmctw: { icon: SiBilibili, color: "#00A1D6", label: "哔哩哔哩港澳台" },
+	bahamut: { icon: BahamutIcon, color: "#FF7800", label: "巴哈姆特动画疯" },
+	spotify: { icon: SiSpotify, color: "#1DB954", label: "Spotify" },
+	prime_video: { icon: PrimeVideoIcon, color: "#00A8E1", label: "Prime Video" },
 };
 
 // Returns true for Iconify IDs like "simple-icons:netflix" or "mdi:home"
