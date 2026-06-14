@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Play } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { CheckOptionsFields } from "@/components/check-options-fields";
 import { Button } from "@/components/ui/button";
@@ -11,11 +11,13 @@ import {
 } from "@/components/ui/popover";
 import {
 	type CheckFormOptions,
+	hasStoredCheckOptions,
 	loadCheckOptions,
+	reconcileMediaApps,
 	saveCheckOptions,
 } from "@/lib/checkOptions";
 import { isApiError } from "@/lib/client";
-import { queryKeys, useTriggerCheck } from "@/queries";
+import { queryKeys, useRules, useTriggerCheck } from "@/queries";
 
 // Split button: primary click re-runs with the last-used options
 // (localStorage per subscription); the chevron opens the options popover.
@@ -32,6 +34,23 @@ export function RunCheckButton({
 	const [opts, setOpts] = useState<CheckFormOptions>(() =>
 		loadCheckOptions(subscriptionId),
 	);
+	const { data: rulesData } = useRules();
+	const availablePlatforms = useMemo(
+		() =>
+			(rulesData?.rules ?? []).filter((r) => r.enabled).map((r) => r.key),
+		[rulesData],
+	);
+	const reconciled = useRef(false);
+	useEffect(() => {
+		if (!rulesData || reconciled.current) return;
+		reconciled.current = true;
+		setOpts((prev) => ({
+			...prev,
+			media_apps: hasStoredCheckOptions(subscriptionId)
+				? reconcileMediaApps(prev.media_apps, availablePlatforms)
+				: availablePlatforms,
+		}));
+	}, [rulesData, availablePlatforms, subscriptionId]);
 	const triggerMut = useTriggerCheck();
 	const qc = useQueryClient();
 
@@ -85,7 +104,12 @@ export function RunCheckButton({
 					<ChevronDown size={14} />
 				</PopoverTrigger>
 				<PopoverContent className="w-80">
-					<CheckOptionsFields value={opts} onChange={setOpts} showDebug />
+					<CheckOptionsFields
+						value={opts}
+						onChange={setOpts}
+						availablePlatforms={availablePlatforms}
+						showDebug
+					/>
 					<Button
 						variant="success"
 						className="mt-3 w-full"
