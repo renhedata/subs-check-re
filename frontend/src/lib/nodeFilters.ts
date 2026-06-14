@@ -6,14 +6,26 @@ export const BUILTIN_PLATFORMS = [
 	"youtube",
 	"youtube_premium",
 	"openai",
+	"chatgpt_ios",
 	"claude",
 	"gemini",
 	"grok",
 	"disney",
 	"tiktok",
+	"bilibili_cn",
+	"bilibili_hkmctw",
+	"bahamut",
+	"spotify",
+	"prime_video",
 ] as const;
 
 export type BuiltinPlatform = (typeof BUILTIN_PLATFORMS)[number];
+
+export type PlatformOutcomeLike = {
+	unlocked: boolean;
+	status: string;
+	region?: string;
+};
 
 // Structural subset of checker.NodeResult that the helpers need. The real
 // NodeResult satisfies it.
@@ -23,8 +35,8 @@ export type NodeLike = {
 	alive: boolean;
 	latency_ms: number;
 	speed_kbps: number;
-	extra_platforms: Record<string, boolean>;
-} & Record<BuiltinPlatform, boolean>;
+	platforms: Record<string, PlatformOutcomeLike>;
+};
 
 export type SortKey = "latency" | "speed" | "name";
 export type SortDir = "asc" | "desc";
@@ -36,10 +48,7 @@ export interface NodeFilter {
 }
 
 export function nodeHasPlatform(n: NodeLike, platform: string): boolean {
-	if ((BUILTIN_PLATFORMS as readonly string[]).includes(platform)) {
-		return n[platform as BuiltinPlatform] === true;
-	}
-	return n.extra_platforms?.[platform] === true;
+	return n.platforms?.[platform]?.unlocked === true;
 }
 
 export function filterNodes<T extends NodeLike>(

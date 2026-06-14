@@ -3,6 +3,7 @@ import {
 	filterNodes,
 	latencyTone,
 	type NodeLike,
+	nodeHasPlatform,
 	sortNodes,
 } from "./nodeFilters";
 
@@ -13,17 +14,7 @@ function node(partial: Partial<NodeLike>): NodeLike {
 		alive: partial.alive ?? true,
 		latency_ms: partial.latency_ms ?? 100,
 		speed_kbps: partial.speed_kbps ?? 0,
-		netflix: false,
-		youtube: false,
-		youtube_premium: false,
-		openai: false,
-		claude: false,
-		gemini: false,
-		grok: false,
-		disney: false,
-		tiktok: false,
-		extra_platforms: {},
-		...partial,
+		platforms: partial.platforms ?? {},
 	};
 }
 
@@ -56,12 +47,16 @@ describe("sortNodes", () => {
 
 describe("filterNodes", () => {
 	const nodes = [
-		node({ node_id: "hk", node_name: "HK-IEPL-01", netflix: true }),
+		node({
+			node_id: "hk",
+			node_name: "HK-IEPL-01",
+			platforms: { netflix: { unlocked: true, status: "Yes", region: "HK" } },
+		}),
 		node({ node_id: "jp", node_name: "JP Tokyo", alive: false }),
 		node({
 			node_id: "sg",
 			node_name: "SG Marina",
-			extra_platforms: { spotify: true },
+			platforms: { spotify: { unlocked: true, status: "Yes" } },
 		}),
 	];
 
@@ -82,6 +77,20 @@ describe("filterNodes", () => {
 		expect(
 			filterNodes(nodes, { platforms: ["spotify"] }).map((n) => n.node_id),
 		).toEqual(["sg"]);
+	});
+});
+
+describe("nodeHasPlatform (platforms map)", () => {
+	it("reads unlocked from the platforms map for builtin and custom keys", () => {
+		const n = node({
+			platforms: {
+				netflix: { unlocked: true, status: "Yes", region: "US" },
+				spotify: { unlocked: false, status: "No" },
+			},
+		});
+		expect(nodeHasPlatform(n, "netflix")).toBe(true);
+		expect(nodeHasPlatform(n, "spotify")).toBe(false);
+		expect(nodeHasPlatform(n, "absent")).toBe(false);
 	});
 });
 
