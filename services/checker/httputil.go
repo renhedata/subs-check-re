@@ -19,6 +19,7 @@ type httpRequestResult struct {
 	Status   int
 	Body     string
 	FinalURL string
+	Headers  map[string]string
 	Err      error
 }
 
@@ -72,15 +73,26 @@ func trackedHTTPRequest(ctx context.Context, client *http.Client, method, url st
 	}
 	durationMs := time.Since(start).Milliseconds()
 
+	flat := flattenHeaders(resp.Header)
 	if dr != nil {
-		dr.HTTPResp(resp.StatusCode, flattenHeaders(resp.Header), string(rawBody), durationMs, resp.Request.URL.String())
+		dr.HTTPResp(resp.StatusCode, flat, string(rawBody), durationMs, resp.Request.URL.String())
 	}
 
 	return httpRequestResult{
 		Status:   resp.StatusCode,
 		Body:     string(rawBody),
 		FinalURL: resp.Request.URL.String(),
+		Headers:  lowerKeys(flat),
 	}
+}
+
+// lowerKeys returns a copy of h with lower-cased keys (rules look up headers case-insensitively).
+func lowerKeys(h map[string]string) map[string]string {
+	out := make(map[string]string, len(h))
+	for k, v := range h {
+		out[strings.ToLower(k)] = v
+	}
+	return out
 }
 
 // flattenHeaders converts http.Header (multi-value) to a flat map suitable for JSON

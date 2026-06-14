@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/cookiejar"
 
 	"github.com/dop251/goja"
 	"github.com/evanw/esbuild/pkg/api"
@@ -36,10 +37,13 @@ func runJSRule(ctx context.Context, client *http.Client, ruleType string, defRaw
 	// Wrap so a bare `return` at top level is valid.
 	wrapped := "(function() {\n" + code + "\n})()"
 
+	jar, _ := cookiejar.New(nil)
+	ruleClient := &http.Client{Transport: client.Transport, Timeout: client.Timeout, Jar: jar}
+
 	vm := goja.New()
 	vm.SetFieldNameMapper(goja.TagFieldNameMapper("json", true))
 
-	if err := injectHTTPGet(ctx, vm, client, dr); err != nil {
+	if err := injectHTTP(ctx, vm, ruleClient, dr); err != nil {
 		if dr != nil {
 			dr.Error(err)
 		}
@@ -69,6 +73,26 @@ func runJSRule(ctx context.Context, client *http.Client, ruleType string, defRaw
 		}
 		return PlatformOutcome{}, fmt.Errorf("script error: %w", err)
 	}
+	exported := val.Export()
+	if obj, ok := exported.(map[string]interface{}); ok {
+		out := PlatformOutcome{}
+		if u, ok := obj["unlocked"].(bool); ok {
+			out.Unlocked = u
+		}
+		if s, ok := obj["status"].(string); ok {
+			out.Status = s
+		}
+		if r, ok := obj["region"].(string); ok {
+			out.Region = r
+		}
+		if out.Status == "" {
+			out.Status = boolOutcome(out.Unlocked).Status
+		}
+		if dr != nil {
+			dr.Variable("return_value", out)
+		}
+		return out, nil
+	}
 	result := val.ToBoolean()
 	if dr != nil {
 		dr.Variable("return_value", result)
@@ -76,45 +100,85 @@ func runJSRule(ctx context.Context, client *http.Client, ruleType string, defRaw
 	return boolOutcome(result), nil
 }
 
-// httpGetResult is the object returned to scripts by http_get().
+// httpGetResult is the object returned to scripts by http_get(), http_post(), and http_request().
 type httpGetResult struct {
-	Status   int    `json:"status"`
-	Body     string `json:"body"`
-	FinalURL string `json:"final_url"`
+	Status   int               `json:"status"`
+	Body     string            `json:"body"`
+	FinalURL string            `json:"final_url"`
+	Headers  map[string]string `json:"headers"`
 }
 
-// injectHTTPGet registers the http_get() function in the goja VM.
-func injectHTTPGet(ctx context.Context, vm *goja.Runtime, client *http.Client, dr *DebugRecorder) error {
-	fn := func(call goja.FunctionCall) goja.Value {
-		if len(call.Arguments) == 0 {
-			panic(vm.ToValue("http_get requires a URL argument"))
-		}
-		url := call.Arguments[0].String()
-
-		headers := map[string]string{}
-		if len(call.Arguments) > 1 {
-			if opts, ok := call.Arguments[1].Export().(map[string]interface{}); ok {
-				if h, ok := opts["headers"]; ok {
-					if hm, ok := h.(map[string]interface{}); ok {
-						for k, v := range hm {
-							headers[k] = fmt.Sprintf("%v", v)
-						}
-					}
-				}
-			}
-		}
-
-		res := trackedHTTPGet(ctx, client, url, headers, dr)
+// injectHTTP registers http_get, http_post, and http_request functions in the goja VM.
+func injectHTTP(ctx context.Context, vm *goja.Runtime, client *http.Client, dr *DebugRecorder) error {
+	do := func(method, url string, headers map[string]string, body string) goja.Value {
+		res := trackedHTTPRequest(ctx, client, method, url, headers, []byte(body), dr)
 		if res.Err != nil {
 			panic(vm.ToValue(res.Err.Error()))
 		}
 		return vm.ToValue(httpGetResult{
-			Status:   res.Status,
-			Body:     res.Body,
-			FinalURL: res.FinalURL,
+			Status: res.Status, Body: res.Body, FinalURL: res.FinalURL, Headers: res.Headers,
 		})
 	}
-	return vm.Set("http_get", fn)
+	parseOpts := func(call goja.FunctionCall) (map[string]string, string) {
+		headers := map[string]string{}
+		body := ""
+		if len(call.Arguments) > 1 {
+			if opts, ok := call.Arguments[1].Export().(map[string]interface{}); ok {
+				if h, ok := opts["headers"].(map[string]interface{}); ok {
+					for k, v := range h {
+						headers[k] = fmt.Sprintf("%v", v)
+					}
+				}
+				if b, ok := opts["body"]; ok && b != nil {
+					body = fmt.Sprintf("%v", b)
+				}
+			}
+		}
+		return headers, body
+	}
+	get := func(call goja.FunctionCall) goja.Value {
+		if len(call.Arguments) == 0 {
+			panic(vm.ToValue("http_get requires a URL"))
+		}
+		h, _ := parseOpts(call)
+		return do("GET", call.Arguments[0].String(), h, "")
+	}
+	post := func(call goja.FunctionCall) goja.Value {
+		if len(call.Arguments) == 0 {
+			panic(vm.ToValue("http_post requires a URL"))
+		}
+		h, b := parseOpts(call)
+		return do("POST", call.Arguments[0].String(), h, b)
+	}
+	request := func(call goja.FunctionCall) goja.Value {
+		if len(call.Arguments) == 0 {
+			panic(vm.ToValue("http_request requires an options object"))
+		}
+		opts, _ := call.Arguments[0].Export().(map[string]interface{})
+		method, _ := opts["method"].(string)
+		if method == "" {
+			method = "GET"
+		}
+		url, _ := opts["url"].(string)
+		headers := map[string]string{}
+		if h, ok := opts["headers"].(map[string]interface{}); ok {
+			for k, v := range h {
+				headers[k] = fmt.Sprintf("%v", v)
+			}
+		}
+		body := ""
+		if b, ok := opts["body"]; ok && b != nil {
+			body = fmt.Sprintf("%v", b)
+		}
+		return do(method, url, headers, body)
+	}
+	if err := vm.Set("http_get", get); err != nil {
+		return err
+	}
+	if err := vm.Set("http_post", post); err != nil {
+		return err
+	}
+	return vm.Set("http_request", request)
 }
 
 // transpileTS converts TypeScript to JavaScript using esbuild.
