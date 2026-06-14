@@ -163,10 +163,31 @@ func loadJobProxies(ctx context.Context, jobID, subscriptionID, subNamePrefix st
 		aliveClause = ""
 	}
 	query := `
-		WITH r AS (
+		WITH latest_platform_kv AS (
+			SELECT DISTINCT ON (cr2.node_name, kv.key) cr2.node_name, kv.key AS key, kv.value AS value
+			FROM check_results cr2
+			JOIN check_jobs cj2 ON cj2.id = cr2.job_id
+			CROSS JOIN LATERAL jsonb_each(cr2.platforms) AS kv(key, value)
+			WHERE cj2.subscription_id = $2 AND cr2.platforms IS NOT NULL AND cr2.platforms <> '{}'::jsonb
+			ORDER BY cr2.node_name, kv.key, cr2.checked_at DESC
+		),
+		merged_platforms AS (
+			SELECT node_name, jsonb_object_agg(key, value) AS platforms
+			FROM latest_platform_kv
+			GROUP BY node_name
+		),
+		r AS (
 			SELECT COALESCE(n.config, cr.node_config) AS config,
 			       COALESCE(n.name, cr.node_name) AS node_name,
-			       cr.country, cr.platforms,
+			       CASE WHEN cr.country <> '' THEN cr.country
+			            ELSE COALESCE((
+			                SELECT cr2.country FROM check_results cr2
+			                JOIN check_jobs cj2 ON cj2.id = cr2.job_id
+			                WHERE cr2.node_name = cr.node_name AND cj2.subscription_id = $2 AND cr2.country <> ''
+			                ORDER BY cr2.checked_at DESC LIMIT 1
+			            ), '')
+			       END AS country,
+			       COALESCE(mp.platforms, cr.platforms, '{}'::jsonb) AS platforms,
 			       CASE WHEN cr.speed_kbps > 0 THEN cr.speed_kbps
 			            ELSE COALESCE((
 			                SELECT cr2.speed_kbps FROM check_results cr2
@@ -178,6 +199,7 @@ func loadJobProxies(ctx context.Context, jobID, subscriptionID, subNamePrefix st
 			       cr.latency_ms
 			FROM check_results cr
 			LEFT JOIN nodes n ON n.id = cr.node_id
+			LEFT JOIN merged_platforms mp ON mp.node_name = cr.node_name
 			WHERE cr.job_id = $1 AND ` + aliveClause + `COALESCE(n.enabled, true) = true
 		)
 		SELECT config, node_name, country, platforms, speed_kbps, latency_ms
