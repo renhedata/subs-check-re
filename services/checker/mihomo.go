@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/cookiejar"
 	"net/url"
 	"strconv"
 	"sync/atomic"
@@ -19,7 +20,7 @@ import (
 
 const (
 	proxyTimeout = 10 * time.Second
-	aliveTestURL = "http://www.gstatic.com/generate_204"
+	aliveTestURL = "http://cp.cloudflare.com/generate_204"
 	ipLookupURL  = "http://ip-api.com/json/?fields=query,countryCode"
 )
 
@@ -112,19 +113,25 @@ func get(ctx context.Context, client *http.Client, url string) (*http.Response, 
 	return client.Do(req)
 }
 
-// isAlive returns true if the proxy can reach the connectivity test URL.
-func isAlive(ctx context.Context, client *http.Client, testURL string) bool {
+// probeLatency does a single GET to the connectivity URL and returns whether the
+// proxy is alive plus the round-trip latency in ms. Matches clash-verge-rev's
+// single-request delay test. ms is 0 when not alive.
+func probeLatency(ctx context.Context, client *http.Client, testURL string) (alive bool, ms int) {
 	url := testURL
 	if url == "" {
 		url = aliveTestURL
 	}
+	start := time.Now()
 	resp, err := get(ctx, client, url)
 	if err != nil {
-		return false
+		return false, 0
 	}
 	defer resp.Body.Close()
 	io.Copy(io.Discard, resp.Body)
-	return resp.StatusCode >= 200 && resp.StatusCode < 400
+	if resp.StatusCode < 200 || resp.StatusCode >= 400 {
+		return false, 0
+	}
+	return true, int(time.Since(start).Milliseconds())
 }
 
 // getProxyInfo retrieves the external IP and country code via the proxy.
@@ -148,25 +155,6 @@ func getProxyInfo(ctx context.Context, client *http.Client) (ip, country string)
 		return "", ""
 	}
 	return result.Query, result.CountryCode
-}
-
-// measureLatency measures round-trip latency in milliseconds.
-func measureLatency(ctx context.Context, client *http.Client, testURL string) int {
-	url := testURL
-	if url == "" {
-		url = aliveTestURL
-	}
-	start := time.Now()
-	resp, err := get(ctx, client, url)
-	if err != nil {
-		return 0
-	}
-	defer resp.Body.Close()
-	io.Copy(io.Discard, resp.Body)
-	if resp.StatusCode < 200 || resp.StatusCode >= 400 {
-		return 0
-	}
-	return int(time.Since(start).Milliseconds())
 }
 
 const speedTestTimeout = 30 * time.Second
@@ -263,23 +251,14 @@ type nodeCheckResult struct {
 	UploadSpeedKbps int
 	IP              string
 	Country         string
-	Netflix         bool
-	YouTube         bool
-	YouTubePremium  bool
-	OpenAI          bool
-	Claude          bool
-	Gemini          bool
-	Grok            bool
-	Disney          bool
-	TikTok          bool
+	Platforms       map[string]PlatformOutcome
 	TrafficBytes    int64
-	ExtraPlatforms  map[string]bool
 	Debug           *NodeDebug
 }
 
 // checkNode runs all checks for a single proxy mapping and returns the result.
-// User rules override the corresponding built-in checks; rules with non-builtin
-// keys are stored in ExtraPlatforms.
+// Every enabled rule is evaluated and its outcome stored in result.Platforms,
+// keyed by rule key.
 func checkNode(ctx context.Context, nodeID string, mapping map[string]any, speedTestURL, uploadTestURL, latencyTestURL string, opts CheckOptions, rules []*PlatformRule) nodeCheckResult {
 	name, _ := mapping["name"].(string)
 	result := nodeCheckResult{NodeID: nodeID, NodeName: name}
@@ -301,7 +280,8 @@ func checkNode(ctx context.Context, nodeID string, mapping map[string]any, speed
 	}
 	defer pc.close()
 
-	if !isAlive(ctx, pc.Client, latencyTestURL) {
+	alive, latency := probeLatency(ctx, pc.Client, latencyTestURL)
+	if !alive {
 		if opts.Debug && result.Debug != nil {
 			result.Debug.Traces = append(result.Debug.Traces, DebugTrace{
 				Platform: "connectivity",
@@ -312,7 +292,7 @@ func checkNode(ctx context.Context, nodeID string, mapping map[string]any, speed
 		return result
 	}
 	result.Alive = true
-	result.LatencyMs = measureLatency(ctx, pc.Client, latencyTestURL)
+	result.LatencyMs = latency
 	if opts.Debug && result.Debug != nil {
 		result.Debug.Traces = append(result.Debug.Traces, DebugTrace{
 			Platform: "connectivity",
@@ -331,9 +311,11 @@ func checkNode(ctx context.Context, nodeID string, mapping map[string]any, speed
 	}
 
 	if len(opts.MediaApps) > 0 {
+		jar, _ := cookiejar.New(nil)
 		mediaClient := &http.Client{
 			Transport: pc.Transport,
 			Timeout:   8 * time.Second,
+			Jar:       jar,
 		}
 		result.IP, result.Country = getProxyInfo(ctx, mediaClient)
 
@@ -341,52 +323,15 @@ func checkNode(ctx context.Context, nodeID string, mapping map[string]any, speed
 		if opts.Debug {
 			ruleRecorders = make(map[string]*DebugRecorder)
 		}
-		ruleResults := runUserRulesWithDebug(ctx, mediaClient, rules, ruleRecorders)
-
-		extra := make(map[string]bool)
-		for k, v := range ruleResults {
+		outcomes := runUserRulesWithDebug(ctx, mediaClient, rules, ruleRecorders)
+		result.Platforms = make(map[string]PlatformOutcome, len(outcomes))
+		for k, v := range outcomes {
 			if opts.Debug && result.Debug != nil {
 				if rd, ok := ruleRecorders[k]; ok {
-					result.Debug.Traces = append(result.Debug.Traces, DebugTrace{
-						Platform: k, Result: v.Unlocked, Steps: rd.Steps,
-					})
+					result.Debug.Traces = append(result.Debug.Traces, DebugTrace{Platform: k, Result: v.Unlocked, Steps: rd.Steps})
 				}
 			}
-			if !builtinKeys[k] {
-				extra[k] = v.Unlocked
-			}
-		}
-		if len(extra) > 0 {
-			result.ExtraPlatforms = extra
-		}
-
-		// Surface builtin platform results from rule engine output. If a user disabled
-		// or deleted the rule for a key, that platform simply isn't checked — there's
-		// no Go fallback. Default rules are seeded into platform_rules on first ListRules.
-		if hasApp(opts, "netflix") {
-			result.Netflix = ruleResults["netflix"].Unlocked
-		}
-		if hasApp(opts, "youtube") {
-			result.YouTube = ruleResults["youtube"].Unlocked
-			result.YouTubePremium = ruleResults["youtube_premium"].Unlocked
-		}
-		if hasApp(opts, "openai") {
-			result.OpenAI = ruleResults["openai"].Unlocked
-		}
-		if hasApp(opts, "claude") {
-			result.Claude = ruleResults["claude"].Unlocked
-		}
-		if hasApp(opts, "gemini") {
-			result.Gemini = ruleResults["gemini"].Unlocked
-		}
-		if hasApp(opts, "grok") {
-			result.Grok = ruleResults["grok"].Unlocked
-		}
-		if hasApp(opts, "disney") {
-			result.Disney = ruleResults["disney"].Unlocked
-		}
-		if hasApp(opts, "tiktok") {
-			result.TikTok = ruleResults["tiktok"].Unlocked
+			result.Platforms[k] = v
 		}
 	}
 
