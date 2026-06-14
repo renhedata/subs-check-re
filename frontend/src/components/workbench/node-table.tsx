@@ -1,6 +1,6 @@
 import { ArrowDown, ArrowUp } from "lucide-react";
 import { useState } from "react";
-import { PlatformIcon, PlatformIconAny } from "@/components/platform-icons";
+import { PlatformIconAny } from "@/components/platform-icons";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip } from "@/components/ui/tooltip";
 import { NodeDetailDialog } from "@/components/workbench/node-detail-dialog";
@@ -38,31 +38,25 @@ function UnlockIcons({
 	r: NodeResult;
 	ruleByKey: Record<string, PlatformRule>;
 }) {
+	const entries = Object.entries(r.platforms ?? {}).filter(
+		([, o]) => o?.unlocked,
+	);
+	// youtube_premium supersedes the plain youtube icon.
+	const hasPremium = entries.some(([k]) => k === "youtube_premium");
 	return (
 		<div className="flex flex-wrap items-center gap-1.5">
-			{r.netflix && <PlatformIcon platform="netflix" />}
-			{r.youtube && !r.youtube_premium && <PlatformIcon platform="youtube" />}
-			{r.youtube_premium && <PlatformIcon platform="youtube_premium" />}
-			{r.openai && <PlatformIcon platform="openai" />}
-			{r.claude && <PlatformIcon platform="claude" />}
-			{r.gemini && <PlatformIcon platform="gemini" />}
-			{r.grok && <PlatformIcon platform="grok" />}
-			{r.disney && <PlatformIcon platform="disney" />}
-			{r.tiktok && <PlatformIcon platform="tiktok" />}
-			{r.extra_platforms &&
-				Object.entries(r.extra_platforms)
-					.filter(([, v]) => v)
-					.map(([key]) => {
-						const rule = ruleByKey[key];
-						return (
-							<PlatformIconAny
-								key={key}
-								platformKey={key}
-								icon={rule?.icon}
-								label={rule?.name ?? key}
-							/>
-						);
-					})}
+			{entries.map(([key]) => {
+				if (key === "youtube" && hasPremium) return null;
+				const rule = ruleByKey[key];
+				return (
+					<PlatformIconAny
+						key={key}
+						platformKey={key}
+						icon={rule?.icon}
+						label={rule?.name ?? key}
+					/>
+				);
+			})}
 		</div>
 	);
 }
