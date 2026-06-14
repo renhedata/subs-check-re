@@ -154,12 +154,18 @@ func injectHTTP(ctx context.Context, vm *goja.Runtime, client *http.Client, dr *
 		if len(call.Arguments) == 0 {
 			panic(vm.ToValue("http_request requires an options object"))
 		}
-		opts, _ := call.Arguments[0].Export().(map[string]interface{})
+		opts, ok := call.Arguments[0].Export().(map[string]interface{})
+		if !ok {
+			panic(vm.ToValue("http_request: argument must be an object"))
+		}
 		method, _ := opts["method"].(string)
 		if method == "" {
 			method = "GET"
 		}
 		url, _ := opts["url"].(string)
+		if url == "" {
+			panic(vm.ToValue("http_request: options.url is required"))
+		}
 		headers := map[string]string{}
 		if h, ok := opts["headers"].(map[string]interface{}); ok {
 			for k, v := range h {

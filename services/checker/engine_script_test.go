@@ -40,8 +40,20 @@ func TestJSRule_HTTPPostAndHeaders(t *testing.T) {
 func TestJSRule_BareBoolStillWorks(t *testing.T) {
 	client := mockClient(map[string]mockResp{"https://api.test/x": {status: 200, body: "ok"}})
 	def := []byte(`{"code":"var r=http_get('https://api.test/x'); return r.status===200;"}`)
-	out, _ := runJSRule(context.Background(), client, "js", def, nil)
+	out, err := runJSRule(context.Background(), client, "js", def, nil)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
 	if !out.Unlocked || out.Status != "Yes" {
 		t.Fatalf("got %+v", out)
+	}
+}
+
+func TestJSRule_HTTPRequestNonObjectArg(t *testing.T) {
+	client := mockClient(nil)
+	def := []byte(`{"code":"http_request('not-an-object'); return false;"}`)
+	_, err := runJSRule(context.Background(), client, "js", def, nil)
+	if err == nil {
+		t.Fatal("expected error when http_request receives a non-object argument, got nil")
 	}
 }
