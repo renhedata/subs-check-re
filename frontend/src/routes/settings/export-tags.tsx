@@ -45,10 +45,11 @@ function ExportTagsPage() {
 		setTags(byKey);
 	}, [loaded, rules]);
 
-	// youtube_premium is a built-in but not a standalone tag — it renders as the
-	// "YT+" modifier on the youtube tag, so it never gets its own editable row.
+	// youtube_premium → folded into the "YT+" modifier; chatgpt_ios → display-only.
+	// Neither gets its own editable export-tag row.
+	const NON_TAG_BUILTINS = new Set(["youtube_premium", "chatgpt_ios"]);
 	const builtinKeys: string[] = BUILTIN_PLATFORMS.filter(
-		(k) => k !== "youtube_premium",
+		(k) => !NON_TAG_BUILTINS.has(k),
 	);
 	// Filter custom rules against ALL built-in keys (incl. youtube_premium) so a
 	// seeded youtube_premium rule doesn't leak in as a bogus custom platform.

@@ -11,7 +11,7 @@ import type { checker } from "@/lib/client.gen";
 import { cn } from "@/lib/utils";
 import { useLocalUnlock } from "@/queries";
 
-const PLATFORM_KEYS: (keyof checker.LocalUnlockResult)[] = [
+const PLATFORM_KEYS: string[] = [
 	"openai",
 	"claude",
 	"gemini",
@@ -30,7 +30,7 @@ export function UnlockStrip() {
 	const { data, isLoading, isFetching, refetch } = useLocalUnlock();
 
 	const unlockCount = data
-		? PLATFORM_KEYS.filter((k) => data[k] === true).length
+		? PLATFORM_KEYS.filter((k) => data.platforms?.[k]?.unlocked === true).length
 		: 0;
 
 	return (
@@ -73,7 +73,7 @@ export function UnlockStrip() {
 				</p>
 				<div className="flex flex-wrap gap-2">
 					{PLATFORM_KEYS.map((k) => {
-						const available = data ? data[k] === true : false;
+						const available = data ? data.platforms?.[k]?.unlocked === true : false;
 						return (
 							<span
 								key={k}
