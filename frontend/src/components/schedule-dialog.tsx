@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { CheckOptionsFields } from "@/components/check-options-fields";
 import { CronPicker } from "@/components/cron-picker";
@@ -21,11 +21,12 @@ import {
 import {
 	type CheckFormOptions,
 	DEFAULT_CHECK_OPTIONS,
+	reconcileMediaApps,
 } from "@/lib/checkOptions";
 import { isApiError } from "@/lib/client";
 import type { scheduler, subscription } from "@/lib/client.gen";
 import { describeCron, nextRun } from "@/lib/cron";
-import { useCreateScheduledJob } from "@/queries";
+import { useCreateScheduledJob, useRules } from "@/queries";
 
 type ScheduledJob = scheduler.ScheduledJob;
 type Subscription = subscription.Subscription;
@@ -52,6 +53,11 @@ export function ScheduleDialog({
 	const [subId, setSubId] = useState("");
 	const [cron, setCron] = useState("0 */6 * * *");
 	const [opts, setOpts] = useState<CheckFormOptions>(DEFAULT_CHECK_OPTIONS);
+	const { data: rulesData } = useRules();
+	const availablePlatforms = useMemo(
+		() => (rulesData?.rules ?? []).filter((r) => r.enabled).map((r) => r.key),
+		[rulesData],
+	);
 
 	useEffect(() => {
 		if (open) {
@@ -61,13 +67,15 @@ export function ScheduleDialog({
 				...DEFAULT_CHECK_OPTIONS,
 				speed_test: editing?.speed_test ?? true,
 				upload_speed_test: editing?.upload_speed_test ?? false,
-				media_apps: editing?.media_apps ?? [
-					...DEFAULT_CHECK_OPTIONS.media_apps,
-				],
+				media_apps: editing?.media_apps
+					? reconcileMediaApps(editing.media_apps, availablePlatforms)
+					: availablePlatforms.length > 0
+						? availablePlatforms
+						: [...DEFAULT_CHECK_OPTIONS.media_apps],
 				debug: editing?.debug ?? false,
 			});
 		}
-	}, [open, editing]);
+	}, [open, editing, availablePlatforms]);
 
 	const createMut = useCreateScheduledJob();
 	const next = nextRun(cron);
@@ -157,7 +165,11 @@ export function ScheduleDialog({
 						</p>
 					</div>
 
-					<CheckOptionsFields value={opts} onChange={setOpts} />
+					<CheckOptionsFields
+						value={opts}
+						onChange={setOpts}
+						availablePlatforms={availablePlatforms}
+					/>
 				</div>
 
 				<DialogFooter>
