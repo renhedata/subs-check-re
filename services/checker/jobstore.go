@@ -138,17 +138,18 @@ func (s *jobStore) replaceNodes(ctx context.Context, subscriptionID string, prox
 func (s *jobStore) insertResult(ctx context.Context, jobID, nodeID string, proxy map[string]any, res nodeCheckResult) error {
 	nodeType, _ := proxy["type"].(string)
 	nodeConfigJSON, _ := json.Marshal(proxy)
-	extraJSON, _ := json.Marshal(res.ExtraPlatforms)
+	platformsJSON, _ := json.Marshal(res.Platforms)
+	if len(platformsJSON) == 0 || string(platformsJSON) == "null" {
+		platformsJSON = []byte("{}")
+	}
 	_, err := db.Exec(ctx, `
 		INSERT INTO check_results
 		  (id, job_id, node_id, node_name, node_type, node_config, checked_at, alive, latency_ms, speed_kbps, upload_speed_kbps, country, ip,
-		   netflix, youtube, youtube_premium, openai, claude, gemini, grok, disney, tiktok, traffic_bytes, extra_platforms)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)
+		   platforms, traffic_bytes)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
 	`, uuid.New().String(), jobID, nodeID, res.NodeName, nodeType, nodeConfigJSON, time.Now(),
 		res.Alive, res.LatencyMs, res.SpeedKbps, res.UploadSpeedKbps, res.Country, res.IP,
-		res.Netflix, res.YouTube, res.YouTubePremium, res.OpenAI,
-		res.Claude, res.Gemini, res.Grok, res.Disney, res.TikTok,
-		res.TrafficBytes, extraJSON,
+		platformsJSON, res.TrafficBytes,
 	)
 	return err
 }
