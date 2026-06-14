@@ -97,6 +97,9 @@ func (r *jobRunner) run(parentCtx context.Context, jobID, subscriptionID, userID
 	if err != nil {
 		rlog.Warn("failed to load user platform rules; using built-ins", "job_id", jobID, "err", err)
 	}
+	// Only evaluate rules the caller selected for this run; unselected
+	// platforms inherit their last-known result at read time.
+	userRules = filterRulesBySelection(userRules, cfg.Options.MediaApps)
 	uploadTestURL := ""
 	if userCfg, err := settingssvc.GetSpeedTestURLForUser(ctx, userID); err == nil {
 		uploadTestURL = userCfg.UploadTestURL

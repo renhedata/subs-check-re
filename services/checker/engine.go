@@ -56,3 +56,23 @@ func runUserRulesWithDebug(ctx context.Context, client *http.Client, rules []*Pl
 	}
 	return out
 }
+
+// filterRulesBySelection returns only the rules whose Key is in selected.
+// An empty/nil selection yields no rules — an alive-only check tests no
+// platforms, so every platform inherits its last-known value at read time.
+func filterRulesBySelection(rules []*PlatformRule, selected []string) []*PlatformRule {
+	if len(selected) == 0 {
+		return nil
+	}
+	want := make(map[string]bool, len(selected))
+	for _, k := range selected {
+		want[k] = true
+	}
+	out := make([]*PlatformRule, 0, len(rules))
+	for _, r := range rules {
+		if want[r.Key] {
+			out = append(out, r)
+		}
+	}
+	return out
+}

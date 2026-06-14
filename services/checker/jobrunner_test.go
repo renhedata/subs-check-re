@@ -4,6 +4,7 @@ package checker
 import (
 	"context"
 	"encoding/json"
+	"sync"
 	"testing"
 
 	"github.com/google/uuid"
@@ -134,5 +135,54 @@ func TestJobRunnerCanceledContextMarksFailed(t *testing.T) {
 	status, _, _ := jobState(t, jobID)
 	if status != "failed" {
 		t.Errorf("want failed for canceled context, got %s", status)
+	}
+}
+
+func TestJobRunnerFiltersRulesBySelection(t *testing.T) {
+	userID := "filter-user-" + uuid.New().String()
+	subID := "runner-sub-" + uuid.New().String()
+	for _, k := range []string{"netflix", "youtube"} {
+		if _, err := db.Exec(context.Background(),
+			`INSERT INTO platform_rules (id, user_id, name, key, rule_type) VALUES ($1,$2,$3,$4,'condition')`,
+			uuid.New().String(), userID, k, k); err != nil {
+			t.Fatalf("seed rule %s: %v", k, err)
+		}
+	}
+
+	opts := CheckOptions{SpeedTest: false, MediaApps: []string{"netflix"}}
+	optsJSON, _ := json.Marshal(opts)
+	jobID := uuid.New().String()
+	if _, err := db.Exec(context.Background(), `
+		INSERT INTO check_jobs (id, subscription_id, user_id, sub_url, options_json, status, created_at)
+		VALUES ($1,$2,$3,'http://example.test/sub',$4,'queued',NOW())
+	`, jobID, subID, userID, optsJSON); err != nil {
+		t.Fatalf("seed job: %v", err)
+	}
+
+	var mu sync.Mutex
+	var gotKeys []string
+	recording := func(_ context.Context, nodeID string, mapping map[string]any, _, _, _ string, _ CheckOptions, rules []*PlatformRule) nodeCheckResult {
+		mu.Lock()
+		if gotKeys == nil {
+			gotKeys = keysOf(rules)
+			if gotKeys == nil {
+				gotKeys = []string{}
+			}
+		}
+		mu.Unlock()
+		name, _ := mapping["name"].(string)
+		return nodeCheckResult{NodeID: nodeID, NodeName: name, Alive: true}
+	}
+
+	r := &jobRunner{
+		store:   defaultJobStore,
+		fetcher: &scriptedFetcher{out: runnerProxies()},
+		bus:     newInProcessJobBus(),
+		check:   recording,
+	}
+	r.run(context.Background(), jobID, subID, userID)
+
+	if len(gotKeys) != 1 || gotKeys[0] != "netflix" {
+		t.Errorf("runner must pass only selected rules; want [netflix], got %v", gotKeys)
 	}
 }
