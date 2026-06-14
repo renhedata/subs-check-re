@@ -157,7 +157,7 @@ export function RuleInspector({
 	const canSave = name.trim() && (isEdit || ruleKey.trim());
 
 	return (
-		<div className="flex h-full min-w-0 flex-col">
+		<div className="flex h-full min-w-0 flex-1 flex-col">
 			{/* identity header */}
 			<div className="flex items-center gap-3 border-border border-b px-4 py-3">
 				{onMobileBack && (
