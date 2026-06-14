@@ -9,14 +9,21 @@ export interface CheckFormOptions {
 }
 
 export const MEDIA_APPS = [
+	"netflix",
+	"youtube",
+	"youtube_premium",
 	"openai",
+	"chatgpt_ios",
 	"claude",
 	"gemini",
 	"grok",
-	"netflix",
-	"youtube",
 	"disney",
 	"tiktok",
+	"bilibili_cn",
+	"bilibili_hkmctw",
+	"bahamut",
+	"spotify",
+	"prime_video",
 ] as const;
 
 export const DEFAULT_CHECK_OPTIONS: CheckFormOptions = {
