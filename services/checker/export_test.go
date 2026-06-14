@@ -15,11 +15,18 @@ func expUniq() string { return fmt.Sprintf("%d", time.Now().UnixNano()) }
 func TestTaggedNameDefaultConfigFullOrder(t *testing.T) {
 	// All built-ins unlocked under the real defaults must reproduce the exact
 	// legacy export name (order + labels), with premium rendering YT+.
-	flags := unlockFlags{
-		Netflix: true, YouTube: true, YouTubePremium: true, OpenAI: true,
-		Claude: true, Gemini: true, Grok: true, Disney: true, TikTok: true,
+	platforms := map[string]PlatformOutcome{
+		"netflix":         {Unlocked: true, Status: "Yes"},
+		"youtube":         {Unlocked: true, Status: "Yes"},
+		"youtube_premium": {Unlocked: true, Status: "Yes"},
+		"openai":          {Unlocked: true, Status: "Yes"},
+		"claude":          {Unlocked: true, Status: "Yes"},
+		"gemini":          {Unlocked: true, Status: "Yes"},
+		"grok":            {Unlocked: true, Status: "Yes"},
+		"disney":          {Unlocked: true, Status: "Yes"},
+		"tiktok":          {Unlocked: true, Status: "Yes"},
 	}
-	got := taggedName("N", "HK", flags, nil, 1536, settingssvc.DefaultExportTags())
+	got := taggedName("N", "HK", platforms, 1536, settingssvc.DefaultExportTags())
 	if got != "N|NF|GPT|GM|CL|GK|YT+|D+|TK|1.5MB" {
 		t.Errorf("default full order: got %q", got)
 	}
@@ -28,8 +35,8 @@ func TestTaggedNameDefaultConfigFullOrder(t *testing.T) {
 func TestTaggedNamePremiumOnlyEmitsTag(t *testing.T) {
 	// A node flagged premium but not basic youtube must still emit the tag
 	// (the two unlock checks hit different URLs and can disagree).
-	flags := unlockFlags{YouTubePremium: true}
-	got := taggedName("N", "", flags, nil, 0, settingssvc.DefaultExportTags())
+	platforms := map[string]PlatformOutcome{"youtube_premium": {Unlocked: true, Status: "Yes"}}
+	got := taggedName("N", "", platforms, 0, settingssvc.DefaultExportTags())
 	if got != "N|YT+" {
 		t.Errorf("premium-only: got %q", got)
 	}
@@ -48,8 +55,11 @@ func legacyCfg() settingssvc.ExportTagConfig {
 }
 
 func TestTaggedNameLegacyDefault(t *testing.T) {
-	flags := unlockFlags{Netflix: true, OpenAI: true}
-	got := taggedName("HK-01", "HK", flags, nil, 1536, legacyCfg())
+	platforms := map[string]PlatformOutcome{
+		"netflix": {Unlocked: true, Status: "Yes"},
+		"openai":  {Unlocked: true, Status: "Yes"},
+	}
+	got := taggedName("HK-01", "HK", platforms, 1536, legacyCfg())
 	if got != "HK-01|NF|GPT|1.5MB" {
 		t.Errorf("got %q", got)
 	}
@@ -59,8 +69,13 @@ func TestTaggedNameCountryAndPremiumAndDisabled(t *testing.T) {
 	cfg := legacyCfg()
 	cfg.ShowCountry = true
 	cfg.Platforms[1].Enabled = false // disable openai
-	flags := unlockFlags{Netflix: true, OpenAI: true, YouTube: true, YouTubePremium: true}
-	got := taggedName("JP-1", "JP", flags, nil, 0, cfg)
+	platforms := map[string]PlatformOutcome{
+		"netflix":         {Unlocked: true, Status: "Yes"},
+		"openai":          {Unlocked: true, Status: "Yes"},
+		"youtube":         {Unlocked: true, Status: "Yes"},
+		"youtube_premium": {Unlocked: true, Status: "Yes"},
+	}
+	got := taggedName("JP-1", "JP", platforms, 0, cfg)
 	if got != "JP-1|JP|NF|YT+" {
 		t.Errorf("got %q", got)
 	}
@@ -74,9 +89,13 @@ func TestTaggedNameCustomLabelAndExtraSorted(t *testing.T) {
 			{Key: "spotify", Label: "Spotify", Enabled: true},
 		},
 	}
-	flags := unlockFlags{Netflix: true}
-	extra := map[string]bool{"zlib": true, "spotify": true, "off": false}
-	got := taggedName("US", "US", flags, extra, 999, cfg)
+	platforms := map[string]PlatformOutcome{
+		"netflix": {Unlocked: true, Status: "Yes"},
+		"zlib":    {Unlocked: true, Status: "Yes"},
+		"spotify": {Unlocked: true, Status: "Yes"},
+		"off":     {Unlocked: false, Status: "No"},
+	}
+	got := taggedName("US", "US", platforms, 999, cfg)
 	if got != "US|Netflix|Spotify|zlib" {
 		t.Errorf("got %q", got)
 	}
@@ -93,9 +112,8 @@ func seedExportNode(t *testing.T, ctx context.Context, subID, jobID, name string
 		t.Fatalf("seed node %s: %v", name, err)
 	}
 	if _, err := db.Exec(ctx, `
-		INSERT INTO check_results (id, job_id, node_id, node_name, node_type, node_config, alive, latency_ms, speed_kbps, upload_speed_kbps, country, ip,
-			netflix, youtube, youtube_premium, openai, claude, gemini, grok, disney, tiktok, traffic_bytes, extra_platforms)
-		VALUES ($1,$2,$3,$4,'ss',$5::jsonb,$6,$7,$8,0,'','',false,false,false,false,false,false,false,false,false,0,'{}'::jsonb)
+		INSERT INTO check_results (id, job_id, node_id, node_name, node_type, node_config, alive, latency_ms, speed_kbps, upload_speed_kbps, country, ip, traffic_bytes)
+		VALUES ($1,$2,$3,$4,'ss',$5::jsonb,$6,$7,$8,0,'','',0)
 	`, "expr-"+name+"-"+jobID, jobID, nodeID, name, cfg, alive, latencyMs, speedKbps); err != nil {
 		t.Fatalf("seed result %s: %v", name, err)
 	}

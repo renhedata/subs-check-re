@@ -29,87 +29,51 @@ func orderClause(s string) string {
 	return "speed_kbps DESC NULLS LAST, latency_ms ASC NULLS LAST"
 }
 
-// unlockFlags carries a node's built-in platform unlock booleans.
-type unlockFlags struct {
-	Netflix        bool
-	YouTube        bool
-	YouTubePremium bool
-	OpenAI         bool
-	Claude         bool
-	Gemini         bool
-	Grok           bool
-	Disney         bool
-	TikTok         bool
-}
-
-// builtinUnlocked maps a built-in platform key to whether this node unlocked it.
-func (f unlockFlags) builtinUnlocked(key string) bool {
-	switch key {
-	case "netflix":
-		return f.Netflix
-	case "youtube":
-		return f.YouTube || f.YouTubePremium
-	case "openai":
-		return f.OpenAI
-	case "claude":
-		return f.Claude
-	case "gemini":
-		return f.Gemini
-	case "grok":
-		return f.Grok
-	case "disney":
-		return f.Disney
-	case "tiktok":
-		return f.TikTok
-	default:
-		return false
-	}
-}
-
 // taggedName appends country / platform / speed tags to a node name per cfg.
-// Order: country, built-in platforms (cfg order), custom extra_platforms
-// (sorted by key), speed. Returns the bare name when no tags apply.
-func taggedName(name, country string, f unlockFlags, extra map[string]bool, speedKbps int, cfg settingssvc.ExportTagConfig) string {
+// Order: country, built-in platforms (cfg order), custom platforms (sorted by
+// key), speed. A platform is tagged when its outcome is Unlocked.
+func taggedName(name, country string, platforms map[string]PlatformOutcome, speedKbps int, cfg settingssvc.ExportTagConfig) string {
 	tags := []string{}
 
 	if cfg.ShowCountry && country != "" {
 		tags = append(tags, country)
 	}
 
-	builtin := map[string]bool{
-		"netflix": true, "youtube": true, "openai": true, "claude": true,
-		"gemini": true, "grok": true, "disney": true, "tiktok": true,
+	unlocked := func(key string) bool {
+		o, ok := platforms[key]
+		return ok && o.Unlocked
 	}
+
 	cfgByKey := map[string]settingssvc.PlatformTag{}
 	for _, p := range cfg.Platforms {
 		cfgByKey[p.Key] = p
 	}
 
 	for _, p := range cfg.Platforms {
-		if !builtin[p.Key] || !p.Enabled {
+		if !builtinKeys[p.Key] || !p.Enabled {
 			continue
 		}
-		if !f.builtinUnlocked(p.Key) {
+		if p.Key == "youtube" {
+			if unlocked("youtube_premium") {
+				tags = append(tags, p.Label+"+")
+			} else if unlocked("youtube") {
+				tags = append(tags, p.Label)
+			}
 			continue
 		}
-		if p.Key == "youtube" && f.YouTubePremium {
-			tags = append(tags, p.Label+"+")
-		} else {
+		if unlocked(p.Key) {
 			tags = append(tags, p.Label)
 		}
 	}
 
-	keys := make([]string, 0, len(extra))
-	for k, v := range extra {
-		if v {
+	keys := make([]string, 0, len(platforms))
+	for k, o := range platforms {
+		if o.Unlocked && !builtinKeys[k] {
 			keys = append(keys, k)
 		}
 	}
 	sort.Strings(keys)
 	for _, k := range keys {
-		if builtin[k] {
-			continue
-		}
 		if p, ok := cfgByKey[k]; ok {
 			if !p.Enabled {
 				continue
@@ -202,18 +166,13 @@ func loadJobProxies(ctx context.Context, jobID, subscriptionID, subNamePrefix st
 		WITH r AS (
 			SELECT COALESCE(n.config, cr.node_config) AS config,
 			       COALESCE(n.name, cr.node_name) AS node_name,
-			       cr.netflix, cr.youtube, cr.youtube_premium, cr.openai, cr.claude, cr.gemini, cr.grok, cr.disney, cr.tiktok,
-			       cr.country, cr.extra_platforms,
+			       cr.country, cr.platforms,
 			       CASE WHEN cr.speed_kbps > 0 THEN cr.speed_kbps
 			            ELSE COALESCE((
-			                SELECT cr2.speed_kbps
-			                FROM check_results cr2
+			                SELECT cr2.speed_kbps FROM check_results cr2
 			                JOIN check_jobs cj2 ON cj2.id = cr2.job_id
-			                WHERE cr2.node_name = cr.node_name
-			                  AND cj2.subscription_id = $2
-			                  AND cr2.speed_kbps > 0
-			                ORDER BY cr2.checked_at DESC
-			                LIMIT 1
+			                WHERE cr2.node_name = cr.node_name AND cj2.subscription_id = $2 AND cr2.speed_kbps > 0
+			                ORDER BY cr2.checked_at DESC LIMIT 1
 			            ), 0)
 			       END AS speed_kbps,
 			       cr.latency_ms
@@ -221,8 +180,7 @@ func loadJobProxies(ctx context.Context, jobID, subscriptionID, subNamePrefix st
 			LEFT JOIN nodes n ON n.id = cr.node_id
 			WHERE cr.job_id = $1 AND ` + aliveClause + `COALESCE(n.enabled, true) = true
 		)
-		SELECT config, node_name, netflix, youtube, youtube_premium, openai, claude, gemini, grok, disney, tiktok,
-		       country, extra_platforms, speed_kbps, latency_ms
+		SELECT config, node_name, country, platforms, speed_kbps, latency_ms
 		FROM r
 		ORDER BY ` + orderClause(prefs.Sort)
 	rows, err := db.Query(ctx, query, jobID, subscriptionID)
@@ -234,18 +192,14 @@ func loadJobProxies(ctx context.Context, jobID, subscriptionID, subNamePrefix st
 	var out []map[string]any
 	for rows.Next() {
 		var (
-			configJSON                                                                      []byte
-			name                                                                            string
-			netflix, youtube, youtubePremium, openai, claude, gemini, grok, disney, tiktok bool
-			country                                                                          string
-			extraJSON                                                                        []byte
-			speedKbps                                                                        int
-			latencyMs                                                                        sql.NullInt64
+			configJSON    []byte
+			name          string
+			country       string
+			platformsJSON []byte
+			speedKbps     int
+			latencyMs     sql.NullInt64
 		)
-		if err := rows.Scan(&configJSON, &name,
-			&netflix, &youtube, &youtubePremium, &openai, &claude, &gemini, &grok, &disney, &tiktok,
-			&country, &extraJSON,
-			&speedKbps, &latencyMs); err != nil {
+		if err := rows.Scan(&configJSON, &name, &country, &platformsJSON, &speedKbps, &latencyMs); err != nil {
 			continue
 		}
 		if len(configJSON) == 0 {
@@ -255,16 +209,11 @@ func loadJobProxies(ctx context.Context, jobID, subscriptionID, subNamePrefix st
 		if json.Unmarshal(configJSON, &nodeCfg) != nil {
 			continue
 		}
-		var extra map[string]bool
-		if len(extraJSON) > 0 {
-			_ = json.Unmarshal(extraJSON, &extra)
+		var platforms map[string]PlatformOutcome
+		if len(platformsJSON) > 0 {
+			_ = json.Unmarshal(platformsJSON, &platforms)
 		}
-		tagged := taggedName(name, country,
-			unlockFlags{
-				Netflix: netflix, YouTube: youtube, YouTubePremium: youtubePremium,
-				OpenAI: openai, Claude: claude, Gemini: gemini, Grok: grok,
-				Disney: disney, TikTok: tiktok,
-			}, extra, speedKbps, cfg)
+		tagged := taggedName(name, country, platforms, speedKbps, cfg)
 		if subNamePrefix != "" {
 			nodeCfg["name"] = subNamePrefix + "|" + tagged
 		} else {
