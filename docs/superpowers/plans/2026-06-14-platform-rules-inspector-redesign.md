@@ -4,7 +4,7 @@
 
 **Goal:** Replace the `/rules` page (centered list + slide-over Sheet editor) with a professional master–detail inspector: left rule list, right inline inspector/editor, no dialog/sheet.
 
-**Architecture:** A frontend-only redesign that **restructures existing, working pieces** (`ConditionEditor`, `ScriptEditorArea`, `ConsolePanel`, `DocsPanel`, `IconPicker`, `engine` helpers, the save/test logic from `RuleEditorDialog`) into new focused components: `RuleListPane`, `RuleInspector`, `RuleDefinitionEditor`, `RuleTestPanel`, `IconPickerPopover`. Build new alongside old (build stays green), swap the page, then delete the old (`RuleEditorDialog`, `SortableRuleList`, `ui/sheet`, `RuleCard`).
+**Architecture:** A redesign that is frontend-only except for **Task 0** (customizable built-in rules + a Reset endpoint). It **restructures existing, working pieces** (`ConditionEditor`, `ScriptEditorArea`, `ConsolePanel`, `DocsPanel`, `IconPicker`, `engine` helpers, the save/test logic from `RuleEditorDialog`) into new focused components: `RuleListPane`, `RuleInspector`, `RuleDefinitionEditor`, `RuleTestPanel`, `IconPickerPopover`. Build new alongside old (build stays green), swap the page, then delete the old (`RuleEditorDialog`, `SortableRuleList`, `ui/sheet`, `RuleCard`).
 
 **Tech Stack:** React + TanStack Router, `@dnd-kit` (already a dep), Base UI Popover, Monaco (existing `engine`), Biome (tabs). All `bun` commands from `frontend/`.
 
@@ -35,6 +35,275 @@
 | `frontend/src/components/platforms/RuleEditorDialog.tsx`, `SortableRuleList.tsx`, `RuleCard.tsx`, `components/ui/sheet.tsx` | **Delete** (Task 5) |
 
 > `RuleDefinitionEditor` and `RuleTestPanel` from the spec are realized **inline inside `RuleInspector`** to keep file count sane (the inspector is the one owner of edit state). If `RuleInspector.tsx` exceeds ~250 lines, extract them then.
+
+---
+
+## Task 0: Backend — customizable built-in rules + Reset
+
+**Files:**
+- Create: `services/checker/migrations/23_rule_customized.up.sql` + `.down.sql`
+- Modify: `services/checker/rules.go` (struct field, loaders, `UpdateRule`, new `ResetRule`, helper)
+- Modify: `services/checker/rules_defaults.go` (`syncDefaultRules` respects `customized`, stops resetting `sort_order`)
+- Test: `services/checker/rules_reset_test.go`
+- Regenerate the typed client at the end.
+
+Makes built-in rule edits persist (instead of being overwritten by `syncDefaultRules`) and adds a reset-to-default endpoint.
+
+- [ ] **Step 1: Write the failing test**
+
+`services/checker/rules_reset_test.go`:
+
+```go
+package checker
+
+import (
+	"context"
+	"encoding/json"
+	"testing"
+
+	"encore.dev/beta/auth"
+	"encore.dev/et"
+	"github.com/google/uuid"
+
+	authsvc "subs-check-re/services/auth"
+)
+
+func TestCustomizeAndResetBuiltinRule(t *testing.T) {
+	userID := "reset-user-" + uuid.New().String()
+	et.OverrideAuthInfo(auth.UID(userID), &authsvc.UserClaims{UserID: userID})
+	ctx := context.Background()
+
+	if err := syncDefaultRules(ctx, userID); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	// find the seeded netflix rule
+	var id string
+	if err := db.QueryRow(ctx,
+		`SELECT id FROM platform_rules WHERE user_id=$1 AND key='netflix'`, userID).Scan(&id); err != nil {
+		t.Fatalf("find netflix: %v", err)
+	}
+
+	// edit its content -> should mark customized
+	edited := json.RawMessage(`{"code":"return {unlocked:true,status:\"Yes\",region:\"ZZ\"};"}`)
+	if _, err := UpdateRule(ctx, id, &UpdateRuleParams{
+		Name: "Netflix", Icon: "simple-icons:netflix", Enabled: true,
+		RuleType: "js", Definition: edited, SortOrder: 0,
+	}); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	var customized bool
+	db.QueryRow(ctx, `SELECT customized FROM platform_rules WHERE id=$1`, id).Scan(&customized)
+	if !customized {
+		t.Fatal("editing a built-in rule's content must set customized=true")
+	}
+
+	// sync again -> must NOT overwrite the customized rule
+	if err := syncDefaultRules(ctx, userID); err != nil {
+		t.Fatalf("re-sync: %v", err)
+	}
+	var defAfter string
+	db.QueryRow(ctx, `SELECT definition::text FROM platform_rules WHERE id=$1`, id).Scan(&defAfter)
+	if defAfter != string(edited) {
+		t.Fatalf("sync overwrote a customized rule: %s", defAfter)
+	}
+
+	// reset -> back to seed + customized cleared
+	if _, err := ResetRule(ctx, id); err != nil {
+		t.Fatalf("reset: %v", err)
+	}
+	var cust2 bool
+	var def2 string
+	db.QueryRow(ctx, `SELECT customized, definition::text FROM platform_rules WHERE id=$1`, id).Scan(&cust2, &def2)
+	if cust2 {
+		t.Fatal("reset must clear customized")
+	}
+	if def2 == string(edited) {
+		t.Fatal("reset must restore the seed definition")
+	}
+}
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `encore test ./services/checker/ -run TestCustomizeAndResetBuiltinRule`
+Expected: FAIL — `customized` column / `ResetRule` don't exist yet (compile error).
+
+- [ ] **Step 3: Migration**
+
+`services/checker/migrations/23_rule_customized.up.sql`:
+
+```sql
+ALTER TABLE platform_rules ADD COLUMN customized boolean NOT NULL DEFAULT false;
+```
+
+`services/checker/migrations/23_rule_customized.down.sql`:
+
+```sql
+ALTER TABLE platform_rules DROP COLUMN customized;
+```
+
+- [ ] **Step 4: `rules.go` — field, loaders, UpdateRule, ResetRule, helper**
+
+1. Add `"reflect"` to imports. Add the field to `PlatformRule` (after `IsDefault`):
+
+```go
+	IsDefault  bool            `json:"is_default"`
+	Customized bool            `json:"customized"`
+```
+
+2. `loadUserRules` — add `customized` to the SELECT (after `is_default`) and to the Scan (after `&r.IsDefault`):
+
+```go
+		`SELECT id, user_id, name, key, icon, enabled, rule_type, definition, is_default, customized, sort_order, created_at, updated_at
+		 FROM platform_rules WHERE user_id=$1 ORDER BY sort_order, created_at`,
+```
+```go
+			if err := rows.Scan(&r.ID, &r.UserID, &r.Name, &r.Key, &r.Icon, &r.Enabled, &r.RuleType,
+				&rawDef, &r.IsDefault, &r.Customized, &r.SortOrder, &r.CreatedAt, &r.UpdatedAt); err != nil {
+```
+
+3. Add the seed-comparison helper (near `defaultRuleByKey`, but it lives in rules.go is fine):
+
+```go
+// ruleContentMatchesSeed reports whether a rule's editable content equals the seed.
+func ruleContentMatchesSeed(name, icon, ruleType string, def json.RawMessage, seed defaultRule) bool {
+	if name != seed.name || icon != seed.icon || ruleType != seed.ruleType {
+		return false
+	}
+	seedJSON, _ := json.Marshal(seed.def)
+	var a, b any
+	if json.Unmarshal(seedJSON, &a) != nil || json.Unmarshal(def, &b) != nil {
+		return false
+	}
+	return reflect.DeepEqual(a, b)
+}
+```
+
+4. `UpdateRule` — compute `customized` and write it. Replace the body between the `validRuleTypes` check and the final read-back SELECT:
+
+```go
+	now := time.Now()
+	defJSON, _ := json.Marshal(p.Definition)
+
+	// Determine customized: a built-in becomes customized when its content
+	// diverges from the seed (enable-toggle / reorder alone don't count).
+	var isDefault bool
+	var ruleKey string
+	if err := db.QueryRow(ctx,
+		`SELECT is_default, key FROM platform_rules WHERE id=$1 AND user_id=$2`,
+		ruleId, claims.UserID).Scan(&isDefault, &ruleKey); err != nil {
+		return nil, errs.B().Code(errs.NotFound).Msg("rule not found").Err()
+	}
+	customized := false
+	if isDefault {
+		if seed, ok := defaultRuleByKey(ruleKey); ok {
+			customized = !ruleContentMatchesSeed(p.Name, p.Icon, p.RuleType, defJSON, seed)
+		} else {
+			customized = true
+		}
+	}
+
+	result, err := db.Exec(ctx, `
+		UPDATE platform_rules
+		SET name=$3, icon=$4, enabled=$5, rule_type=$6, definition=$7, sort_order=$8, customized=$9, updated_at=$10
+		WHERE id=$1 AND user_id=$2
+	`, ruleId, claims.UserID, p.Name, p.Icon, p.Enabled, p.RuleType, defJSON, p.SortOrder, customized, now)
+	if err != nil {
+		return nil, errs.B().Code(errs.Internal).Msg("failed to update rule").Err()
+	}
+	rows := result.RowsAffected()
+	if rows == 0 {
+		return nil, errs.B().Code(errs.NotFound).Msg("rule not found").Err()
+	}
+```
+
+Then update the read-back SELECT/Scan at the end of `UpdateRule` to include `customized` (after `is_default`):
+
+```go
+	if err := db.QueryRow(ctx,
+		`SELECT id, user_id, name, key, icon, enabled, rule_type, definition, is_default, customized, sort_order, created_at, updated_at
+		 FROM platform_rules WHERE id=$1`,
+		ruleId,
+	).Scan(&rule.ID, &rule.UserID, &rule.Name, &rule.Key, &rule.Icon, &rule.Enabled, &rule.RuleType,
+		&rawDef, &rule.IsDefault, &rule.Customized, &rule.SortOrder, &rule.CreatedAt, &rule.UpdatedAt); err != nil {
+```
+
+5. Add `ResetRule` (after `DeleteRule`):
+
+```go
+// ResetRule restores a built-in rule to its seeded default and clears the
+// customized flag. The enabled state is preserved.
+//
+//encore:api auth method=POST path=/platform-rules/:ruleId/reset
+func ResetRule(ctx context.Context, ruleId string) (*PlatformRule, error) {
+	claims := encauth.Data().(*authsvc.UserClaims)
+
+	var isDefault bool
+	var ruleKey string
+	if err := db.QueryRow(ctx,
+		`SELECT is_default, key FROM platform_rules WHERE id=$1 AND user_id=$2`,
+		ruleId, claims.UserID).Scan(&isDefault, &ruleKey); err != nil {
+		return nil, errs.B().Code(errs.NotFound).Msg("rule not found").Err()
+	}
+	seed, ok := defaultRuleByKey(ruleKey)
+	if !isDefault || !ok {
+		return nil, errs.B().Code(errs.InvalidArgument).Msg("not a built-in rule").Err()
+	}
+	defJSON, _ := json.Marshal(seed.def)
+	if _, err := db.Exec(ctx, `
+		UPDATE platform_rules
+		SET name=$3, icon=$4, rule_type=$5, definition=$6, sort_order=$7, customized=false, updated_at=$8
+		WHERE id=$1 AND user_id=$2
+	`, ruleId, claims.UserID, seed.name, seed.icon, seed.ruleType, defJSON, seed.sortOrder, time.Now()); err != nil {
+		return nil, errs.B().Code(errs.Internal).Msg("failed to reset rule").Err()
+	}
+
+	var rule PlatformRule
+	var rawDef []byte
+	if err := db.QueryRow(ctx,
+		`SELECT id, user_id, name, key, icon, enabled, rule_type, definition, is_default, customized, sort_order, created_at, updated_at
+		 FROM platform_rules WHERE id=$1`,
+		ruleId,
+	).Scan(&rule.ID, &rule.UserID, &rule.Name, &rule.Key, &rule.Icon, &rule.Enabled, &rule.RuleType,
+		&rawDef, &rule.IsDefault, &rule.Customized, &rule.SortOrder, &rule.CreatedAt, &rule.UpdatedAt); err != nil {
+		return nil, errs.B().Code(errs.Internal).Msg("failed to read reset rule").Err()
+	}
+	rule.Definition = rawDef
+	return &rule, nil
+}
+```
+
+6. `CreateRule`'s returned struct literal — add `Customized: false,` (it already sets `IsDefault: false`).
+
+- [ ] **Step 5: `rules_defaults.go` — sync respects customized, keeps user order**
+
+In `syncDefaultRules`, change the `ON CONFLICT … DO UPDATE` so it (a) no longer resets `sort_order`, and (b) skips customized rows:
+
+```go
+			ON CONFLICT (user_id, key) DO UPDATE SET
+			  name=EXCLUDED.name, icon=EXCLUDED.icon, rule_type=EXCLUDED.rule_type,
+			  definition=EXCLUDED.definition, updated_at=EXCLUDED.updated_at
+			WHERE platform_rules.is_default = true AND platform_rules.customized = false
+```
+
+(The `INSERT … VALUES` still sets `sort_order` for brand-new rows — only the conflict-update drops it.)
+
+- [ ] **Step 6: Run test + full suite**
+
+Run: `encore test ./services/checker/ -run TestCustomizeAndResetBuiltinRule` → PASS.
+Run: `encore test ./services/checker/` → full suite green.
+
+- [ ] **Step 7: Regenerate the typed client**
+
+Run: `encore gen client subs-check-uqti --lang=typescript --output=./frontend/src/lib/client.gen.ts`
+Expected: `PlatformRule` gains `customized: boolean`; a `ResetRule` method appears under `checker`.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add services/checker/migrations/23_rule_customized.up.sql services/checker/migrations/23_rule_customized.down.sql services/checker/rules.go services/checker/rules_defaults.go services/checker/rules_reset_test.go frontend/src/lib/client.gen.ts
+git commit -m "feat(checker): customizable built-in rules + ResetRule (sync respects customized)"
+```
 
 ---
 
@@ -461,7 +730,20 @@ Restructures `RuleEditorDialog`'s logic (save/test/type-switch, `ConditionEditor
 
 - [ ] **Step 1: Implement**
 
-Read `frontend/src/components/platforms/engine.ts(x)` (for `defaultDef`, `RULE_TYPES`, `RULE_TYPE_LABELS`, `RuleType`, `useMonacoSetup`) and `confirm-dialog` usage before writing. Create `RuleInspector.tsx`:
+First add the reset hook to `frontend/src/queries/rules.ts` (it needs Task 0's regenerated client with `client.checker.ResetRule`):
+
+```ts
+export function useResetRule() {
+	const qc = useQueryClient();
+	return useMutation({
+		mutationFn: (id: string) => client.checker.ResetRule(id),
+		onSuccess: () =>
+			qc.invalidateQueries({ queryKey: queryKeys.platformRules() }),
+	});
+}
+```
+
+(Re-export it from `@/queries` if that barrel explicitly lists rule hooks — check `frontend/src/queries/index.ts`.) Then read `frontend/src/components/platforms/engine.ts(x)` (for `defaultDef`, `RULE_TYPES`, `RULE_TYPE_LABELS`, `RuleType`, `useMonacoSetup`) before writing. The `warning`/`warning-muted` tokens used by the Modified badge already exist in the theme (used elsewhere, e.g. latency tones). Create `RuleInspector.tsx`:
 
 ```tsx
 import { ChevronLeft, Loader2, Play, Trash2 } from "lucide-react";
@@ -476,6 +758,7 @@ import { useTheme } from "@/lib/theme";
 import {
 	useCreateRule,
 	useDeleteRule,
+	useResetRule,
 	useTestNodes,
 	useUpdateRule,
 } from "@/queries";
@@ -527,6 +810,7 @@ export function RuleInspector({
 	const createMut = useCreateRule();
 	const updateMut = useUpdateRule();
 	const deleteMut = useDeleteRule();
+	const resetMut = useResetRule();
 	const saving = createMut.isPending || updateMut.isPending;
 
 	function changeType(t: RuleType) {
@@ -750,10 +1034,28 @@ export function RuleInspector({
 
 			{/* footer */}
 			<div className="flex items-center gap-2 border-border border-t px-4 py-3">
-				{isEdit && rule?.is_default && (
-					<span className="text-[11px] text-muted-foreground">
-						Built-in — edits are overwritten on upgrade.
-					</span>
+				{isEdit && rule?.is_default && rule.customized && (
+					<>
+						<span className="rounded bg-warning-muted px-1.5 py-0.5 text-[11px] text-warning">
+							Modified
+						</span>
+						<button
+							type="button"
+							onClick={() =>
+								resetMut.mutate(rule.id, {
+									onSuccess: () => {
+										toast.success("Reset to default");
+										onClose();
+									},
+									onError: () => toast.error("Failed to reset"),
+								})
+							}
+							disabled={resetMut.isPending}
+							className="rounded-md border border-border px-2.5 py-1 text-muted-foreground text-xs hover:bg-secondary disabled:opacity-50"
+						>
+							Reset to default
+						</button>
+					</>
 				)}
 				<Button
 					variant="success"

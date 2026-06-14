@@ -83,9 +83,20 @@ Map the mockup palette to existing tokens: panels/borders via `bg-card`/`border-
 - Keep/port any existing unit tests that still apply; add a focused unit test for the draft→create vs existing→update branch selection in `RuleInspector` if it's cleanly extractable (pure function for "which mutation").
 - Browser walkthrough (definition of done) covers the interactive behavior.
 
+## Section 6 — Customizable built-in rules + Reset (added)
+
+Today `syncDefaultRules` upserts every `is_default` rule on each `ListRules`, so user edits to a built-in rule are silently overwritten (they never persist). To make built-in rules editable **and** resettable:
+
+- **`customized` flag** — new `platform_rules.customized boolean DEFAULT false` column. `syncDefaultRules` only restores built-ins **where `customized=false`**, so a user-edited built-in is preserved. The sync also stops resetting `sort_order` (only sets it on insert), so reordering built-ins persists too.
+- **Marking** — `UpdateRule` sets `customized=true` for an `is_default` rule **only when its content (name/icon/rule_type/definition) actually differs from the seed** (`defaultRuleByKey`). Toggling `enabled` or reordering alone does **not** mark it customized (those already persist independently). Reverting content back to the seed clears the flag.
+- **Reset** — new `POST /platform-rules/:ruleId/reset`: for an `is_default` rule, restore `name/icon/rule_type/definition/sort_order` from the seed and clear `customized`. 404 for non-existent / non-default rules.
+- **UI (Inspector)** — for an `is_default` rule, show a small **"Modified"** badge + a **"Reset to default"** button when `customized`. Reset calls the endpoint and the rule reverts (refetch).
+
+This **changes** the verge-documented "built-in edits are overwritten on upgrade" behavior — by design, per this request. The inspector's old "edits are overwritten" hint is replaced by the Modified/Reset affordance.
+
 ## Out of Scope
 
-- Backend changes (none — endpoints already exist).
+- Other backend changes (the rest of the redesign is frontend-only — only this Section 6 touches the backend).
 - The icon system internals (`RuleIcon`/`usePlatformDisplay`/`iconUpload`) — already shipped; only the picker's *presentation* is reworked.
 - Merging the branch to `main`.
 - Multi-select / bulk actions on rules.
