@@ -10,12 +10,25 @@ var platformNames = map[string]string{
 	"netflix":         "Netflix",
 	"youtube":         "YouTube",
 	"youtube_premium": "YouTube Premium",
-	"openai":          "OpenAI",
+	"openai":          "ChatGPT Web",
+	"chatgpt_ios":     "ChatGPT iOS",
 	"claude":          "Claude",
 	"gemini":          "Gemini",
 	"grok":            "Grok",
 	"disney":          "Disney+",
 	"tiktok":          "TikTok",
+	"bilibili_cn":     "哔哩哔哩大陆",
+	"bilibili_hkmctw": "哔哩哔哩港澳台",
+	"bahamut":         "巴哈姆特动画疯",
+	"spotify":         "Spotify",
+	"prime_video":     "Prime Video",
+}
+
+// platformOrder controls display order in reports; keys not listed render last, sorted.
+var platformOrder = []string{
+	"netflix", "youtube", "youtube_premium", "openai", "chatgpt_ios",
+	"claude", "gemini", "grok", "disney", "tiktok",
+	"bilibili_cn", "bilibili_hkmctw", "bahamut", "spotify", "prime_video",
 }
 
 func platformDisplayName(key string) string {
@@ -25,24 +38,35 @@ func platformDisplayName(key string) string {
 	return key
 }
 
-type platformEntry struct {
-	emoji string
-	label string
-	count int
-}
-
-func platformEntries(p PlatformCounts) []platformEntry {
-	return []platformEntry{
-		{"🎬", "Netflix", p.Netflix},
-		{"▶️", "YouTube", p.YouTube},
-		{"⭐", "YouTube Premium", p.YouTubePremium},
-		{"🤖", "OpenAI", p.OpenAI},
-		{"🧠", "Claude", p.Claude},
-		{"💎", "Gemini", p.Gemini},
-		{"⚡", "Grok", p.Grok},
-		{"🏰", "Disney+", p.Disney},
-		{"🎵", "TikTok", p.TikTok},
+// orderedPlatformKeys returns keys in platformOrder first, then any extra keys
+// present in either map, sorted. Pass nil for the map you don't have.
+func orderedPlatformKeys(boolM map[string]bool, intM map[string]int) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, k := range platformOrder {
+		if _, ok := boolM[k]; ok {
+			out = append(out, k)
+			seen[k] = true
+			continue
+		}
+		if _, ok := intM[k]; ok {
+			out = append(out, k)
+			seen[k] = true
+		}
 	}
+	var extra []string
+	for k := range boolM {
+		if !seen[k] {
+			extra = append(extra, k)
+		}
+	}
+	for k := range intM {
+		if !seen[k] {
+			extra = append(extra, k)
+		}
+	}
+	sort.Strings(extra)
+	return append(out, extra...)
 }
 
 func formatSpeed(kbps int) string {
@@ -66,11 +90,10 @@ func formatCheckReport(s *JobReport) string {
 		b.WriteString(fmt.Sprintf("⏱ <b>Latency:</b> avg %dms\n", s.AvgLatencyMs))
 	}
 
-	entries := platformEntries(s.Platforms)
 	var unlocked []string
-	for _, e := range entries {
-		if e.count > 0 {
-			unlocked = append(unlocked, fmt.Sprintf("  %s %s: %d", e.emoji, e.label, e.count))
+	for _, key := range orderedPlatformKeys(map[string]bool(nil), s.Platforms) {
+		if n := s.Platforms[key]; n > 0 {
+			unlocked = append(unlocked, fmt.Sprintf("  %s: %d", platformDisplayName(key), n))
 		}
 	}
 	if len(unlocked) > 0 {
@@ -123,30 +146,13 @@ func formatUnlockReport(r *LocalUnlockReport) string {
 		b.WriteString(fmt.Sprintf("📍 %s %s\n", r.Country, r.IP))
 	}
 
-	type item struct {
-		emoji string
-		name  string
-		ok    bool
-	}
-	platforms := []item{
-		{"🎬", "Netflix", r.Netflix},
-		{"▶️", "YouTube", r.YouTube},
-		{"⭐", "YouTube Premium", r.YouTubePremium},
-		{"🤖", "OpenAI", r.OpenAI},
-		{"🧠", "Claude", r.Claude},
-		{"💎", "Gemini", r.Gemini},
-		{"⚡", "Grok", r.Grok},
-		{"🏰", "Disney+", r.Disney},
-		{"🎵", "TikTok", r.TikTok},
-	}
-
 	b.WriteByte('\n')
-	for _, p := range platforms {
+	for _, key := range orderedPlatformKeys(r.Platforms, nil) {
 		status := "❌"
-		if p.ok {
+		if r.Platforms[key] {
 			status = "✅"
 		}
-		b.WriteString(fmt.Sprintf("%s %s %s\n", p.emoji, p.name, status))
+		b.WriteString(fmt.Sprintf("%s %s\n", platformDisplayName(key), status))
 	}
 
 	return b.String()

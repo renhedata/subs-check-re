@@ -84,18 +84,8 @@ type JobReport struct {
 	Countries        map[string]int
 }
 
-// PlatformCounts holds per-platform unlock counts for a job.
-type PlatformCounts struct {
-	Netflix        int
-	YouTube        int
-	YouTubePremium int
-	OpenAI         int
-	Claude         int
-	Gemini         int
-	Grok           int
-	Disney         int
-	TikTok         int
-}
+// PlatformCounts maps a platform key to how many nodes unlocked it.
+type PlatformCounts map[string]int
 
 // TopNode is one high-performing node row in a JobReport.
 type TopNode struct {
@@ -107,17 +97,9 @@ type TopNode struct {
 
 // LocalUnlockReport is the notification-side view of a local-network unlock probe.
 type LocalUnlockReport struct {
-	IP             string
-	Country        string
-	Netflix        bool
-	YouTube        bool
-	YouTubePremium bool
-	OpenAI         bool
-	Claude         bool
-	Gemini         bool
-	Grok           bool
-	Disney         bool
-	TikTok         bool
+	IP        string
+	Country   string
+	Platforms map[string]bool
 }
 
 // fromCheckerSummary copies the cross-service payload into the local DTO so that
@@ -128,22 +110,15 @@ func fromCheckerSummary(s *checkersvc.JobDetailedSummary) *JobReport {
 		SubscriptionName: s.SubscriptionName,
 		Available:        s.Available,
 		Total:            s.Total,
-		Platforms: PlatformCounts{
-			Netflix:        s.Platforms.Netflix,
-			YouTube:        s.Platforms.YouTube,
-			YouTubePremium: s.Platforms.YouTubePremium,
-			OpenAI:         s.Platforms.OpenAI,
-			Claude:         s.Platforms.Claude,
-			Gemini:         s.Platforms.Gemini,
-			Grok:           s.Platforms.Grok,
-			Disney:         s.Platforms.Disney,
-			TikTok:         s.Platforms.TikTok,
-		},
-		AvgSpeedKbps: s.AvgSpeedKbps,
-		MaxSpeedKbps: s.MaxSpeedKbps,
-		AvgLatencyMs: s.AvgLatencyMs,
-		Countries:    s.Countries,
-		TopNodes:     make([]TopNode, 0, len(s.TopNodes)),
+		Platforms:        PlatformCounts(s.Platforms),
+		AvgSpeedKbps:     s.AvgSpeedKbps,
+		MaxSpeedKbps:     s.MaxSpeedKbps,
+		AvgLatencyMs:     s.AvgLatencyMs,
+		Countries:        s.Countries,
+		TopNodes:         make([]TopNode, 0, len(s.TopNodes)),
+	}
+	if r.Platforms == nil {
+		r.Platforms = PlatformCounts{}
 	}
 	for _, n := range s.TopNodes {
 		r.TopNodes = append(r.TopNodes, TopNode{
@@ -158,10 +133,9 @@ func fromCheckerSummary(s *checkersvc.JobDetailedSummary) *JobReport {
 }
 
 func fromCheckerLocalUnlock(r *checkersvc.LocalUnlockResult) *LocalUnlockReport {
-	return &LocalUnlockReport{
-		IP: r.IP, Country: r.Country,
-		Netflix: r.Netflix, YouTube: r.YouTube, YouTubePremium: r.YouTubePremium,
-		OpenAI: r.OpenAI, Claude: r.Claude, Gemini: r.Gemini,
-		Grok: r.Grok, Disney: r.Disney, TikTok: r.TikTok,
+	out := &LocalUnlockReport{IP: r.IP, Country: r.Country, Platforms: map[string]bool{}}
+	for k, v := range r.Platforms {
+		out.Platforms[k] = v.Unlocked
 	}
+	return out
 }

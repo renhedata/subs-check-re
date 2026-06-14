@@ -441,8 +441,8 @@ func sampleJobReport() *JobReport {
 		Available:        42,
 		Total:            100,
 		Platforms: PlatformCounts{
-			Netflix: 10, YouTube: 15, OpenAI: 8,
-			Claude: 5, Gemini: 7, Disney: 3,
+			"netflix": 10, "youtube": 15, "openai": 8,
+			"claude": 5, "gemini": 7, "disney": 3,
 		},
 		AvgSpeedKbps: 5120,
 		MaxSpeedKbps: 15360,

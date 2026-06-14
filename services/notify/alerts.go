@@ -11,16 +11,9 @@ import (
 // checkPlatformAlerts compares the current job's platform counts against the stored
 // last-known state and sends alerts for any platform that dropped from available to zero.
 func checkPlatformAlerts(ctx context.Context, userID, subID string, summary *JobReport) {
-	current := map[string]bool{
-		"netflix":         summary.Platforms.Netflix > 0,
-		"youtube":         summary.Platforms.YouTube > 0,
-		"youtube_premium": summary.Platforms.YouTubePremium > 0,
-		"openai":          summary.Platforms.OpenAI > 0,
-		"claude":          summary.Platforms.Claude > 0,
-		"gemini":          summary.Platforms.Gemini > 0,
-		"grok":            summary.Platforms.Grok > 0,
-		"disney":          summary.Platforms.Disney > 0,
-		"tiktok":          summary.Platforms.TikTok > 0,
+	current := map[string]bool{}
+	for key, count := range summary.Platforms {
+		current[key] = count > 0
 	}
 
 	prev := loadPreviousPlatformState(ctx, subID)
