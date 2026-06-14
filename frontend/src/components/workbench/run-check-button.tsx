@@ -36,8 +36,7 @@ export function RunCheckButton({
 	);
 	const { data: rulesData } = useRules();
 	const availablePlatforms = useMemo(
-		() =>
-			(rulesData?.rules ?? []).filter((r) => r.enabled).map((r) => r.key),
+		() => (rulesData?.rules ?? []).filter((r) => r.enabled).map((r) => r.key),
 		[rulesData],
 	);
 	const reconciled = useRef(false);
