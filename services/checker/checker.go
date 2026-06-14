@@ -498,9 +498,23 @@ func GetResults(ctx context.Context, subscriptionID string, p *GetResultsParams)
 		}
 	}
 
-	// speed_kbps / upload_speed_kbps fall back to the most recent historical value if this job skipped speed testing.
+	// speed_kbps / upload_speed_kbps / country / platforms fall back to the most recent historical
+	// value if this job skipped measuring them. Platform inheritance is per-key.
 	rows, err := db.Query(ctx, `
-		WITH r AS (
+		WITH latest_platform_kv AS (
+			SELECT DISTINCT ON (cr2.node_name, kv.key) cr2.node_name, kv.key AS key, kv.value AS value
+			FROM check_results cr2
+			JOIN check_jobs cj2 ON cj2.id = cr2.job_id
+			CROSS JOIN LATERAL jsonb_each(cr2.platforms) AS kv(key, value)
+			WHERE cj2.subscription_id = $2 AND cr2.platforms IS NOT NULL AND cr2.platforms <> '{}'::jsonb
+			ORDER BY cr2.node_name, kv.key, cr2.checked_at DESC
+		),
+		merged_platforms AS (
+			SELECT node_name, jsonb_object_agg(key, value) AS platforms
+			FROM latest_platform_kv
+			GROUP BY node_name
+		),
+		r AS (
 			SELECT cr.node_id,
 			       COALESCE(n.name, cr.node_name) AS node_name,
 			       COALESCE(n.type, cr.node_type) AS node_type,
@@ -511,32 +525,34 @@ func GetResults(ctx context.Context, subscriptionID string, p *GetResultsParams)
 			       cr.alive, cr.latency_ms,
 			       CASE WHEN cr.speed_kbps > 0 THEN cr.speed_kbps
 			            ELSE COALESCE((
-			                SELECT cr2.speed_kbps
-			                FROM check_results cr2
+			                SELECT cr2.speed_kbps FROM check_results cr2
 			                JOIN check_jobs cj2 ON cj2.id = cr2.job_id
-			                WHERE cr2.node_name = cr.node_name
-			                  AND cj2.subscription_id = $2
-			                  AND cr2.speed_kbps > 0
-			                ORDER BY cr2.checked_at DESC
-			                LIMIT 1
+			                WHERE cr2.node_name = cr.node_name AND cj2.subscription_id = $2 AND cr2.speed_kbps > 0
+			                ORDER BY cr2.checked_at DESC LIMIT 1
 			            ), 0)
 			       END AS speed_kbps,
 			       CASE WHEN cr.upload_speed_kbps > 0 THEN cr.upload_speed_kbps
 			            ELSE COALESCE((
-			                SELECT cr2.upload_speed_kbps
-			                FROM check_results cr2
+			                SELECT cr2.upload_speed_kbps FROM check_results cr2
 			                JOIN check_jobs cj2 ON cj2.id = cr2.job_id
-			                WHERE cr2.node_name = cr.node_name
-			                  AND cj2.subscription_id = $2
-			                  AND cr2.upload_speed_kbps > 0
-			                ORDER BY cr2.checked_at DESC
-			                LIMIT 1
+			                WHERE cr2.node_name = cr.node_name AND cj2.subscription_id = $2 AND cr2.upload_speed_kbps > 0
+			                ORDER BY cr2.checked_at DESC LIMIT 1
 			            ), 0)
 			       END AS upload_speed_kbps,
-			       cr.country, cr.ip,
-			       cr.platforms, cr.traffic_bytes
+			       CASE WHEN cr.country <> '' THEN cr.country
+			            ELSE COALESCE((
+			                SELECT cr2.country FROM check_results cr2
+			                JOIN check_jobs cj2 ON cj2.id = cr2.job_id
+			                WHERE cr2.node_name = cr.node_name AND cj2.subscription_id = $2 AND cr2.country <> ''
+			                ORDER BY cr2.checked_at DESC LIMIT 1
+			            ), '')
+			       END AS country,
+			       cr.ip,
+			       COALESCE(mp.platforms, cr.platforms, '{}'::jsonb) AS platforms,
+			       cr.traffic_bytes
 			FROM check_results cr
 			LEFT JOIN nodes n ON n.id = cr.node_id
+			LEFT JOIN merged_platforms mp ON mp.node_name = cr.node_name
 			WHERE cr.job_id = $1
 		)
 		SELECT * FROM r

@@ -3,6 +3,7 @@ package checker
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -16,6 +17,89 @@ import (
 func resultsCtx(userID string) context.Context {
 	et.OverrideAuthInfo(auth.UID(userID), &authsvc.UserClaims{UserID: userID})
 	return context.Background()
+}
+
+func seedFullResult(t *testing.T, jobID, subID, userID, nodeName string, ageHours int,
+	alive bool, latency, speed int, country string, platforms map[string]PlatformOutcome) {
+	t.Helper()
+	jobExists := 0
+	db.QueryRow(context.Background(), `SELECT COUNT(*) FROM check_jobs WHERE id=$1`, jobID).Scan(&jobExists)
+	if jobExists == 0 {
+		if _, err := db.Exec(context.Background(), `
+			INSERT INTO check_jobs (id, subscription_id, user_id, status, total, available, created_at, finished_at)
+			VALUES ($1,$2,$3,'completed',1,1,NOW(),NOW())
+		`, jobID, subID, userID); err != nil {
+			t.Fatalf("seed job: %v", err)
+		}
+	}
+	pj, _ := json.Marshal(platforms)
+	if string(pj) == "null" {
+		pj = []byte("{}")
+	}
+	if _, err := db.Exec(context.Background(), `
+		INSERT INTO check_results (id, job_id, node_id, node_name, node_type, checked_at, alive, latency_ms, speed_kbps, country, ip, platforms)
+		VALUES ($1,$2,$3,$4,'ss', NOW() - make_interval(hours => $5::int), $6,$7,$8,$9,'', $10)
+	`, uuid.New().String(), jobID, uuid.New().String(), nodeName, ageHours, alive, latency, speed, country, pj); err != nil {
+		t.Fatalf("seed result: %v", err)
+	}
+}
+
+func TestGetResultsInheritsUnmeasuredDimensions(t *testing.T) {
+	userID := "inh-user-" + uuid.New().String()
+	subID := "inh-sub-" + uuid.New().String()
+	ctx := resultsCtx(userID)
+	jobA, jobB := uuid.New().String(), uuid.New().String()
+
+	// Older full check: speed 5000, HK, netflix + youtube unlocked.
+	seedFullResult(t, jobA, subID, userID, "N1", 2, true, 50, 5000, "HK",
+		map[string]PlatformOutcome{"netflix": {Unlocked: true}, "youtube": {Unlocked: true}})
+	// Newer alive-only check: fresh alive/latency, nothing else.
+	seedFullResult(t, jobB, subID, userID, "N1", 0, true, 30, 0, "",
+		map[string]PlatformOutcome{})
+
+	resp, err := GetResults(ctx, subID, &GetResultsParams{JobID: jobB})
+	if err != nil {
+		t.Fatalf("GetResults: %v", err)
+	}
+	r := resp.Results[0]
+	if r.LatencyMs != 30 {
+		t.Errorf("latency must be fresh from alive-only run, got %d", r.LatencyMs)
+	}
+	if r.SpeedKbps != 5000 {
+		t.Errorf("speed must inherit, got %d", r.SpeedKbps)
+	}
+	if r.Country != "HK" {
+		t.Errorf("country must inherit, got %q", r.Country)
+	}
+	if !r.Platforms["netflix"].Unlocked || !r.Platforms["youtube"].Unlocked {
+		t.Errorf("platforms must inherit, got %+v", r.Platforms)
+	}
+}
+
+func TestGetResultsPlatformInheritanceIsPerKey(t *testing.T) {
+	userID := "perkey-user-" + uuid.New().String()
+	subID := "perkey-sub-" + uuid.New().String()
+	ctx := resultsCtx(userID)
+	jobA, jobC := uuid.New().String(), uuid.New().String()
+
+	// Older: netflix + youtube both unlocked.
+	seedFullResult(t, jobA, subID, userID, "N1", 2, true, 100, 1000, "US",
+		map[string]PlatformOutcome{"netflix": {Unlocked: true}, "youtube": {Unlocked: true}})
+	// Newer: tested netflix only, now locked. youtube NOT tested.
+	seedFullResult(t, jobC, subID, userID, "N1", 1, true, 100, 1000, "US",
+		map[string]PlatformOutcome{"netflix": {Unlocked: false}})
+
+	resp, err := GetResults(ctx, subID, &GetResultsParams{JobID: jobC})
+	if err != nil {
+		t.Fatalf("GetResults: %v", err)
+	}
+	r := resp.Results[0]
+	if r.Platforms["netflix"].Unlocked {
+		t.Error("netflix must reflect the fresh (locked) result")
+	}
+	if !r.Platforms["youtube"].Unlocked {
+		t.Error("youtube must inherit the older unlocked result (per-key)")
+	}
 }
 
 func TestGetResultsReturnsServerPortConfig(t *testing.T) {
