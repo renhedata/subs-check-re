@@ -8,7 +8,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { isApiError } from "@/lib/client";
 import type { settings } from "@/lib/client.gen";
-import { BUILTIN_PLATFORMS } from "@/lib/nodeFilters";
 import { useRules, useSettings, useUpdateSettings } from "@/queries";
 
 export const Route = createFileRoute("/settings/export-tags")({
@@ -44,18 +43,11 @@ function ExportTagsPage() {
 		setTags(byKey);
 	}, [loaded, rules]);
 
-	// youtube_premium → folded into the "YT+" modifier; chatgpt_ios → display-only.
-	// Neither gets its own editable export-tag row.
-	const NON_TAG_BUILTINS = new Set(["youtube_premium", "chatgpt_ios"]);
-	const builtinKeys: string[] = BUILTIN_PLATFORMS.filter(
-		(k) => !NON_TAG_BUILTINS.has(k),
-	);
-	// Filter custom rules against ALL built-in keys (incl. youtube_premium) so a
-	// seeded youtube_premium rule doesn't leak in as a bogus custom platform.
-	const allBuiltinSet = new Set<string>(BUILTIN_PLATFORMS);
-	const customKeys = rules
+	// Every rule is taggable, in rule order. youtube_premium folds into YouTube's
+	// "YT+" modifier at export time, so it has no standalone tag row.
+	const tagKeys: string[] = rules
 		.map((r) => r.key)
-		.filter((k) => !allBuiltinSet.has(k));
+		.filter((k) => k !== "youtube_premium");
 
 	const setTag = (key: string, patch: Partial<PlatformTag>) =>
 		setTags((prev) => ({
@@ -69,14 +61,8 @@ function ExportTagsPage() {
 	function buildPreview(): string {
 		const parts = ["HK-01"];
 		if (showCountry) parts.push("HK");
-		const sample = new Set(["netflix", "openai", ...customKeys.slice(0, 1)]);
-		for (const k of builtinKeys) {
-			const t = tags[k];
-			if (t?.enabled && sample.has(k)) parts.push(t.label || k);
-		}
-		for (const k of [...customKeys].sort()) {
-			const t = tags[k];
-			if (t?.enabled && sample.has(k)) parts.push(t.label || k);
+		for (const k of tagKeys.filter((k) => tags[k]?.enabled).slice(0, 3)) {
+			parts.push(tags[k]?.label || labelFor(k));
 		}
 		if (showSpeed) parts.push("10.5MB");
 		return parts.join("|");
@@ -84,10 +70,9 @@ function ExportTagsPage() {
 
 	function save() {
 		if (!loaded) return;
-		const platforms: PlatformTag[] = [
-			...builtinKeys.map((k) => tags[k]).filter(Boolean),
-			...customKeys.map((k) => tags[k]).filter(Boolean),
-		];
+		const platforms: PlatformTag[] = tagKeys
+			.map((k) => tags[k])
+			.filter(Boolean);
 		const next: settings.UserSettings = {
 			...loaded,
 			export_tags: {
@@ -135,7 +120,7 @@ function ExportTagsPage() {
 			<section className="rounded-lg border border-border bg-card p-4">
 				<p className="mb-3 font-medium text-foreground text-sm">Platforms</p>
 				<div className="space-y-2">
-					{[...builtinKeys, ...customKeys].map((key) => {
+					{tagKeys.map((key) => {
 						const t = tags[key];
 						return (
 							<div key={key} className="flex items-center gap-3">

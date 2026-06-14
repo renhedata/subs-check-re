@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Radar } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMonacoSetup } from "@/components/platforms/engine";
 import { RuleInspector } from "@/components/platforms/RuleInspector";
 import { RuleListPane } from "@/components/platforms/RuleListPane";
@@ -26,6 +26,23 @@ function RulesPage() {
 			setSelectedId(null);
 		}
 	}, [rules, selectedId]);
+
+	// On desktop, open the first rule by default so the inspector isn't blank on
+	// landing. Fires once; mobile stays on the list.
+	const didAutoSelect = useRef(false);
+	useEffect(() => {
+		if (didAutoSelect.current) return;
+		if (
+			rules.length > 0 &&
+			!selectedId &&
+			!draft &&
+			typeof window !== "undefined" &&
+			window.matchMedia("(min-width: 1024px)").matches
+		) {
+			didAutoSelect.current = true;
+			setSelectedId(rules[0].id);
+		}
+	}, [rules, selectedId, draft]);
 
 	const selected = rules.find((r) => r.id === selectedId) ?? null;
 	const showInspector = draft || !!selected;
