@@ -1,4 +1,4 @@
-import { ChevronLeft, Loader2, Play, Trash2 } from "lucide-react";
+import { BookOpen, ChevronLeft, Loader2, Play, Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { IconPickerPopover } from "@/components/platforms/IconPickerPopover";
@@ -7,6 +7,7 @@ import { Switch } from "@/components/ui/switch";
 import { client } from "@/lib/client";
 import type { checker } from "@/lib/client.gen";
 import { useTheme } from "@/lib/theme";
+import { cn } from "@/lib/utils";
 import {
 	useCreateRule,
 	useDeleteRule,
@@ -14,9 +15,9 @@ import {
 	useTestNodes,
 	useUpdateRule,
 } from "@/queries";
-import { cn } from "@/lib/utils";
 import { ConditionEditor } from "./ConditionEditor";
 import { ConsolePanel } from "./ConsolePanel";
+import { DocsPanel } from "./DocsPanel";
 import {
 	defaultDef,
 	RULE_TYPE_LABELS,
@@ -56,6 +57,7 @@ export function RuleInspector({
 	const [testResult, setTestResult] = useState<TestRuleResult | null>(null);
 	const [testing, setTesting] = useState(false);
 	const [testNodeId, setTestNodeId] = useState("");
+	const [showDocs, setShowDocs] = useState(true);
 	const consoleRef = useRef<HTMLDivElement>(null);
 
 	const testNodes = useTestNodes().data?.nodes ?? [];
@@ -107,7 +109,8 @@ export function RuleInspector({
 			toast.success(isEdit ? "Rule saved" : "Rule created");
 			onClose();
 		};
-		const onError = () => toast.error(isEdit ? "Failed to save" : "Failed to create");
+		const onError = () =>
+			toast.error(isEdit ? "Failed to save" : "Failed to create");
 		if (isEdit && rule) {
 			updateMut.mutate(
 				{
@@ -167,7 +170,12 @@ export function RuleInspector({
 						<ChevronLeft size={18} />
 					</button>
 				)}
-				<IconPickerPopover value={icon} onChange={setIcon} name={name} size={40} />
+				<IconPickerPopover
+					value={icon}
+					onChange={setIcon}
+					name={name}
+					size={40}
+				/>
 				<div className="min-w-0">
 					<input
 						value={name}
@@ -210,7 +218,23 @@ export function RuleInspector({
 							</button>
 						))}
 					</div>
-					<Switch checked={enabled} onCheckedChange={(v) => setEnabled(v === true)} />
+					<button
+						type="button"
+						onClick={() => setShowDocs((d) => !d)}
+						className={cn(
+							"hidden h-7 items-center gap-1 rounded-md border px-2 text-[11px] transition-colors xl:flex",
+							showDocs
+								? "border-primary/40 text-primary"
+								: "border-border text-muted-foreground hover:bg-secondary",
+						)}
+						aria-pressed={showDocs}
+					>
+						<BookOpen size={12} /> Docs
+					</button>
+					<Switch
+						checked={enabled}
+						onCheckedChange={(v) => setEnabled(v === true)}
+					/>
 					{isEdit && (
 						<button
 							type="button"
@@ -224,64 +248,78 @@ export function RuleInspector({
 				</div>
 			</div>
 
-			{/* definition */}
-			<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-				{ruleType === "condition" ? (
-					<div className="flex-1 overflow-y-auto p-4">
-						<ConditionEditor def={def} onChange={setDef} />
+			{/* editor + test (left) · docs (right) */}
+			<div className="flex min-h-0 flex-1 overflow-hidden">
+				<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+					{/* definition */}
+					<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+						{ruleType === "condition" ? (
+							<div className="flex-1 overflow-y-auto p-4">
+								<ConditionEditor def={def} onChange={setDef} />
+							</div>
+						) : (
+							<ScriptEditorArea
+								def={def}
+								onChange={setDef}
+								lang={ruleType}
+								monacoTheme={monacoTheme}
+								activeTab={activeTab}
+								onTabChange={setActiveTab}
+							/>
+						)}
 					</div>
-				) : (
-					<ScriptEditorArea
-						def={def}
-						onChange={setDef}
-						lang={ruleType}
-						monacoTheme={monacoTheme}
-						activeTab={activeTab}
-						onTabChange={setActiveTab}
-					/>
-				)}
-			</div>
 
-			{/* test */}
-			<div className="border-border border-t bg-card/40">
-				<div className="flex items-center gap-2 px-4 py-2.5">
-					<select
-						value={testNodeId}
-						onChange={(e) => setTestNodeId(e.target.value)}
-						className="h-7 max-w-[170px] rounded-lg border border-border bg-background px-2 text-muted-foreground text-xs focus:outline-none"
-						title="Node to test through"
-					>
-						<option value="">Direct (no proxy)</option>
-						{testNodes.map((n) => (
-							<option key={n.id} value={n.id}>
-								{n.name}
-							</option>
-						))}
-					</select>
-					<button
-						type="button"
-						onClick={runTest}
-						disabled={testing}
-						className="flex h-7 items-center gap-1.5 rounded-lg bg-primary px-3 font-medium text-primary-foreground text-xs hover:opacity-90 disabled:opacity-50"
-					>
-						{testing ? <Loader2 size={11} className="animate-spin" /> : <Play size={11} />}
-						{testing ? "Running…" : "Run test"}
-					</button>
+					{/* test */}
+					<div className="border-border border-t bg-card/40">
+						<div className="flex items-center gap-2 px-4 py-2.5">
+							<select
+								value={testNodeId}
+								onChange={(e) => setTestNodeId(e.target.value)}
+								className="h-7 max-w-[170px] rounded-lg border border-border bg-background px-2 text-muted-foreground text-xs focus:outline-none"
+								title="Node to test through"
+							>
+								<option value="">Direct (no proxy)</option>
+								{testNodes.map((n) => (
+									<option key={n.id} value={n.id}>
+										{n.name}
+									</option>
+								))}
+							</select>
+							<button
+								type="button"
+								onClick={runTest}
+								disabled={testing}
+								className="flex h-7 items-center gap-1.5 rounded-lg bg-primary px-3 font-medium text-primary-foreground text-xs hover:opacity-90 disabled:opacity-50"
+							>
+								{testing ? (
+									<Loader2 size={11} className="animate-spin" />
+								) : (
+									<Play size={11} />
+								)}
+								{testing ? "Running…" : "Run test"}
+							</button>
+						</div>
+						<div ref={consoleRef}>
+							{(testResult || testing) && (
+								<ConsolePanel
+									result={testResult}
+									loading={testing}
+									nodeLabel={
+										testResult?.node_name ??
+										(testNodeId
+											? (testNodes.find((n) => n.id === testNodeId)?.name ?? "")
+											: "")
+									}
+								/>
+							)}
+						</div>
+					</div>
 				</div>
-				<div ref={consoleRef}>
-					{(testResult || testing) && (
-						<ConsolePanel
-							result={testResult}
-							loading={testing}
-							nodeLabel={
-								testResult?.node_name ??
-								(testNodeId
-									? (testNodes.find((n) => n.id === testNodeId)?.name ?? "")
-									: "")
-							}
-						/>
-					)}
-				</div>
+				{showDocs && (
+					<div className="hidden w-80 shrink-0 overflow-y-auto border-border border-l xl:block">
+						<DocsPanel ruleType={ruleType} />
+					</div>
+				)}
 			</div>
 
 			{/* footer */}
