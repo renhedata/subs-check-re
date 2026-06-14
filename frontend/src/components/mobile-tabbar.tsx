@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Clock, List, Settings } from "lucide-react";
+import { Clock, List, Radar, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const TABS = [
@@ -10,6 +10,13 @@ const TABS = [
 		icon: Clock,
 		exact: true,
 		matchPrefix: "/scheduler",
+	},
+	{
+		to: "/rules",
+		label: "Rules",
+		icon: Radar,
+		exact: false,
+		matchPrefix: "/rules",
 	},
 	{
 		to: "/settings/general",

@@ -1,5 +1,5 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { Clock, List, LogOut, Moon, Settings, Sun } from "lucide-react";
+import { Clock, List, LogOut, Moon, Radar, Settings, Sun } from "lucide-react";
 import type React from "react";
 import {
 	DropdownMenu,
@@ -27,6 +27,13 @@ const NAV_ITEMS = [
 		icon: Clock,
 		exact: true,
 		matchPrefix: "/scheduler",
+	},
+	{
+		to: "/rules",
+		label: "Platform Rules",
+		icon: Radar,
+		exact: false,
+		matchPrefix: "/rules",
 	},
 	{
 		to: "/settings/general",
