@@ -14,17 +14,12 @@ import (
 	authsvc "subs-check-re/services/auth"
 )
 
-// builtinKeys are platform keys with dedicated bool columns in check_results.
+// builtinKeys are platform keys treated as first-class builtins; controls
+// export-tag ordering and suppresses double-tagging.
 var builtinKeys = map[string]bool{
-	"netflix":         true,
-	"youtube":         true,
-	"youtube_premium": true,
-	"openai":          true,
-	"claude":          true,
-	"gemini":          true,
-	"grok":            true,
-	"disney":          true,
-	"tiktok":          true,
+	"netflix": true, "youtube": true, "youtube_premium": true, "openai": true, "chatgpt_ios": true,
+	"claude": true, "gemini": true, "grok": true, "disney": true, "tiktok": true,
+	"bilibili_cn": true, "bilibili_hkmctw": true, "bahamut": true, "spotify": true, "prime_video": true,
 }
 
 // PlatformOutcome is the result of evaluating one platform rule for one node.
