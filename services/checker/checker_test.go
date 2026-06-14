@@ -204,3 +204,21 @@ func TestMeasureSpeedPartialDownload(t *testing.T) {
 		t.Error("expected non-zero speed for partial download")
 	}
 }
+
+func TestApplyOptionDefaults_PreservesExplicitAliveOnly(t *testing.T) {
+	// Explicit empty media + no speed = alive-only. Must NOT be reset to full.
+	o := CheckOptions{SpeedTest: false, UploadSpeedTest: false, MediaApps: []string{}}
+	applyOptionDefaults(&o)
+	if o.SpeedTest || len(o.MediaApps) != 0 {
+		t.Errorf("alive-only must be preserved, got %+v", o)
+	}
+}
+
+func TestApplyOptionDefaults_DefaultsNilMedia(t *testing.T) {
+	// Omitted media (nil) defaults to the built-in platform list.
+	o := CheckOptions{SpeedTest: true, MediaApps: nil}
+	applyOptionDefaults(&o)
+	if len(o.MediaApps) == 0 {
+		t.Error("nil media must default to built-in list")
+	}
+}

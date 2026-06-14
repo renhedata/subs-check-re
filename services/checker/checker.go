@@ -150,10 +150,9 @@ func defaultCheckOptions() CheckOptions {
 }
 
 func applyOptionDefaults(o *CheckOptions) {
-	if o.SpeedTest == false && len(o.MediaApps) == 0 {
-		*o = defaultCheckOptions()
-		return
-	}
+	// A nil slice means the field was omitted → default to the built-in
+	// platform list. An explicit empty slice means "test no platforms"
+	// (e.g. an alive-only run) and must be preserved.
 	if o.MediaApps == nil {
 		o.MediaApps = defaultCheckOptions().MediaApps
 	}
