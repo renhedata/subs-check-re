@@ -1,6 +1,5 @@
 import { CheckCircle, Globe, RefreshCw } from "lucide-react";
-import type { PlatformKey } from "@/components/platform-icons";
-import { PlatformIcon } from "@/components/platform-icons";
+import { RulePlatformIcon } from "@/components/rule-icon";
 import { Button } from "@/components/ui/button";
 import {
 	Popover,
@@ -10,27 +9,16 @@ import {
 import { cn } from "@/lib/utils";
 import { useLocalUnlock } from "@/queries";
 
-const PLATFORM_KEYS: string[] = [
-	"openai",
-	"claude",
-	"gemini",
-	"grok",
-	"netflix",
-	"youtube",
-	"youtube_premium",
-	"disney",
-	"tiktok",
-];
-
 // Compact footer strip showing what the server's own IP can reach — the old
 // Dashboard panel, demoted to a popover. Matters when reading node results:
 // a platform blocked for the server itself shows as blocked on every node.
 export function UnlockStrip() {
 	const { data, isLoading, isFetching, refetch } = useLocalUnlock();
 
-	const unlockCount = data
-		? PLATFORM_KEYS.filter((k) => data.platforms?.[k]?.unlocked === true).length
-		: 0;
+	const keys = data ? Object.keys(data.platforms ?? {}) : [];
+	const unlockCount = keys.filter(
+		(k) => data?.platforms?.[k]?.unlocked === true,
+	).length;
 
 	return (
 		<Popover>
@@ -71,25 +59,29 @@ export function UnlockStrip() {
 					Platforms reachable from this server's own IP.
 				</p>
 				<div className="flex flex-wrap gap-2">
-					{PLATFORM_KEYS.map((k) => {
-						const available = data
-							? data.platforms?.[k]?.unlocked === true
-							: false;
-						return (
-							<span
-								key={k}
-								className={cn(
-									"inline-flex items-center gap-1.5 rounded-md bg-secondary px-2 py-1",
-									available ? "" : "opacity-35",
-								)}
-							>
-								<PlatformIcon platform={k as PlatformKey} size={14} showLabel />
-								{available ? (
-									<CheckCircle size={10} className="text-success" />
-								) : null}
-							</span>
-						);
-					})}
+					{keys.length === 0 ? (
+						<span className="text-muted-foreground text-xs">
+							No enabled rules.
+						</span>
+					) : (
+						keys.map((k) => {
+							const available = data?.platforms?.[k]?.unlocked === true;
+							return (
+								<span
+									key={k}
+									className={cn(
+										"inline-flex items-center gap-1.5 rounded-md bg-secondary px-2 py-1",
+										available ? "" : "opacity-35",
+									)}
+								>
+									<RulePlatformIcon platformKey={k} size={14} showLabel />
+									{available ? (
+										<CheckCircle size={10} className="text-success" />
+									) : null}
+								</span>
+							);
+						})
+					)}
 				</div>
 			</PopoverContent>
 		</Popover>

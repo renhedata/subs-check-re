@@ -1,6 +1,6 @@
 import { ArrowDown, ArrowUp } from "lucide-react";
 import { useState } from "react";
-import { PlatformIconAny } from "@/components/platform-icons";
+import { RuleIcon } from "@/components/rule-icon";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip } from "@/components/ui/tooltip";
 import { NodeDetailDialog } from "@/components/workbench/node-detail-dialog";
@@ -27,10 +27,6 @@ function Latency({ r }: { r: NodeResult }) {
 	);
 }
 
-// PlatformIcon already has title={meta.label} on the wrapping <span>, so
-// hover tooltips work natively. For PlatformIconAny (custom rules), the
-// component also renders title={displayLabel} on its wrapper. No additional
-// Tooltip wrapping is needed.
 function UnlockIcons({
 	r,
 	ruleByKey,
@@ -49,11 +45,11 @@ function UnlockIcons({
 				if (key === "youtube" && hasPremium) return null;
 				const rule = ruleByKey[key];
 				return (
-					<PlatformIconAny
+					<RuleIcon
 						key={key}
-						platformKey={key}
-						icon={rule?.icon}
+						icon={rule?.icon ?? ""}
 						label={rule?.name ?? key}
+						size={14}
 					/>
 				);
 			})}

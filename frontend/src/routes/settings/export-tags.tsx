@@ -1,7 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { PLATFORM_META, type PlatformKey } from "@/components/platform-icons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -65,9 +64,7 @@ function ExportTagsPage() {
 		}));
 
 	const labelFor = (key: string) =>
-		PLATFORM_META[key as PlatformKey]?.label ??
-		rules.find((r) => r.key === key)?.name ??
-		key;
+		rules.find((r) => r.key === key)?.name ?? key;
 
 	function buildPreview(): string {
 		const parts = ["HK-01"];

@@ -1,5 +1,5 @@
 import { CopyButton } from "@/components/copy-button";
-import { PLATFORM_META, type PlatformKey } from "@/components/platform-icons";
+import { RuleIcon } from "@/components/rule-icon";
 import {
 	Dialog,
 	DialogContent,
@@ -44,6 +44,7 @@ function platformRows(
 ): Array<{
 	key: string;
 	label: string;
+	icon: string;
 	unlocked: boolean;
 	status: string;
 	region: string;
@@ -56,7 +57,8 @@ function platformRows(
 		const o = platforms[key];
 		return {
 			key,
-			label: PLATFORM_META[key as PlatformKey]?.label ?? key,
+			label: ruleByKey[key]?.name ?? key,
+			icon: ruleByKey[key]?.icon ?? "",
 			unlocked: o?.unlocked === true,
 			status: o?.status ?? "",
 			region: o?.region ?? "",
@@ -67,6 +69,7 @@ function platformRows(
 		.map(([key, o]) => ({
 			key,
 			label: ruleByKey[key]?.name ?? key,
+			icon: ruleByKey[key]?.icon ?? "",
 			unlocked: o?.unlocked === true,
 			status: o?.status ?? "",
 			region: o?.region ?? "",
@@ -158,8 +161,9 @@ export function NodeDetailDialog({
 											key={p.key}
 											className="flex items-center justify-between gap-2 text-xs"
 										>
-											<span className="truncate text-foreground">
-												{p.label}
+											<span className="flex min-w-0 items-center gap-1.5 text-foreground">
+												<RuleIcon icon={p.icon} label={p.label} size={14} />
+												<span className="truncate">{p.label}</span>
 											</span>
 											<span className="flex shrink-0 items-center gap-1.5">
 												{p.region ? (

@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { CronPicker } from "@/components/cron-picker";
-import type { PlatformKey } from "@/components/platform-icons";
-import { PlatformIcon } from "@/components/platform-icons";
+import { RulePlatformIcon } from "@/components/rule-icon";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -276,11 +275,7 @@ export function NotifyChannelDialog({
 												: "border-border text-muted-foreground hover:bg-secondary",
 										)}
 									>
-										<PlatformIcon
-											platform={app as PlatformKey}
-											size={12}
-											showLabel
-										/>
+										<RulePlatformIcon platformKey={app} size={12} showLabel />
 									</button>
 								);
 							})}

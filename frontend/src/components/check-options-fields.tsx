@@ -1,5 +1,4 @@
-import type { PlatformKey } from "@/components/platform-icons";
-import { PlatformIcon } from "@/components/platform-icons";
+import { RulePlatformIcon } from "@/components/rule-icon";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { CheckFormOptions } from "@/lib/checkOptions";
 import { MEDIA_APPS } from "@/lib/checkOptions";
@@ -85,11 +84,7 @@ export function CheckOptionsFields({
 										: "border-border text-muted-foreground hover:bg-secondary",
 								)}
 							>
-								<PlatformIcon
-									platform={app as PlatformKey}
-									size={12}
-									showLabel
-								/>
+								<RulePlatformIcon platformKey={app} size={12} showLabel />
 							</button>
 						);
 					})}
