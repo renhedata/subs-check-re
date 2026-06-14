@@ -1,7 +1,16 @@
 import { Icon as IconifyIcon } from "@iconify/react";
 import { Loader2, Search } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { isIconifyId } from "@/components/platform-icons";
+import { RuleIcon } from "@/components/rule-icon";
+import { readIconAsDataUrl, validateIconFile } from "@/lib/iconUpload";
+
+const QUICK_SETS = [
+	{ label: "Brands", prefix: "simple-icons" },
+	{ label: "Logos", prefix: "logos" },
+	{ label: "Generic", prefix: "lucide" },
+];
 
 export function IconDisplay({
 	icon,
@@ -74,6 +83,22 @@ export function IconPickerInput({
 	const [results, setResults] = useState<string[]>([]);
 	const [searching, setSearching] = useState(false);
 	const containerRef = useRef<HTMLDivElement>(null);
+	const fileRef = useRef<HTMLInputElement>(null);
+
+	const onUpload = async (file: File | undefined) => {
+		if (!file) return;
+		const err = validateIconFile(file);
+		if (err) {
+			toast.error(err);
+			return;
+		}
+		try {
+			onChange(await readIconAsDataUrl(file));
+			setOpen(false);
+		} catch {
+			toast.error("Could not read file");
+		}
+	};
 
 	useEffect(() => {
 		function onDown(e: MouseEvent) {
@@ -113,7 +138,7 @@ export function IconPickerInput({
 	return (
 		<div className="relative" ref={containerRef}>
 			<div className="flex items-center gap-1">
-				<IconDisplay icon={value} name={name || "?"} size="sm" />
+				<RuleIcon icon={value} label={name || "?"} size={18} />
 				<input
 					value={value}
 					onChange={(e) => onChange(e.target.value)}
@@ -140,6 +165,33 @@ export function IconPickerInput({
 						// biome-ignore lint/a11y/noAutofocus: intentional — picker opens on button click
 						autoFocus
 					/>
+
+					<div className="mb-2 flex flex-wrap items-center gap-1">
+						<button
+							type="button"
+							onClick={() => fileRef.current?.click()}
+							className="rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-secondary"
+						>
+							Upload SVG/PNG
+						</button>
+						{QUICK_SETS.map((s) => (
+							<button
+								key={s.prefix}
+								type="button"
+								onClick={() => setQuery(`${s.label} `)}
+								className="rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-secondary"
+							>
+								{s.label}
+							</button>
+						))}
+						<input
+							ref={fileRef}
+							type="file"
+							accept="image/svg+xml,image/png,image/jpeg,image/webp"
+							className="hidden"
+							onChange={(e) => onUpload(e.target.files?.[0])}
+						/>
+					</div>
 
 					{searching && (
 						<div className="flex justify-center py-3">
