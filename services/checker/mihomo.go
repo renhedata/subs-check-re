@@ -24,6 +24,37 @@ const (
 	ipLookupURL  = "http://ip-api.com/json/?fields=query,countryCode"
 )
 
+// Test seams: production points at the real network probes; tests override
+// these to drive retry logic without real I/O.
+var probeLatencyFn = probeLatency
+
+const aliveProbeAttempts = 3
+
+// aliveProbeBackoff is the pause between failed alive probes; var so tests shrink it.
+var aliveProbeBackoff = 300 * time.Millisecond
+
+// probeLatencyWithRetry retries the single-shot alive probe up to
+// aliveProbeAttempts times, returning on the first success. A genuinely alive
+// node that drops one probe (a transient blip, or a handshake that just missed
+// the client timeout) is no longer misrecorded as dead. Context cancellation
+// aborts immediately.
+func probeLatencyWithRetry(ctx context.Context, client *http.Client, testURL string) (bool, int) {
+	for attempt := 1; attempt <= aliveProbeAttempts; attempt++ {
+		if alive, ms := probeLatencyFn(ctx, client, testURL); alive {
+			return true, ms
+		}
+		if attempt == aliveProbeAttempts || ctx.Err() != nil {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return false, 0
+		case <-time.After(aliveProbeBackoff):
+		}
+	}
+	return false, 0
+}
+
 // countingTransport wraps an http.RoundTripper and counts response body bytes read.
 type countingTransport struct {
 	base  http.RoundTripper
@@ -280,7 +311,7 @@ func checkNode(ctx context.Context, nodeID string, mapping map[string]any, speed
 	}
 	defer pc.close()
 
-	alive, latency := probeLatency(ctx, pc.Client, latencyTestURL)
+	alive, latency := probeLatencyWithRetry(ctx, pc.Client, latencyTestURL)
 	if !alive {
 		if opts.Debug && result.Debug != nil {
 			result.Debug.Traces = append(result.Debug.Traces, DebugTrace{
