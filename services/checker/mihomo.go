@@ -55,6 +55,39 @@ func probeLatencyWithRetry(ctx context.Context, client *http.Client, testURL str
 	return false, 0
 }
 
+var (
+	measureSpeedFn  = measureSpeed
+	measureUploadFn = measureUploadSpeed
+)
+
+const speedTestAttempts = 2
+
+// measureSpeedWithRetry retries the download test once when it returns 0 (a
+// transient download failure), bounded by speedTestAttempts. A node that is
+// alive but genuinely slow returns 0 after the retries are exhausted.
+func measureSpeedWithRetry(ctx context.Context, transport http.RoundTripper, speedTestURL string) int {
+	var kbps int
+	for attempt := 1; attempt <= speedTestAttempts; attempt++ {
+		kbps = measureSpeedFn(ctx, transport, speedTestURL)
+		if kbps > 0 || ctx.Err() != nil {
+			break
+		}
+	}
+	return kbps
+}
+
+// measureUploadWithRetry mirrors measureSpeedWithRetry for the upload test.
+func measureUploadWithRetry(ctx context.Context, transport http.RoundTripper, speedTestURL, uploadTestURL string) int {
+	var kbps int
+	for attempt := 1; attempt <= speedTestAttempts; attempt++ {
+		kbps = measureUploadFn(ctx, transport, speedTestURL, uploadTestURL)
+		if kbps > 0 || ctx.Err() != nil {
+			break
+		}
+	}
+	return kbps
+}
+
 // countingTransport wraps an http.RoundTripper and counts response body bytes read.
 type countingTransport struct {
 	base  http.RoundTripper
@@ -335,10 +368,10 @@ func checkNode(ctx context.Context, nodeID string, mapping map[string]any, speed
 		})
 	}
 	if opts.SpeedTest {
-		result.SpeedKbps = measureSpeed(ctx, pc.Client.Transport, speedTestURL)
+		result.SpeedKbps = measureSpeedWithRetry(ctx, pc.Client.Transport, speedTestURL)
 	}
 	if opts.UploadSpeedTest {
-		result.UploadSpeedKbps = measureUploadSpeed(ctx, pc.Client.Transport, speedTestURL, uploadTestURL)
+		result.UploadSpeedKbps = measureUploadWithRetry(ctx, pc.Client.Transport, speedTestURL, uploadTestURL)
 	}
 
 	if len(opts.MediaApps) > 0 {

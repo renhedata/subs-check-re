@@ -82,3 +82,63 @@ func TestProbeLatencyWithRetry_CanceledContextStopsEarly(t *testing.T) {
 		t.Errorf("canceled ctx must not retry; got %d calls", calls)
 	}
 }
+
+func TestMeasureSpeedWithRetry_RetriesOnZero(t *testing.T) {
+	rs := measureSpeedFn
+	defer func() { measureSpeedFn = rs }()
+	calls := 0
+	vals := []int{0, 1500}
+	measureSpeedFn = func(context.Context, http.RoundTripper, string) int {
+		i := calls
+		calls++
+		return vals[i]
+	}
+	got := measureSpeedWithRetry(context.Background(), nil, "")
+	if got != 1500 || calls != 2 {
+		t.Errorf("want 1500 in 2 calls, got %d in %d", got, calls)
+	}
+}
+
+func TestMeasureSpeedWithRetry_NonZeroFirstNoRetry(t *testing.T) {
+	rs := measureSpeedFn
+	defer func() { measureSpeedFn = rs }()
+	calls := 0
+	measureSpeedFn = func(context.Context, http.RoundTripper, string) int {
+		calls++
+		return 900
+	}
+	got := measureSpeedWithRetry(context.Background(), nil, "")
+	if got != 900 || calls != 1 {
+		t.Errorf("want 900 in 1 call, got %d in %d", got, calls)
+	}
+}
+
+func TestMeasureSpeedWithRetry_AllZeroCapped(t *testing.T) {
+	rs := measureSpeedFn
+	defer func() { measureSpeedFn = rs }()
+	calls := 0
+	measureSpeedFn = func(context.Context, http.RoundTripper, string) int {
+		calls++
+		return 0
+	}
+	got := measureSpeedWithRetry(context.Background(), nil, "")
+	if got != 0 || calls != speedTestAttempts {
+		t.Errorf("want 0 in %d calls, got %d in %d", speedTestAttempts, got, calls)
+	}
+}
+
+func TestMeasureUploadWithRetry_RetriesOnZero(t *testing.T) {
+	ru := measureUploadFn
+	defer func() { measureUploadFn = ru }()
+	calls := 0
+	vals := []int{0, 800}
+	measureUploadFn = func(context.Context, http.RoundTripper, string, string) int {
+		i := calls
+		calls++
+		return vals[i]
+	}
+	got := measureUploadWithRetry(context.Background(), nil, "", "")
+	if got != 800 || calls != 2 {
+		t.Errorf("want 800 in 2 calls, got %d in %d", got, calls)
+	}
+}
