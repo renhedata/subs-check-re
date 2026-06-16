@@ -23,7 +23,7 @@ services:
       start_period: 10s
 
   backend:
-    image: ${BACKEND_IMAGE:-asharca/subs-check:latest}
+    image: subs-check:latest
     environment:
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
@@ -49,4 +49,3 @@ services:
     depends_on:
       - backend
     restart: unless-stopped
-
