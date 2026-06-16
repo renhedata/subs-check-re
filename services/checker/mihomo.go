@@ -58,6 +58,7 @@ func probeLatencyWithRetry(ctx context.Context, client *http.Client, testURL str
 var (
 	measureSpeedFn  = measureSpeed
 	measureUploadFn = measureUploadSpeed
+	getProxyInfoFn  = getProxyInfo
 )
 
 const speedTestAttempts = 2
@@ -381,7 +382,7 @@ func checkNode(ctx context.Context, nodeID string, mapping map[string]any, speed
 			Timeout:   8 * time.Second,
 			Jar:       jar,
 		}
-		result.IP, result.Country = getProxyInfo(ctx, mediaClient)
+		result.IP, result.Country = getProxyInfoFn(ctx, mediaClient)
 
 		var ruleRecorders map[string]*DebugRecorder
 		if opts.Debug {

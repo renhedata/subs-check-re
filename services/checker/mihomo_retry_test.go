@@ -142,3 +142,68 @@ func TestMeasureUploadWithRetry_RetriesOnZero(t *testing.T) {
 		t.Errorf("want 800 in 2 calls, got %d in %d", got, calls)
 	}
 }
+
+func TestCheckNode_AliveNodeRunsAllSelectedTests(t *testing.T) {
+	rp, rs, ru, rg, rr := probeLatencyFn, measureSpeedFn, measureUploadFn, getProxyInfoFn, runRuleFn
+	defer func() {
+		probeLatencyFn, measureSpeedFn, measureUploadFn, getProxyInfoFn, runRuleFn = rp, rs, ru, rg, rr
+	}()
+	probeLatencyFn = func(context.Context, *http.Client, string) (bool, int) { return true, 25 }
+	measureSpeedFn = func(context.Context, http.RoundTripper, string) int { return 1200 }
+	measureUploadFn = func(context.Context, http.RoundTripper, string, string) int { return 600 }
+	getProxyInfoFn = func(context.Context, *http.Client) (string, string) { return "1.2.3.4", "US" }
+	runRuleFn = func(context.Context, *http.Client, *PlatformRule, *DebugRecorder) (PlatformOutcome, error) {
+		return PlatformOutcome{Unlocked: true, Status: "Yes"}, nil
+	}
+
+	mapping := map[string]any{
+		"name": "t", "type": "ss", "server": "127.0.0.1", "port": 1,
+		"cipher": "aes-128-gcm", "password": "x",
+	}
+	opts := CheckOptions{SpeedTest: true, UploadSpeedTest: true, MediaApps: []string{"netflix", "disney"}}
+	rules := []*PlatformRule{{Key: "netflix", Enabled: true}, {Key: "disney", Enabled: true}}
+
+	res := checkNode(context.Background(), "node-1", mapping, "", "", "", opts, rules)
+
+	if !res.Alive {
+		t.Fatal("alive node must be marked alive")
+	}
+	if res.SpeedKbps != 1200 {
+		t.Errorf("want speed 1200, got %d", res.SpeedKbps)
+	}
+	if res.UploadSpeedKbps != 600 {
+		t.Errorf("want upload 600, got %d", res.UploadSpeedKbps)
+	}
+	if len(res.Platforms) != 2 || !res.Platforms["netflix"].Unlocked || !res.Platforms["disney"].Unlocked {
+		t.Errorf("alive node must have every selected platform tested, got %+v", res.Platforms)
+	}
+}
+
+func TestCheckNode_DeadNodeSkipsSubTests(t *testing.T) {
+	rp, rs, rr, rb := probeLatencyFn, measureSpeedFn, runRuleFn, aliveProbeBackoff
+	defer func() { probeLatencyFn, measureSpeedFn, runRuleFn, aliveProbeBackoff = rp, rs, rr, rb }()
+	aliveProbeBackoff = time.Millisecond
+	probeLatencyFn = func(context.Context, *http.Client, string) (bool, int) { return false, 0 }
+	speedCalls := 0
+	measureSpeedFn = func(context.Context, http.RoundTripper, string) int { speedCalls++; return 0 }
+	ruleCalls := 0
+	runRuleFn = func(context.Context, *http.Client, *PlatformRule, *DebugRecorder) (PlatformOutcome, error) {
+		ruleCalls++
+		return PlatformOutcome{}, nil
+	}
+
+	mapping := map[string]any{
+		"name": "t", "type": "ss", "server": "127.0.0.1", "port": 1,
+		"cipher": "aes-128-gcm", "password": "x",
+	}
+	opts := CheckOptions{SpeedTest: true, MediaApps: []string{"netflix"}}
+	rules := []*PlatformRule{{Key: "netflix", Enabled: true}}
+
+	res := checkNode(context.Background(), "node-1", mapping, "", "", "", opts, rules)
+	if res.Alive {
+		t.Fatal("want dead")
+	}
+	if speedCalls != 0 || ruleCalls != 0 {
+		t.Errorf("dead node must skip sub-tests; speedCalls=%d ruleCalls=%d", speedCalls, ruleCalls)
+	}
+}
