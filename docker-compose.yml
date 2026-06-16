@@ -23,7 +23,7 @@ services:
       start_period: 10s
 
   backend:
-    image: subs-check:latest
+    image: ghcr.io/renhedata/subs-check-re:latest
     environment:
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}

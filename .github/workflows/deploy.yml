@@ -1,0 +1,36 @@
+name: deploy
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: write          # required to push to GHCR
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Encore CLI
+        run: |
+          curl -L https://encore.dev/install.sh | bash
+          echo "$HOME/.encore/bin" >> "$GITHUB_PATH"
+
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Build & push image (Encore self-host)
+        run: |
+          IMG="ghcr.io/${{ github.repository }}"   # ghcr.io/renhedata/subs-check-re
+          encore build docker --config deploy/infra.config.json "$IMG:${{ github.sha }}"
+          docker tag "$IMG:${{ github.sha }}" "$IMG:latest"
+          docker push "$IMG:${{ github.sha }}"
+          docker push "$IMG:latest"
+
+      - name: Trigger Coolify deploy
+        run: |
+          curl --fail-with-body "${{ secrets.COOLIFY_WEBHOOK }}&force=true" \
+            -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}"
