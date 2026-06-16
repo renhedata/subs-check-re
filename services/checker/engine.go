@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"time"
 )
 
 // runRule dispatches a PlatformRule to the correct engine and normalizes the result.
@@ -34,24 +35,50 @@ func runRule(ctx context.Context, client *http.Client, rule *PlatformRule, dr *D
 	}
 }
 
+// runRuleFn is a seam over runRule so tests can drive the media retry loop
+// without a real engine or network.
+var runRuleFn = runRule
+
+const mediaRuleAttempts = 2
+
+// mediaRuleBackoff is the pause between transient platform-check retries; var so tests shrink it.
+var mediaRuleBackoff = 200 * time.Millisecond
+
 // runUserRules runs all enabled rules against the provided HTTP client.
 func runUserRules(ctx context.Context, client *http.Client, rules []*PlatformRule) map[string]PlatformOutcome {
 	return runUserRulesWithDebug(ctx, client, rules, nil)
 }
 
 // runUserRulesWithDebug runs all enabled rules and optionally collects per-rule debug traces.
+// A platform check that returns a transient error (could not reach the platform)
+// is retried up to mediaRuleAttempts; a definitive answer (err == nil, locked or
+// unlocked) is never retried. A fresh DebugRecorder is used per attempt so the
+// surviving trace reflects only the final try.
 func runUserRulesWithDebug(ctx context.Context, client *http.Client, rules []*PlatformRule, results map[string]*DebugRecorder) map[string]PlatformOutcome {
 	out := make(map[string]PlatformOutcome, len(rules))
 	for _, rule := range rules {
 		if !rule.Enabled {
 			continue
 		}
+		var outcome PlatformOutcome
 		var dr *DebugRecorder
+		for attempt := 1; attempt <= mediaRuleAttempts; attempt++ {
+			if results != nil {
+				dr = &DebugRecorder{}
+			}
+			var err error
+			outcome, err = runRuleFn(ctx, client, rule, dr)
+			if err == nil || attempt == mediaRuleAttempts || ctx.Err() != nil {
+				break
+			}
+			select {
+			case <-ctx.Done():
+			case <-time.After(mediaRuleBackoff):
+			}
+		}
 		if results != nil {
-			dr = &DebugRecorder{}
 			results[rule.Key] = dr
 		}
-		outcome, _ := runRule(ctx, client, rule, dr)
 		out[rule.Key] = outcome
 	}
 	return out
