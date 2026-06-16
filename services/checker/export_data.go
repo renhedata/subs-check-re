@@ -29,6 +29,19 @@ func orderClause(s string) string {
 	return "speed_kbps DESC NULLS LAST, latency_ms ASC NULLS LAST"
 }
 
+// nodeIdentityKey returns a SQL expression yielding a stable cross-job identity
+// for the check_results row at the given alias. Real subscriptions embed live
+// counters (remaining traffic, expiry) in node names, so the name changes on
+// every fetch; matching on the connection endpoint (server:port from
+// node_config) lets unmeasured dimensions inherit across renames of the same
+// node. Falls back to node_name for legacy rows that have no node_config.
+// alias is a hardcoded table alias ("cr"/"cr2"), never user input.
+func nodeIdentityKey(alias string) string {
+	return "CASE WHEN COALESCE(" + alias + ".node_config->>'server','') <> '' " +
+		"THEN (" + alias + ".node_config->>'server') || ':' || COALESCE(" + alias + ".node_config->>'port','') " +
+		"ELSE " + alias + ".node_name END"
+}
+
 // taggedName appends country / platform / speed tags to a node name per cfg.
 // Order: country, built-in platforms (cfg order), custom platforms (sorted by
 // key), speed. A platform is tagged when its outcome is Unlocked.
@@ -162,19 +175,20 @@ func loadJobProxies(ctx context.Context, jobID, subscriptionID, subNamePrefix st
 	if prefs.IncludeDead {
 		aliveClause = ""
 	}
+	key, key2 := nodeIdentityKey("cr"), nodeIdentityKey("cr2")
 	query := `
 		WITH latest_platform_kv AS (
-			SELECT DISTINCT ON (cr2.node_name, kv.key) cr2.node_name, kv.key AS key, kv.value AS value
+			SELECT DISTINCT ON (` + key2 + `, kv.key) ` + key2 + ` AS node_key, kv.key AS key, kv.value AS value
 			FROM check_results cr2
 			JOIN check_jobs cj2 ON cj2.id = cr2.job_id
 			CROSS JOIN LATERAL jsonb_each(cr2.platforms) AS kv(key, value)
 			WHERE cj2.subscription_id = $2 AND cr2.platforms IS NOT NULL AND cr2.platforms <> '{}'::jsonb
-			ORDER BY cr2.node_name, kv.key, cr2.checked_at DESC
+			ORDER BY ` + key2 + `, kv.key, cr2.checked_at DESC
 		),
 		merged_platforms AS (
-			SELECT node_name, jsonb_object_agg(key, value) AS platforms
+			SELECT node_key, jsonb_object_agg(key, value) AS platforms
 			FROM latest_platform_kv
-			GROUP BY node_name
+			GROUP BY node_key
 		),
 		r AS (
 			SELECT COALESCE(n.config, cr.node_config) AS config,
@@ -183,7 +197,7 @@ func loadJobProxies(ctx context.Context, jobID, subscriptionID, subNamePrefix st
 			            ELSE COALESCE((
 			                SELECT cr2.country FROM check_results cr2
 			                JOIN check_jobs cj2 ON cj2.id = cr2.job_id
-			                WHERE cr2.node_name = cr.node_name AND cj2.subscription_id = $2 AND cr2.country <> ''
+			                WHERE ` + key2 + ` = ` + key + ` AND cj2.subscription_id = $2 AND cr2.country <> ''
 			                ORDER BY cr2.checked_at DESC LIMIT 1
 			            ), '')
 			       END AS country,
@@ -192,14 +206,14 @@ func loadJobProxies(ctx context.Context, jobID, subscriptionID, subNamePrefix st
 			            ELSE COALESCE((
 			                SELECT cr2.speed_kbps FROM check_results cr2
 			                JOIN check_jobs cj2 ON cj2.id = cr2.job_id
-			                WHERE cr2.node_name = cr.node_name AND cj2.subscription_id = $2 AND cr2.speed_kbps > 0
+			                WHERE ` + key2 + ` = ` + key + ` AND cj2.subscription_id = $2 AND cr2.speed_kbps > 0
 			                ORDER BY cr2.checked_at DESC LIMIT 1
 			            ), 0)
 			       END AS speed_kbps,
 			       cr.latency_ms
 			FROM check_results cr
 			LEFT JOIN nodes n ON n.id = cr.node_id
-			LEFT JOIN merged_platforms mp ON mp.node_name = cr.node_name
+			LEFT JOIN merged_platforms mp ON mp.node_key = ` + key + `
 			WHERE cr.job_id = $1 AND ` + aliveClause + `COALESCE(n.enabled, true) = true
 		)
 		SELECT config, node_name, country, platforms, speed_kbps, latency_ms

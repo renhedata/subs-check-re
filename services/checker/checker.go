@@ -499,20 +499,23 @@ func GetResults(ctx context.Context, subscriptionID string, p *GetResultsParams)
 	}
 
 	// speed_kbps / upload_speed_kbps / country / platforms fall back to the most recent historical
-	// value if this job skipped measuring them. Platform inheritance is per-key.
+	// value if this job skipped measuring them. Inheritance matches on a stable
+	// node identity (server:port), not the display name, which mutates each fetch.
+	// Platform inheritance is per-key.
+	key, key2 := nodeIdentityKey("cr"), nodeIdentityKey("cr2")
 	rows, err := db.Query(ctx, `
 		WITH latest_platform_kv AS (
-			SELECT DISTINCT ON (cr2.node_name, kv.key) cr2.node_name, kv.key AS key, kv.value AS value
+			SELECT DISTINCT ON (`+key2+`, kv.key) `+key2+` AS node_key, kv.key AS key, kv.value AS value
 			FROM check_results cr2
 			JOIN check_jobs cj2 ON cj2.id = cr2.job_id
 			CROSS JOIN LATERAL jsonb_each(cr2.platforms) AS kv(key, value)
 			WHERE cj2.subscription_id = $2 AND cr2.platforms IS NOT NULL AND cr2.platforms <> '{}'::jsonb
-			ORDER BY cr2.node_name, kv.key, cr2.checked_at DESC
+			ORDER BY `+key2+`, kv.key, cr2.checked_at DESC
 		),
 		merged_platforms AS (
-			SELECT node_name, jsonb_object_agg(key, value) AS platforms
+			SELECT node_key, jsonb_object_agg(key, value) AS platforms
 			FROM latest_platform_kv
-			GROUP BY node_name
+			GROUP BY node_key
 		),
 		r AS (
 			SELECT cr.node_id,
@@ -527,7 +530,7 @@ func GetResults(ctx context.Context, subscriptionID string, p *GetResultsParams)
 			            ELSE COALESCE((
 			                SELECT cr2.speed_kbps FROM check_results cr2
 			                JOIN check_jobs cj2 ON cj2.id = cr2.job_id
-			                WHERE cr2.node_name = cr.node_name AND cj2.subscription_id = $2 AND cr2.speed_kbps > 0
+			                WHERE `+key2+` = `+key+` AND cj2.subscription_id = $2 AND cr2.speed_kbps > 0
 			                ORDER BY cr2.checked_at DESC LIMIT 1
 			            ), 0)
 			       END AS speed_kbps,
@@ -535,7 +538,7 @@ func GetResults(ctx context.Context, subscriptionID string, p *GetResultsParams)
 			            ELSE COALESCE((
 			                SELECT cr2.upload_speed_kbps FROM check_results cr2
 			                JOIN check_jobs cj2 ON cj2.id = cr2.job_id
-			                WHERE cr2.node_name = cr.node_name AND cj2.subscription_id = $2 AND cr2.upload_speed_kbps > 0
+			                WHERE `+key2+` = `+key+` AND cj2.subscription_id = $2 AND cr2.upload_speed_kbps > 0
 			                ORDER BY cr2.checked_at DESC LIMIT 1
 			            ), 0)
 			       END AS upload_speed_kbps,
@@ -543,7 +546,7 @@ func GetResults(ctx context.Context, subscriptionID string, p *GetResultsParams)
 			            ELSE COALESCE((
 			                SELECT cr2.country FROM check_results cr2
 			                JOIN check_jobs cj2 ON cj2.id = cr2.job_id
-			                WHERE cr2.node_name = cr.node_name AND cj2.subscription_id = $2 AND cr2.country <> ''
+			                WHERE `+key2+` = `+key+` AND cj2.subscription_id = $2 AND cr2.country <> ''
 			                ORDER BY cr2.checked_at DESC LIMIT 1
 			            ), '')
 			       END AS country,
@@ -552,7 +555,7 @@ func GetResults(ctx context.Context, subscriptionID string, p *GetResultsParams)
 			       cr.traffic_bytes
 			FROM check_results cr
 			LEFT JOIN nodes n ON n.id = cr.node_id
-			LEFT JOIN merged_platforms mp ON mp.node_name = cr.node_name
+			LEFT JOIN merged_platforms mp ON mp.node_key = `+key+`
 			WHERE cr.job_id = $1
 		)
 		SELECT * FROM r
