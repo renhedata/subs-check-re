@@ -24,15 +24,18 @@ type jobConfig struct {
 	SpeedTestURL   string
 	LatencyTestURL string
 	Options        CheckOptions
+	NodeIDs        []string
 }
 
 func (s *jobStore) loadConfig(ctx context.Context, jobID string) (*jobConfig, error) {
 	var cfg jobConfig
 	var optsJSON []byte
+	var nodeIDsJSON string
 	if err := db.QueryRow(ctx,
-		`SELECT sub_url, COALESCE(speed_test_url, ''), COALESCE(latency_test_url, ''), COALESCE(options_json, '{}')
+		`SELECT sub_url, COALESCE(speed_test_url, ''), COALESCE(latency_test_url, ''),
+		        COALESCE(options_json, '{}'), COALESCE(node_ids::text, '')
 		 FROM check_jobs WHERE id=$1`,
-		jobID).Scan(&cfg.SubURL, &cfg.SpeedTestURL, &cfg.LatencyTestURL, &optsJSON); err != nil {
+		jobID).Scan(&cfg.SubURL, &cfg.SpeedTestURL, &cfg.LatencyTestURL, &optsJSON, &nodeIDsJSON); err != nil {
 		return nil, fmt.Errorf("load job config: %w", err)
 	}
 	if cfg.SubURL == "" {
@@ -43,6 +46,9 @@ func (s *jobStore) loadConfig(ctx context.Context, jobID string) (*jobConfig, er
 	}
 	if err := json.Unmarshal(optsJSON, &cfg.Options); err != nil {
 		cfg.Options = defaultCheckOptions()
+	}
+	if nodeIDsJSON != "" {
+		_ = json.Unmarshal([]byte(nodeIDsJSON), &cfg.NodeIDs)
 	}
 	return &cfg, nil
 }
