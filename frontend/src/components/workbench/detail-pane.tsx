@@ -1,5 +1,6 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight, Download, PlayCircle } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { DebugPanel, type NodeDebug } from "@/components/debug-panel";
 import { Badge } from "@/components/ui/badge";
@@ -8,16 +9,20 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { DetailHeader } from "@/components/workbench/detail-header";
 import { ProgressPanel } from "@/components/workbench/progress-panel";
 import { ResultsSection } from "@/components/workbench/results-section";
+import { loadCheckOptions } from "@/lib/checkOptions";
 import { isApiError } from "@/lib/client";
 import type { checker, subscription } from "@/lib/client.gen";
 import type { SSEConnection, SSEProgress } from "@/queries";
 import {
+	queryKeys,
 	useCancelCheck,
 	useExportLogs,
 	useJobs,
+	useNodes,
 	useResults,
 	useRules,
 	useSetNodeEnabled,
+	useTriggerCheck,
 } from "@/queries";
 
 type Subscription = subscription.Subscription;
@@ -56,6 +61,69 @@ export function DetailPane({
 	const resultsQuery = useResults(sub.id, selectedJobId);
 	const cancelMut = useCancelCheck(sub.id);
 	const toggleNodeMut = useSetNodeEnabled(sub.id);
+	const qc = useQueryClient();
+	const nodesQuery = useNodes(sub.id);
+	const triggerMut = useTriggerCheck();
+
+	// On the default "Latest result" view, the node list is the source of truth.
+	const showNodeList = selectedJobId === null;
+
+	// Refetch the node list once a run finishes so live overlay reconciles with
+	// the persisted latest-per-node state.
+	useEffect(() => {
+		if (progress?.done) {
+			qc.invalidateQueries({ queryKey: queryKeys.nodes(sub.id) });
+		}
+	}, [progress?.done, qc, sub.id]);
+
+	// Map a Node (superset) to the NodeResult shape the table renders.
+	const nodeResults: checker.NodeResult[] = useMemo(
+		() =>
+			(nodesQuery.data?.nodes ?? []).map((n) => ({
+				node_id: n.node_id,
+				node_name: n.node_name,
+				node_type: n.node_type,
+				enabled: n.enabled,
+				alive: n.alive,
+				latency_ms: n.latency_ms,
+				speed_kbps: n.speed_kbps,
+				upload_speed_kbps: n.upload_speed_kbps,
+				country: n.country,
+				ip: n.ip,
+				server: n.server,
+				port: n.port,
+				config: n.config,
+				platforms: n.platforms,
+				traffic_bytes: n.traffic_bytes,
+			})),
+		[nodesQuery.data],
+	);
+
+	// Trigger a check over the given node ids ([] = all), reusing the saved
+	// per-subscription check options.
+	const handleCheckNodes = (nodeIds: string[]) => {
+		const opts = loadCheckOptions(sub.id);
+		triggerMut.mutate(
+			{ subscriptionId: sub.id, params: { ...opts, node_ids: nodeIds } },
+			{
+				onSuccess: (resp) => {
+					toast.success(
+						nodeIds.length === 0
+							? "Check started"
+							: `Checking ${nodeIds.length} node${nodeIds.length > 1 ? "s" : ""}`,
+					);
+					onRunStarted(resp.job_id);
+				},
+				onError: (e) => {
+					if (isApiError(e) && (e.status === 409 || e.status === 412)) {
+						toast.error("A check is already running for this subscription");
+						return;
+					}
+					toast.error(isApiError(e) ? e.message : "Failed to start check");
+				},
+			},
+		);
+	};
 
 	const running = !!activeJobId && !progress?.done;
 	const job = resultsQuery.data?.job;
@@ -178,6 +246,28 @@ export function DetailPane({
 						title="No checks yet"
 						description="Run your first check to see node availability, latency and unlocks."
 					/>
+				) : showNodeList ? (
+					nodesQuery.isLoading ? (
+						<div className="space-y-2">
+							<Skeleton className="h-8 w-2/3" />
+							<Skeleton className="h-40 w-full" />
+						</div>
+					) : nodeResults.length === 0 ? (
+						<EmptyState
+							icon={PlayCircle}
+							title="No nodes yet"
+							description="Refresh from the URL or import nodes to populate this list, then run a check."
+						/>
+					) : (
+						<ResultsSection
+							results={nodeResults}
+							rules={rulesQuery.data?.rules}
+							onToggleEnabled={handleToggleNode}
+							selectable
+							onCheck={handleCheckNodes}
+							checkDisabled={!!activeJobId}
+						/>
+					)
 				) : (
 					<ResultsSection
 						results={results}
