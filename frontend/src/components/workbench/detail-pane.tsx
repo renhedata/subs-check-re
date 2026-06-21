@@ -12,7 +12,7 @@ import { ResultsSection } from "@/components/workbench/results-section";
 import { loadCheckOptions } from "@/lib/checkOptions";
 import { isApiError } from "@/lib/client";
 import type { checker, subscription } from "@/lib/client.gen";
-import type { SSEConnection, SSEProgress } from "@/queries";
+import type { InflightNode, SSEConnection, SSEProgress } from "@/queries";
 import {
 	queryKeys,
 	useCancelCheck,
@@ -34,6 +34,7 @@ export function DetailPane({
 	logEntries,
 	debugData,
 	connection,
+	inflight,
 	selectedJobId,
 	onSelectJob,
 	onRunStarted,
@@ -48,6 +49,7 @@ export function DetailPane({
 	logEntries: SSEProgress[];
 	debugData: NodeDebug[];
 	connection: SSEConnection;
+	inflight: InflightNode[];
 	selectedJobId: string | null;
 	onSelectJob: (jobId: string | null) => void;
 	onRunStarted: (jobId: string) => void;
@@ -199,6 +201,7 @@ export function DetailPane({
 						progress={progress}
 						logEntries={logEntries}
 						connection={connection}
+						inflight={inflight}
 						cancelPending={cancelMut.isPending}
 						onCancel={handleCancel}
 					/>

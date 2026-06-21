@@ -4,7 +4,15 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
-import type { SSEConnection, SSEProgress } from "@/queries";
+import type { InflightNode, SSEConnection, SSEProgress } from "@/queries";
+
+const PHASE_LABELS: Record<string, string> = {
+	latency: "Latency",
+	speed: "Speed test",
+	upload: "Upload",
+	region: "Region",
+	streaming: "Streaming",
+};
 
 function formatElapsed(startedAt: number): string {
 	const s = Math.floor((Date.now() - startedAt) / 1000);
@@ -15,16 +23,18 @@ export function ProgressPanel({
 	progress,
 	logEntries,
 	connection,
+	inflight,
 	cancelPending,
 	onCancel,
 }: {
 	progress: SSEProgress | null;
 	logEntries: SSEProgress[];
 	connection: SSEConnection;
+	inflight: InflightNode[];
 	cancelPending: boolean;
 	onCancel: () => void;
 }) {
-	const [logOpen, setLogOpen] = useState(false);
+	const [logOpen, setLogOpen] = useState(true);
 	const startedAtRef = useRef(Date.now());
 	const logRef = useRef<HTMLDivElement | null>(null);
 	const [, forceTick] = useState(0);
@@ -97,7 +107,7 @@ export function ProgressPanel({
 					className="inline-flex items-center gap-1 transition-colors hover:text-foreground"
 				>
 					{logOpen ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
-					Live log ({logEntries.length})
+					Live log ({inflight.length + logEntries.length})
 				</button>
 				<span className="tabular-nums">
 					elapsed {formatElapsed(startedAtRef.current)}
@@ -105,11 +115,25 @@ export function ProgressPanel({
 				</span>
 			</div>
 
-			{logOpen && logEntries.length > 0 ? (
+			{logOpen ? (
 				<div
 					ref={logRef}
-					className="max-h-44 overflow-y-auto rounded-md bg-background/60 p-2"
+					className="max-h-52 overflow-y-auto rounded-md bg-background/60 p-2"
 				>
+					{inflight.map((n: InflightNode) => (
+						<div
+							key={`live-${n.node_id}`}
+							className="flex items-baseline gap-2 py-0.5 font-mono text-[11px] tabular-nums"
+						>
+							<Spinner className="size-3 text-info" />
+							<span className="min-w-0 flex-1 truncate text-foreground">
+								{n.node_name}
+							</span>
+							<span className="text-muted-foreground">
+								{PHASE_LABELS[n.phase] ?? n.phase}
+							</span>
+						</div>
+					))}
 					{logEntries.map((e, i) => (
 						<div
 							key={`${i}-${e.node_name ?? ""}`}

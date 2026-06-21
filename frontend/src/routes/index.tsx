@@ -66,14 +66,15 @@ function WorkbenchPage() {
 		}
 	}, [latestForSelected]);
 
-	const { progress, logEntries, debugData, connection } = useSSEProgress({
-		jobId: activeJobId,
-		subscriptionId: selectedId ?? "",
-		onDone: () => {
-			setActiveJobId(null);
-			setSelectedJobId(null); // jump to the fresh latest result
-		},
-	});
+	const { progress, logEntries, debugData, connection, inflight } =
+		useSSEProgress({
+			jobId: activeJobId,
+			subscriptionId: selectedId ?? "",
+			onDone: () => {
+				setActiveJobId(null);
+				setSelectedJobId(null); // jump to the fresh latest result
+			},
+		});
 
 	const liveProgressPct =
 		activeJobId && progress?.total
@@ -160,6 +161,7 @@ function WorkbenchPage() {
 						logEntries={logEntries}
 						debugData={debugData}
 						connection={connection}
+						inflight={inflight}
 						selectedJobId={selectedJobId}
 						onSelectJob={setSelectedJobId}
 						onRunStarted={(jobId) => setActiveJobId(jobId)}
