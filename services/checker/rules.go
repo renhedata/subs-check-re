@@ -126,6 +126,9 @@ type NodeSummary struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
 	Type string `json:"type"`
+	// Config is the node's proxy config JSON, used when selecting a node to
+	// tunnel a subscription fetch through.
+	Config string `json:"config"`
 }
 
 // ListTestNodesResponse is returned by GET /platform-rules/test-nodes.
@@ -348,7 +351,7 @@ func ListTestNodes(ctx context.Context) (*ListTestNodesResponse, error) {
 	claims := encauth.Data().(*authsvc.UserClaims)
 
 	rows, err := db.Query(ctx, `
-		SELECT DISTINCT ON (n.name) n.id, n.name, COALESCE(n.type, '')
+		SELECT DISTINCT ON (n.name) n.id, n.name, COALESCE(n.type, ''), COALESCE(n.config::text, '')
 		FROM nodes n
 		WHERE n.subscription_id IN (
 		    SELECT DISTINCT subscription_id FROM check_jobs WHERE user_id = $1
@@ -364,7 +367,7 @@ func ListTestNodes(ctx context.Context) (*ListTestNodesResponse, error) {
 	var nodes []*NodeSummary
 	for rows.Next() {
 		var n NodeSummary
-		if err := rows.Scan(&n.ID, &n.Name, &n.Type); err == nil {
+		if err := rows.Scan(&n.ID, &n.Name, &n.Type, &n.Config); err == nil {
 			nodes = append(nodes, &n)
 		}
 	}

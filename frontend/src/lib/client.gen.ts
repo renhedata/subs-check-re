@@ -387,6 +387,11 @@ export namespace checker {
         id: string
         name: string
         type: string
+        /**
+         * Config is the node's proxy config JSON, used when selecting a node to
+         * tunnel a subscription fetch through.
+         */
+        config: string
     }
 
     /**
@@ -1096,6 +1101,15 @@ export namespace subscription {
     }
 
     /**
+     * SetFetchProxyParams sets (or clears) the node used to tunnel subscription
+     * fetches. Config is the chosen node's proxy config as JSON; an empty string
+     * clears it (fetch directly).
+     */
+    export interface SetFetchProxyParams {
+        config: string
+    }
+
+    /**
      * Subscription represents a proxy subscription link.
      */
     export interface Subscription {
@@ -1109,6 +1123,13 @@ export namespace subscription {
         "last_run_at": string
         "export_include_dead": boolean
         "export_sort": string
+        /**
+         * FetchProxyConfig, when non-empty, is the JSON of a node's proxy config
+         * used to tunnel the subscription fetch through that node (for URLs the
+         * server can't reach directly). Empty means fetch directly. Stored as
+         * jsonb, surfaced as a JSON string so it crosses the Encore API boundary.
+         */
+        "fetch_proxy_config": string
     }
 
     /**
@@ -1134,6 +1155,7 @@ export namespace subscription {
             this.Delete = this.Delete.bind(this)
             this.GetSubscription = this.GetSubscription.bind(this)
             this.List = this.List.bind(this)
+            this.SetFetchProxy = this.SetFetchProxy.bind(this)
             this.Update = this.Update.bind(this)
         }
 
@@ -1172,6 +1194,17 @@ export namespace subscription {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("GET", `/subscriptions`)
             return await resp.json() as ListResponse
+        }
+
+        /**
+         * SetFetchProxy stores the chosen node's proxy config on the subscription so
+         * refresh / test-fetch tunnel the download through that node. Pass an empty
+         * config to go back to a direct fetch.
+         */
+        public async SetFetchProxy(id: string, params: SetFetchProxyParams): Promise<Subscription> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("PUT", `/subscriptions/${encodeURIComponent(id)}/fetch-proxy`, JSON.stringify(params))
+            return await resp.json() as Subscription
         }
 
         /**

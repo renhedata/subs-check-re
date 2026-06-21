@@ -4,10 +4,12 @@ package checker
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"encore.dev/rlog"
@@ -26,6 +28,9 @@ type SubscriptionFetcher interface {
 // so region-restricted URLs work through a local proxy.
 type HTTPSubscriptionFetcher struct {
 	Client *http.Client
+	// ProxyConfig, when set, tunnels the fetch through this mihomo proxy node
+	// (for subscription URLs the server can't reach directly).
+	ProxyConfig map[string]any
 }
 
 func newHTTPClient() *http.Client {
@@ -46,7 +51,16 @@ func newHTTPClient() *http.Client {
 func (f *HTTPSubscriptionFetcher) Fetch(ctx context.Context, url string) ([]map[string]any, error) {
 	client := f.Client
 	if client == nil {
-		client = newHTTPClient()
+		if len(f.ProxyConfig) > 0 {
+			c, closeProxy, err := proxyHTTPClient(f.ProxyConfig, 30*time.Second)
+			if err != nil {
+				return nil, fmt.Errorf("build proxy for fetch: %w", err)
+			}
+			defer closeProxy()
+			client = c
+		} else {
+			client = newHTTPClient()
+		}
 	}
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
@@ -131,6 +145,30 @@ func fetchWithRetry(ctx context.Context, fetcher SubscriptionFetcher, url string
 // defaultFetcher is the package-level fetcher used by runJob.
 // Tests can swap this for a stub.
 var defaultFetcher SubscriptionFetcher = &HTTPSubscriptionFetcher{}
+
+// fetcherForProxy returns a fetcher that tunnels through the node described by
+// the given JSON config, or the default (direct / env-proxy) fetcher when the
+// config is empty/invalid.
+func fetcherForProxy(configJSON string) SubscriptionFetcher {
+	cfg := parseProxyConfig(configJSON)
+	if len(cfg) == 0 {
+		return defaultFetcher
+	}
+	return &HTTPSubscriptionFetcher{ProxyConfig: cfg}
+}
+
+// parseProxyConfig decodes a stored fetch-proxy node config (JSON) into a proxy
+// map, or returns nil for an empty/invalid value (→ direct fetch).
+func parseProxyConfig(s string) map[string]any {
+	if strings.TrimSpace(s) == "" {
+		return nil
+	}
+	var m map[string]any
+	if err := json.Unmarshal([]byte(s), &m); err != nil {
+		return nil
+	}
+	return m
+}
 
 // parseProxies tries Clash YAML first, then V2Ray format.
 func parseProxies(data []byte) ([]map[string]any, error) {

@@ -32,7 +32,7 @@ func RefreshSubscription(ctx context.Context, subscriptionID string) (*RefreshRe
 		return nil, errs.B().Code(errs.FailedPrecondition).Msg("subscription has no URL; import nodes instead").Err()
 	}
 
-	count, err := refreshNodes(ctx, defaultFetcher, subscriptionID, sub.URL)
+	count, err := refreshNodes(ctx, fetcherForProxy(sub.FetchProxyConfig), subscriptionID, sub.URL)
 	if err != nil {
 		return nil, errs.B().Code(errs.Unavailable).Msgf("could not fetch subscription: %v", err).Err()
 	}
@@ -64,7 +64,7 @@ func TestFetch(ctx context.Context, subscriptionID string) (*TestFetchResponse, 
 		return &TestFetchResponse{Ok: false, Error: "subscription has no URL configured"}, nil
 	}
 
-	count, err := dryRunFetch(ctx, defaultFetcher, sub.URL)
+	count, err := dryRunFetch(ctx, fetcherForProxy(sub.FetchProxyConfig), sub.URL)
 	if err != nil {
 		return &TestFetchResponse{Ok: false, Error: err.Error()}, nil
 	}

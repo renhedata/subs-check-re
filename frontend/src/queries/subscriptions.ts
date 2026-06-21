@@ -40,3 +40,16 @@ export function useDeleteSubscription() {
 		},
 	});
 }
+
+// useSetFetchProxy chooses the node used to tunnel a subscription's fetch
+// (empty config = direct).
+export function useSetFetchProxy() {
+	const qc = useQueryClient();
+	return useMutation({
+		mutationFn: (args: { id: string; config: string }) =>
+			client.subscription.SetFetchProxy(args.id, { config: args.config }),
+		onSuccess: () => {
+			qc.invalidateQueries({ queryKey: queryKeys.subscriptions() });
+		},
+	});
+}

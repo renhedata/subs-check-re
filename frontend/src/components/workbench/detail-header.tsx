@@ -112,7 +112,11 @@ export function DetailHeader({
 					</Select>
 				) : null}
 
-				<NodeSourceMenu subscriptionId={sub.id} hasUrl={!!sub.url} />
+				<NodeSourceMenu
+					subscriptionId={sub.id}
+					hasUrl={!!sub.url}
+					viaNode={!!sub.fetch_proxy_config}
+				/>
 
 				<ExportPopover subscriptionId={sub.id} />
 

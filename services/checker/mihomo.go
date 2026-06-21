@@ -4,6 +4,7 @@ package checker
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"io"
 	"net"
@@ -132,14 +133,13 @@ func (pc *proxyClient) close() {
 	}
 }
 
-// newProxyClient creates an HTTP client that routes through the given proxy map.
-// Returns nil if the proxy config is invalid.
-func newProxyClient(mapping map[string]any) *proxyClient {
+// proxyTransport builds an http.Transport that dials through the given mihomo
+// proxy. Returns the proxy so the caller can Close() it.
+func proxyTransport(mapping map[string]any) (*http.Transport, constant.Proxy, error) {
 	proxy, err := adapter.ParseProxy(mapping)
 	if err != nil {
-		return nil
+		return nil, nil, err
 	}
-
 	transport := &http.Transport{
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 			host, portStr, err := net.SplitHostPort(addr)
@@ -157,7 +157,16 @@ func newProxyClient(mapping map[string]any) *proxyClient {
 		},
 		DisableKeepAlives: true,
 	}
+	return transport, proxy, nil
+}
 
+// newProxyClient creates an HTTP client that routes through the given proxy map.
+// Returns nil if the proxy config is invalid.
+func newProxyClient(mapping map[string]any) *proxyClient {
+	transport, proxy, err := proxyTransport(mapping)
+	if err != nil {
+		return nil
+	}
 	ct := &countingTransport{base: transport}
 	return &proxyClient{
 		Client: &http.Client{
@@ -167,6 +176,24 @@ func newProxyClient(mapping map[string]any) *proxyClient {
 		proxy:   proxy,
 		counter: ct,
 	}
+}
+
+// proxyHTTPClient builds an http.Client that tunnels through the given proxy
+// config, used to fetch a subscription URL the server can't reach directly. The
+// returned closer releases the proxy. TLS verification is relaxed to match the
+// direct-fetch client.
+func proxyHTTPClient(mapping map[string]any, timeout time.Duration) (*http.Client, func(), error) {
+	transport, proxy, err := proxyTransport(mapping)
+	if err != nil {
+		return nil, nil, err
+	}
+	transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	client := &http.Client{Timeout: timeout, Transport: transport}
+	closer := func() {
+		client.CloseIdleConnections()
+		proxy.Close()
+	}
+	return client, closer, nil
 }
 
 // get performs a GET request using the given context, honoring cancellation.
