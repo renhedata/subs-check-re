@@ -132,6 +132,13 @@ export interface NodeTableProps {
 	sortDir: SortDir;
 	onSort: (key: SortKey) => void;
 	onToggleEnabled?: (nodeId: string, enabled: boolean) => void;
+	// Selection + per-row check (node-list view only).
+	selectable?: boolean;
+	selectedIds?: Set<string>;
+	onToggleSelect?: (nodeId: string) => void;
+	onToggleSelectAll?: (visibleIds: string[], select: boolean) => void;
+	onCheckNode?: (nodeId: string) => void;
+	checkDisabled?: boolean;
 }
 
 export function NodeTable({
@@ -141,9 +148,19 @@ export function NodeTable({
 	sortDir,
 	onSort,
 	onToggleEnabled,
+	selectable,
+	selectedIds,
+	onToggleSelect,
+	onToggleSelectAll,
+	onCheckNode,
+	checkDisabled,
 }: NodeTableProps) {
 	const ruleByKey = Object.fromEntries(rules.map((r) => [r.key, r]));
 	const [detail, setDetail] = useState<NodeResult | null>(null);
+	const allSelected =
+		selectable &&
+		results.length > 0 &&
+		results.every((r) => selectedIds?.has(r.node_id));
 
 	return (
 		<>
@@ -158,6 +175,14 @@ export function NodeTable({
 						)}
 					>
 						<div className="flex items-center gap-2">
+							{selectable ? (
+								<input
+									type="checkbox"
+									aria-label={`Select ${r.node_name}`}
+									checked={!!selectedIds?.has(r.node_id)}
+									onChange={() => onToggleSelect?.(r.node_id)}
+								/>
+							) : null}
 							<button
 								type="button"
 								onClick={() => setDetail(r)}
@@ -169,6 +194,16 @@ export function NodeTable({
 								{r.alive ? "alive" : "dead"}
 							</Badge>
 							<EnableToggle r={r} onToggleEnabled={onToggleEnabled} />
+							{onCheckNode ? (
+								<button
+									type="button"
+									disabled={checkDisabled}
+									onClick={() => onCheckNode(r.node_id)}
+									className="rounded-md border border-border px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-secondary disabled:opacity-40"
+								>
+									Check
+								</button>
+							) : null}
 						</div>
 						<div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs tabular-nums">
 							<span>
@@ -205,6 +240,21 @@ export function NodeTable({
 				<table className="w-full border-collapse text-[12.5px]">
 					<thead>
 						<tr className="border-border border-b bg-card">
+							{selectable ? (
+								<th className="w-8 px-2 py-2">
+									<input
+										type="checkbox"
+										aria-label="Select all"
+										checked={!!allSelected}
+										onChange={(e) =>
+											onToggleSelectAll?.(
+												results.map((r) => r.node_id),
+												e.target.checked,
+											)
+										}
+									/>
+								</th>
+							) : null}
 							<th className="w-8 px-2 py-2" aria-label="Enabled" />
 							<SortHeader
 								label="Node"
@@ -239,6 +289,11 @@ export function NodeTable({
 							<th className="px-3 py-2 text-left font-medium text-[11px] text-muted-foreground uppercase tracking-[0.4px]">
 								Unlocks
 							</th>
+							{onCheckNode ? (
+								<th className="px-3 py-2 text-right font-medium text-[11px] text-muted-foreground uppercase tracking-[0.4px]">
+									Check
+								</th>
+							) : null}
 						</tr>
 					</thead>
 					<tbody className="tabular-nums">
@@ -250,6 +305,16 @@ export function NodeTable({
 									!r.enabled && "opacity-50",
 								)}
 							>
+								{selectable ? (
+									<td className="px-2 py-1.5">
+										<input
+											type="checkbox"
+											aria-label={`Select ${r.node_name}`}
+											checked={!!selectedIds?.has(r.node_id)}
+											onChange={() => onToggleSelect?.(r.node_id)}
+										/>
+									</td>
+								) : null}
 								<td className="px-2 py-1.5">
 									<EnableToggle r={r} onToggleEnabled={onToggleEnabled} />
 								</td>
@@ -291,6 +356,18 @@ export function NodeTable({
 								<td className="px-3 py-1.5">
 									<UnlockIcons r={r} ruleByKey={ruleByKey} />
 								</td>
+								{onCheckNode ? (
+									<td className="px-3 py-1.5 text-right">
+										<button
+											type="button"
+											disabled={checkDisabled}
+											onClick={() => onCheckNode(r.node_id)}
+											className="rounded-md border border-border px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-secondary disabled:opacity-40"
+										>
+											Check
+										</button>
+									</td>
+								) : null}
 							</tr>
 						))}
 					</tbody>
