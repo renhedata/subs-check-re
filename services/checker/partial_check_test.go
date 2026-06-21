@@ -46,7 +46,7 @@ func TestPartialCheckScopesToSubset(t *testing.T) {
 		store:   defaultJobStore,
 		fetcher: &noFetchOnPartialFetcher{t},
 		bus:     newInProcessJobBus(),
-		check: func(_ context.Context, nodeID string, _ map[string]any, _, _, _ string, _ CheckOptions, _ []*PlatformRule) nodeCheckResult {
+		check: func(_ context.Context, nodeID string, _ map[string]any, _, _, _ string, _ CheckOptions, _ []*PlatformRule, _ phaseEmitter) nodeCheckResult {
 			return nodeCheckResult{NodeID: nodeID, NodeName: "A", Alive: true, LatencyMs: 10}
 		},
 	}

@@ -30,7 +30,7 @@ func TestLiveProgressEmitsInheritedResult(t *testing.T) {
 	// (now locked), no country/speed.
 	jobID := insertTestJob(t, subID)
 	proxy := map[string]any{"name": "HK-01 |流量:48G", "type": "ss", "server": "1.1.1.1", "port": 443}
-	check := func(_ context.Context, nodeID string, mapping map[string]any, _, _, _ string, _ CheckOptions, _ []*PlatformRule) nodeCheckResult {
+	check := func(_ context.Context, nodeID string, mapping map[string]any, _, _, _ string, _ CheckOptions, _ []*PlatformRule, _ phaseEmitter) nodeCheckResult {
 		name, _ := mapping["name"].(string)
 		return nodeCheckResult{
 			NodeID: nodeID, NodeName: name, Alive: true, LatencyMs: 20,

@@ -29,6 +29,10 @@ const (
 // these to drive retry logic without real I/O.
 var probeLatencyFn = probeLatency
 
+// newProxyClientFn is a seam so phase-emission tests can stub proxy creation
+// (avoiding a real mihomo dial).
+var newProxyClientFn = newProxyClient
+
 const aliveProbeAttempts = 3
 
 // aliveProbeBackoff is the pause between failed alive probes; var so tests shrink it.
@@ -348,10 +352,18 @@ type nodeCheckResult struct {
 	Debug           *NodeDebug
 }
 
+const (
+	phaseLatency   = "latency"
+	phaseSpeed     = "speed"
+	phaseUpload    = "upload"
+	phaseRegion    = "region"
+	phaseStreaming = "streaming"
+)
+
 // checkNode runs all checks for a single proxy mapping and returns the result.
 // Every enabled rule is evaluated and its outcome stored in result.Platforms,
 // keyed by rule key.
-func checkNode(ctx context.Context, nodeID string, mapping map[string]any, speedTestURL, uploadTestURL, latencyTestURL string, opts CheckOptions, rules []*PlatformRule) nodeCheckResult {
+func checkNode(ctx context.Context, nodeID string, mapping map[string]any, speedTestURL, uploadTestURL, latencyTestURL string, opts CheckOptions, rules []*PlatformRule, emit phaseEmitter) nodeCheckResult {
 	name, _ := mapping["name"].(string)
 	result := nodeCheckResult{NodeID: nodeID, NodeName: name}
 
@@ -359,7 +371,7 @@ func checkNode(ctx context.Context, nodeID string, mapping map[string]any, speed
 		result.Debug = &NodeDebug{NodeID: nodeID, NodeName: name}
 	}
 
-	pc := newProxyClient(mapping)
+	pc := newProxyClientFn(mapping)
 	if pc == nil {
 		if opts.Debug && result.Debug != nil {
 			result.Debug.Traces = append(result.Debug.Traces, DebugTrace{
@@ -372,6 +384,7 @@ func checkNode(ctx context.Context, nodeID string, mapping map[string]any, speed
 	}
 	defer pc.close()
 
+	emit(phaseLatency)
 	alive, latency := probeLatencyWithRetry(ctx, pc.Client, latencyTestURL)
 	if !alive {
 		if opts.Debug && result.Debug != nil {
@@ -396,9 +409,11 @@ func checkNode(ctx context.Context, nodeID string, mapping map[string]any, speed
 		})
 	}
 	if opts.SpeedTest {
+		emit(phaseSpeed)
 		result.SpeedKbps = measureSpeedWithRetry(ctx, pc.Client.Transport, speedTestURL)
 	}
 	if opts.UploadSpeedTest {
+		emit(phaseUpload)
 		result.UploadSpeedKbps = measureUploadWithRetry(ctx, pc.Client.Transport, speedTestURL, uploadTestURL)
 	}
 
@@ -409,12 +424,14 @@ func checkNode(ctx context.Context, nodeID string, mapping map[string]any, speed
 			Timeout:   8 * time.Second,
 			Jar:       jar,
 		}
+		emit(phaseRegion)
 		result.IP, result.Country = getProxyInfoFn(ctx, mediaClient)
 
 		var ruleRecorders map[string]*DebugRecorder
 		if opts.Debug {
 			ruleRecorders = make(map[string]*DebugRecorder)
 		}
+		emit(phaseStreaming)
 		outcomes := runUserRulesWithDebug(ctx, mediaClient, rules, ruleRecorders)
 		result.Platforms = make(map[string]PlatformOutcome, len(outcomes))
 		for k, v := range outcomes {

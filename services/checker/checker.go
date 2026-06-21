@@ -199,6 +199,7 @@ type progressUpdate struct {
 	Platforms       map[string]PlatformOutcome `json:"platforms,omitempty"`
 	TrafficBytes    int64                      `json:"traffic_bytes,omitempty"`
 	Debug           *NodeDebug                 `json:"debug,omitempty"`
+	Phase           string                     `json:"phase,omitempty"`
 }
 
 // --- API endpoints ---

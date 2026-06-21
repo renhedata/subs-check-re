@@ -22,9 +22,14 @@ const (
 	jobTimeout          = 4 * time.Hour
 )
 
+// phaseEmitter reports the per-node check phase about to start (latency, speed,
+// upload, region, streaming). It feeds the live "what is this node doing now"
+// feed; emissions are best-effort and never block the worker.
+type phaseEmitter func(phase string)
+
 // checkFunc is the per-node check seam; production wires checkNode (mihomo),
 // tests inject fakes so the runner is testable without real proxies.
-type checkFunc func(ctx context.Context, nodeID string, mapping map[string]any, speedTestURL, uploadTestURL, latencyTestURL string, opts CheckOptions, rules []*PlatformRule) nodeCheckResult
+type checkFunc func(ctx context.Context, nodeID string, mapping map[string]any, speedTestURL, uploadTestURL, latencyTestURL string, opts CheckOptions, rules []*PlatformRule, emit phaseEmitter) nodeCheckResult
 
 // jobRunner executes one check job end to end: load config, fetch the
 // subscription (with retry), replace nodes transactionally, fan out node
@@ -211,7 +216,11 @@ func (r *jobRunner) checkOne(ctx context.Context, jobID, nodeID string, proxy ma
 	}()
 	nodeCtx, cancel := context.WithTimeout(ctx, nodeTimeout)
 	defer cancel()
-	return r.check(nodeCtx, nodeID, proxy, cfg.SpeedTestURL, uploadTestURL, cfg.LatencyTestURL, cfg.Options, rules)
+	name, _ := proxy["name"].(string)
+	emit := func(phase string) {
+		r.bus.Publish(jobID, progressUpdate{NodeID: nodeID, NodeName: name, Phase: phase})
+	}
+	return r.check(nodeCtx, nodeID, proxy, cfg.SpeedTestURL, uploadTestURL, cfg.LatencyTestURL, cfg.Options, rules, emit)
 }
 
 // recordResult persists one node's outcome and emits progress. Persistence

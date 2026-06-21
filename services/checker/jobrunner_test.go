@@ -30,7 +30,7 @@ func runnerProxies() []map[string]any {
 	}
 }
 
-func aliveCheck(ctx context.Context, nodeID string, mapping map[string]any, _, _, _ string, _ CheckOptions, _ []*PlatformRule) nodeCheckResult {
+func aliveCheck(ctx context.Context, nodeID string, mapping map[string]any, _, _, _ string, _ CheckOptions, _ []*PlatformRule, _ phaseEmitter) nodeCheckResult {
 	name, _ := mapping["name"].(string)
 	return nodeCheckResult{NodeID: nodeID, NodeName: name, Alive: true, LatencyMs: 10}
 }
@@ -91,11 +91,11 @@ func TestJobRunnerFetchFailureMarksJobFailed(t *testing.T) {
 func TestJobRunnerPanicInCheckRecordsDeadNode(t *testing.T) {
 	subID := "runner-sub-" + uuid.New().String()
 	jobID := insertTestJob(t, subID)
-	panicky := func(ctx context.Context, nodeID string, mapping map[string]any, a, b, c string, o CheckOptions, ru []*PlatformRule) nodeCheckResult {
+	panicky := func(ctx context.Context, nodeID string, mapping map[string]any, a, b, c string, o CheckOptions, ru []*PlatformRule, _ phaseEmitter) nodeCheckResult {
 		if name, _ := mapping["name"].(string); name == "node-a" {
 			panic("mihomo exploded")
 		}
-		return aliveCheck(ctx, nodeID, mapping, a, b, c, o, ru)
+		return aliveCheck(ctx, nodeID, mapping, a, b, c, o, ru, nil)
 	}
 	r := &jobRunner{
 		store:   defaultJobStore,
@@ -161,7 +161,7 @@ func TestJobRunnerFiltersRulesBySelection(t *testing.T) {
 
 	var mu sync.Mutex
 	var gotKeys []string
-	recording := func(_ context.Context, nodeID string, mapping map[string]any, _, _, _ string, _ CheckOptions, rules []*PlatformRule) nodeCheckResult {
+	recording := func(_ context.Context, nodeID string, mapping map[string]any, _, _, _ string, _ CheckOptions, rules []*PlatformRule, _ phaseEmitter) nodeCheckResult {
 		mu.Lock()
 		if gotKeys == nil {
 			gotKeys = keysOf(rules)

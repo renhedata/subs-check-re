@@ -163,7 +163,7 @@ func TestCheckNode_AliveNodeRunsAllSelectedTests(t *testing.T) {
 	opts := CheckOptions{SpeedTest: true, UploadSpeedTest: true, MediaApps: []string{"netflix", "disney"}}
 	rules := []*PlatformRule{{Key: "netflix", Enabled: true}, {Key: "disney", Enabled: true}}
 
-	res := checkNode(context.Background(), "node-1", mapping, "", "", "", opts, rules)
+	res := checkNode(context.Background(), "node-1", mapping, "", "", "", opts, rules, func(string) {})
 
 	if !res.Alive {
 		t.Fatal("alive node must be marked alive")
@@ -199,7 +199,7 @@ func TestCheckNode_DeadNodeSkipsSubTests(t *testing.T) {
 	opts := CheckOptions{SpeedTest: true, MediaApps: []string{"netflix"}}
 	rules := []*PlatformRule{{Key: "netflix", Enabled: true}}
 
-	res := checkNode(context.Background(), "node-1", mapping, "", "", "", opts, rules)
+	res := checkNode(context.Background(), "node-1", mapping, "", "", "", opts, rules, func(string) {})
 	if res.Alive {
 		t.Fatal("want dead")
 	}
