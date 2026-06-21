@@ -75,20 +75,20 @@ export function useTriggerCheck() {
 	return useMutation({
 		mutationFn: (args: {
 			subscriptionId: string;
-			params?: checker.TriggerParams;
+			params?: Partial<checker.TriggerParams>;
 		}) =>
-			client.checker.TriggerCheck(
-				args.subscriptionId,
-				args.params ?? {
-					speed_test: false,
-					upload_speed_test: false,
-					media_apps: [],
-					debug: false,
-				},
-			),
+			client.checker.TriggerCheck(args.subscriptionId, {
+				speed_test: false,
+				upload_speed_test: false,
+				media_apps: [],
+				debug: false,
+				node_ids: [],
+				...args.params,
+			}),
 		onSuccess: (_data, vars) => {
 			qc.invalidateQueries({ queryKey: queryKeys.jobs(vars.subscriptionId) });
 			qc.invalidateQueries({ queryKey: queryKeys.latestJobs() });
+			qc.invalidateQueries({ queryKey: queryKeys.nodes(vars.subscriptionId) });
 		},
 	});
 }
@@ -111,6 +111,7 @@ export function useSetNodeEnabled(subscriptionId: string) {
 			client.checker.SetNodeEnabled(args.nodeId, { enabled: args.enabled }),
 		onSuccess: () => {
 			qc.invalidateQueries({ queryKey: queryKeys.results(subscriptionId) });
+			qc.invalidateQueries({ queryKey: queryKeys.nodes(subscriptionId) });
 		},
 	});
 }
@@ -123,6 +124,7 @@ export function useImportNodes(subscriptionId: string) {
 			client.checker.ImportNodes(subscriptionId, { content }),
 		onSuccess: () => {
 			qc.invalidateQueries({ queryKey: queryKeys.results(subscriptionId) });
+			qc.invalidateQueries({ queryKey: queryKeys.nodes(subscriptionId) });
 		},
 	});
 }
@@ -134,6 +136,7 @@ export function useRefreshSubscription(subscriptionId: string) {
 		mutationFn: () => client.checker.RefreshSubscription(subscriptionId),
 		onSuccess: () => {
 			qc.invalidateQueries({ queryKey: queryKeys.results(subscriptionId) });
+			qc.invalidateQueries({ queryKey: queryKeys.nodes(subscriptionId) });
 		},
 	});
 }

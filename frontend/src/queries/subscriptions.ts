@@ -48,8 +48,9 @@ export function useSetFetchProxy() {
 	return useMutation({
 		mutationFn: (args: { id: string; config: string }) =>
 			client.subscription.SetFetchProxy(args.id, { config: args.config }),
-		onSuccess: () => {
+		onSuccess: (_data, args) => {
 			qc.invalidateQueries({ queryKey: queryKeys.subscriptions() });
+			qc.invalidateQueries({ queryKey: queryKeys.nodes(args.id) });
 		},
 	});
 }
