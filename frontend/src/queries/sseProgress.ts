@@ -24,9 +24,28 @@ export interface SSEProgress {
 	config?: string;
 	platforms?: Record<string, checker.PlatformOutcome>;
 	traffic_bytes?: number;
+	phase?: string;
 	done?: boolean;
 	status?: string;
 	debug?: NodeDebug;
+}
+
+export interface InflightNode {
+	node_id: string;
+	node_name: string;
+	phase: string;
+}
+
+// A phase event announces the test a node is starting (in-flight); it carries a
+// `phase` and never advances the completed counter.
+export function isPhaseEvent(d: SSEProgress): boolean {
+	return !!d.phase && !!d.node_id;
+}
+
+// A result event is a finished node (no phase, has a name) — the existing
+// per-node payload that feeds the completed log and the live table.
+export function isResultEvent(d: SSEProgress): boolean {
+	return !d.phase && !!d.node_name;
 }
 
 export type SSEConnection = "idle" | "open" | "reconnecting" | "done";
@@ -42,6 +61,7 @@ interface UseSSEProgressResult {
 	logEntries: SSEProgress[];
 	debugData: NodeDebug[];
 	connection: SSEConnection;
+	inflight: InflightNode[];
 }
 
 const MAX_LOG_ENTRIES = 500;
@@ -63,6 +83,7 @@ export function useSSEProgress({
 	const [logEntries, setLogEntries] = useState<SSEProgress[]>([]);
 	const [debugData, setDebugData] = useState<NodeDebug[]>([]);
 	const [connection, setConnection] = useState<SSEConnection>("idle");
+	const [inflight, setInflight] = useState<InflightNode[]>([]);
 	const qc = useQueryClient();
 	const onDoneRef = useRef(onDone);
 	onDoneRef.current = onDone;
@@ -71,6 +92,7 @@ export function useSSEProgress({
 		setLogEntries([]);
 		setProgress(null);
 		setDebugData([]);
+		setInflight([]);
 		setConnection(jobId ? "reconnecting" : "idle");
 	}, [jobId]);
 
@@ -79,6 +101,8 @@ export function useSSEProgress({
 
 		const buffer: SSEProgress[] = [];
 		const debugBuffer: NodeDebug[] = [];
+		const inflightMap = new Map<string, InflightNode>();
+		let inflightDirty = false;
 		const flush = () => {
 			if (buffer.length > 0) {
 				const batch = buffer.splice(0, buffer.length);
@@ -87,6 +111,10 @@ export function useSSEProgress({
 			if (debugBuffer.length > 0) {
 				const batch = debugBuffer.splice(0, debugBuffer.length);
 				setDebugData((prev) => [...prev, ...batch]);
+			}
+			if (inflightDirty) {
+				inflightDirty = false;
+				setInflight([...inflightMap.values()]);
 			}
 		};
 		const timer = setInterval(flush, FLUSH_INTERVAL_MS);
@@ -97,10 +125,34 @@ export function useSSEProgress({
 		es.onopen = () => setConnection("open");
 		es.onmessage = (e) => {
 			const data: SSEProgress = JSON.parse(e.data);
-			setProgress(data);
 			if (data.debug) debugBuffer.push(data.debug);
-			if (data.node_name) buffer.push(data);
+
+			if (isPhaseEvent(data)) {
+				// In-flight: record/update this node's current phase. Do not touch
+				// progress counters or the completed log.
+				inflightMap.set(data.node_id as string, {
+					node_id: data.node_id as string,
+					node_name: data.node_name ?? "",
+					phase: data.phase as string,
+				});
+				inflightDirty = true;
+				return;
+			}
+
+			if (isResultEvent(data)) {
+				// Finished: drop from in-flight, append to the completed log.
+				if (data.node_id && inflightMap.delete(data.node_id)) {
+					inflightDirty = true;
+				}
+				buffer.push(data);
+			}
+
+			// Counters advance only from non-phase events.
+			setProgress(data);
+
 			if (data.done) {
+				inflightMap.clear();
+				setInflight([]);
 				flush();
 				setConnection("done");
 				es.close();
@@ -123,5 +175,5 @@ export function useSSEProgress({
 		};
 	}, [jobId, qc, subscriptionId]);
 
-	return { progress, logEntries, debugData, connection };
+	return { progress, logEntries, debugData, connection, inflight };
 }
