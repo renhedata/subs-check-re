@@ -77,19 +77,22 @@ func (r *jobRunner) run(parentCtx context.Context, jobID, subscriptionID, userID
 		return
 	}
 
-	// A check tests the subscription's current persisted nodes; it never
-	// re-fetches or replaces them. Nodes change only via an explicit refresh or
-	// a manual import. The one exception is bootstrap: a subscription that has a
-	// URL but no nodes yet fetches once so the first check has something to test.
 	existing, err := r.store.loadNodes(context.Background(), subscriptionID)
 	if err != nil {
 		fail("load nodes", err)
 		return
 	}
 
+	// An explicit node selection scopes the run to those nodes and never
+	// re-fetches; only a whole-subscription run with no nodes yet bootstraps.
+	partial := len(cfg.NodeIDs) > 0
+	if partial {
+		existing = filterNodesByIDs(existing, cfg.NodeIDs)
+	}
+
 	var proxies []map[string]any
 	var nodeIDs []string
-	if len(existing) == 0 && cfg.SubURL != "" {
+	if !partial && len(existing) == 0 && cfg.SubURL != "" {
 		proxies, err = fetchWithRetry(ctx, r.fetcher, cfg.SubURL)
 		if err != nil {
 			fail("fetch subscription", err)
@@ -273,6 +276,25 @@ func buildProgressUpdate(progress, total int, nodeID string, proxy map[string]an
 		pu.Debug = res.Debug
 	}
 	return pu
+}
+
+// filterNodesByIDs returns only the nodes whose id is in ids, preserving the
+// input order. An empty ids slice means "all nodes" and returns the input as-is.
+func filterNodesByIDs(nodes []storedNode, ids []string) []storedNode {
+	if len(ids) == 0 {
+		return nodes
+	}
+	want := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		want[id] = true
+	}
+	out := make([]storedNode, 0, len(ids))
+	for _, n := range nodes {
+		if want[n.id] {
+			out = append(out, n)
+		}
+	}
+	return out
 }
 
 // nodeKeyForProxy mirrors nodeIdentityKey (SQL): a node's stable identity is
