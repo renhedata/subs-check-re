@@ -1,16 +1,29 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import type { NodeDebug } from "@/components/debug-panel";
+import type { checker } from "@/lib/client.gen";
 import { queryKeys } from "./queryKeys";
 
+// Per-node events mirror checker.NodeResult so the live table can render the
+// same columns as GetResults; unmeasured dimensions arrive already inherited.
 export interface SSEProgress {
 	progress?: number;
 	total?: number;
+	node_id?: string;
 	node_name?: string;
+	node_type?: string;
+	enabled?: boolean;
 	alive?: boolean;
 	latency_ms?: number;
 	speed_kbps?: number;
 	upload_speed_kbps?: number;
+	country?: string;
+	ip?: string;
+	server?: string;
+	port?: number;
+	config?: string;
+	platforms?: Record<string, checker.PlatformOutcome>;
+	traffic_bytes?: number;
 	done?: boolean;
 	status?: string;
 	debug?: NodeDebug;

@@ -83,26 +83,29 @@ export function DetailPane({
 		);
 	};
 
+	// Each SSE event already carries a full, inheritance-applied NodeResult
+	// (matching GetResults), so live rows render complete — including unlocks
+	// and country inherited from prior runs — with no placeholder gaps.
 	const streamedResults: checker.NodeResult[] = useMemo(
 		() =>
 			logEntries
 				.filter((e) => e.alive)
 				.map((e, i) => ({
-					node_id: `live-${i}`,
+					node_id: e.node_id ?? `live-${i}`,
 					node_name: e.node_name ?? "",
-					node_type: "",
-					enabled: true,
+					node_type: e.node_type ?? "",
+					enabled: e.enabled ?? true,
 					alive: true,
 					latency_ms: e.latency_ms ?? 0,
 					speed_kbps: e.speed_kbps ?? 0,
 					upload_speed_kbps: e.upload_speed_kbps ?? 0,
-					country: "",
-					ip: "",
-					server: "",
-					port: 0,
-					config: "",
-					platforms: {},
-					traffic_bytes: 0,
+					country: e.country ?? "",
+					ip: e.ip ?? "",
+					server: e.server ?? "",
+					port: e.port ?? 0,
+					config: e.config ?? "",
+					platforms: e.platforms ?? {},
+					traffic_bytes: e.traffic_bytes ?? 0,
 				})),
 		[logEntries],
 	);
@@ -156,10 +159,13 @@ export function DetailPane({
 
 				{running ? (
 					// Spec §Running state: alive nodes stream into the table as
-					// found. Partial rows (no unlocks/traffic/country yet, no
-					// node_id) — the final refetch replaces them with full data.
+					// found, carrying full inheritance-applied data. The final
+					// refetch only reconciles ordering and any disabled flags.
 					streamedResults.length > 0 ? (
-						<ResultsSection results={streamedResults} rules={[]} />
+						<ResultsSection
+							results={streamedResults}
+							rules={rulesQuery.data?.rules}
+						/>
 					) : null
 				) : resultsQuery.isLoading && !noChecksYet ? (
 					<div className="space-y-2">

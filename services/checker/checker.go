@@ -176,15 +176,28 @@ type TriggerParams struct {
 // --- Progress event payload ---
 // The bus that routes these to subscribers lives in jobbus.go.
 
+// progressUpdate is one SSE event. Per-node events carry a full NodeResult
+// (with inheritance already applied) so the live table matches GetResults; the
+// periodic tick / terminal "done" event leave the node fields zero (omitempty).
 type progressUpdate struct {
-	Progress        int        `json:"progress"`
-	Total           int        `json:"total"`
-	NodeName        string     `json:"node_name,omitempty"`
-	Alive           bool       `json:"alive"`
-	LatencyMs       int        `json:"latency_ms,omitempty"`
-	SpeedKbps       int        `json:"speed_kbps,omitempty"`
-	UploadSpeedKbps int        `json:"upload_speed_kbps,omitempty"`
-	Debug           *NodeDebug `json:"debug,omitempty"`
+	Progress        int                        `json:"progress"`
+	Total           int                        `json:"total"`
+	NodeID          string                     `json:"node_id,omitempty"`
+	NodeName        string                     `json:"node_name,omitempty"`
+	NodeType        string                     `json:"node_type,omitempty"`
+	Enabled         bool                       `json:"enabled,omitempty"`
+	Alive           bool                       `json:"alive"`
+	LatencyMs       int                        `json:"latency_ms,omitempty"`
+	SpeedKbps       int                        `json:"speed_kbps,omitempty"`
+	UploadSpeedKbps int                        `json:"upload_speed_kbps,omitempty"`
+	Country         string                     `json:"country,omitempty"`
+	IP              string                     `json:"ip,omitempty"`
+	Server          string                     `json:"server,omitempty"`
+	Port            int                        `json:"port,omitempty"`
+	Config          string                     `json:"config,omitempty"`
+	Platforms       map[string]PlatformOutcome `json:"platforms,omitempty"`
+	TrafficBytes    int64                      `json:"traffic_bytes,omitempty"`
+	Debug           *NodeDebug                 `json:"debug,omitempty"`
 }
 
 // --- API endpoints ---

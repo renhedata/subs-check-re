@@ -3,7 +3,9 @@ package checker
 
 import (
 	"context"
+	"encoding/json"
 	"runtime/debug"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -107,6 +109,15 @@ func (r *jobRunner) run(parentCtx context.Context, jobID, subscriptionID, userID
 		rlog.Warn("failed to load user settings; deriving upload URL from speed test URL", "job_id", jobID, "err", err)
 	}
 
+	// Snapshot prior results once so each node's live event can inherit the
+	// dimensions this run skips (matching GetResults). Best-effort: an empty
+	// baseline just means live events show measured-only values.
+	baseline, err := r.store.loadInheritanceBaseline(ctx, subscriptionID)
+	if err != nil {
+		rlog.Warn("failed to load inheritance baseline; live stream shows measured-only values", "job_id", jobID, "err", err)
+		baseline = inheritanceBaseline{}
+	}
+
 	type task struct {
 		nodeID string
 		proxy  map[string]any
@@ -122,7 +133,7 @@ func (r *jobRunner) run(parentCtx context.Context, jobID, subscriptionID, userID
 			defer wg.Done()
 			for t := range taskCh {
 				res := r.checkOne(ctx, jobID, t.nodeID, t.proxy, cfg, uploadTestURL, userRules)
-				r.recordResult(jobID, t.nodeID, t.proxy, res, total, &processedCount, &totalTrafficBytes, cfg.Options)
+				r.recordResult(jobID, t.nodeID, t.proxy, res, total, &processedCount, &totalTrafficBytes, cfg.Options, baseline)
 			}
 		}()
 	}
@@ -182,7 +193,7 @@ func (r *jobRunner) checkOne(ctx context.Context, jobID, nodeID string, proxy ma
 
 // recordResult persists one node's outcome and emits progress. Persistence
 // failures are logged, not fatal: one lost row should not abort the job.
-func (r *jobRunner) recordResult(jobID, nodeID string, proxy map[string]any, res nodeCheckResult, total int, processed, traffic *atomic.Int64, opts CheckOptions) {
+func (r *jobRunner) recordResult(jobID, nodeID string, proxy map[string]any, res nodeCheckResult, total int, processed, traffic *atomic.Int64, opts CheckOptions, baseline inheritanceBaseline) {
 	if err := r.store.insertResult(context.Background(), jobID, nodeID, proxy, res); err != nil {
 		rlog.Error("failed to persist node result", "job_id", jobID, "node", res.NodeName, "err", err)
 	}
@@ -191,17 +202,104 @@ func (r *jobRunner) recordResult(jobID, nodeID string, proxy map[string]any, res
 	if err := r.store.setProgress(context.Background(), jobID, int(n)); err != nil {
 		rlog.Error("failed to persist progress", "job_id", jobID, "err", err)
 	}
+	r.bus.Publish(jobID, buildProgressUpdate(int(n), total, nodeID, proxy, res, opts, baseline))
+}
+
+// buildProgressUpdate assembles one SSE event as a full, inheritance-applied
+// NodeResult: measured dimensions win; unmeasured speed/upload/country fall back
+// to the node's baseline; platforms merge per key (a freshly tested platform
+// overrides, an untested one keeps its prior value). This keeps the live stream
+// identical to GetResults.
+func buildProgressUpdate(progress, total int, nodeID string, proxy map[string]any, res nodeCheckResult, opts CheckOptions, baseline inheritanceBaseline) progressUpdate {
+	base := baseline[nodeKeyForProxy(proxy)]
+
+	speed := res.SpeedKbps
+	if speed == 0 {
+		speed = base.speedKbps
+	}
+	upload := res.UploadSpeedKbps
+	if upload == 0 {
+		upload = base.uploadSpeedKbps
+	}
+	country := res.Country
+	if country == "" {
+		country = base.country
+	}
+
+	nodeType, _ := proxy["type"].(string)
+	server, _ := proxy["server"].(string)
+	configJSON, _ := json.Marshal(proxy)
+
 	pu := progressUpdate{
-		Progress:        int(n),
+		Progress:        progress,
 		Total:           total,
+		NodeID:          nodeID,
 		NodeName:        res.NodeName,
+		NodeType:        nodeType,
+		Enabled:         true,
 		Alive:           res.Alive,
 		LatencyMs:       res.LatencyMs,
-		SpeedKbps:       res.SpeedKbps,
-		UploadSpeedKbps: res.UploadSpeedKbps,
+		SpeedKbps:       speed,
+		UploadSpeedKbps: upload,
+		Country:         country,
+		IP:              res.IP,
+		Server:          server,
+		Port:            proxyPort(proxy),
+		Config:          string(configJSON),
+		Platforms:       mergePlatforms(base.platforms, res.Platforms),
+		TrafficBytes:    res.TrafficBytes,
 	}
 	if opts.Debug && res.Debug != nil {
 		pu.Debug = res.Debug
 	}
-	r.bus.Publish(jobID, pu)
+	return pu
+}
+
+// nodeKeyForProxy mirrors nodeIdentityKey (SQL): a node's stable identity is
+// server:port from its config, falling back to the display name.
+func nodeKeyForProxy(proxy map[string]any) string {
+	server, _ := proxy["server"].(string)
+	if server == "" {
+		name, _ := proxy["name"].(string)
+		return name
+	}
+	port := ""
+	if _, ok := proxy["port"]; ok {
+		port = strconv.Itoa(proxyPort(proxy))
+	}
+	return server + ":" + port
+}
+
+// proxyPort extracts the port from a proxy map, tolerating the numeric types a
+// JSON/YAML decode may yield.
+func proxyPort(proxy map[string]any) int {
+	switch v := proxy["port"].(type) {
+	case int:
+		return v
+	case int64:
+		return int(v)
+	case float64:
+		return int(v)
+	case json.Number:
+		n, _ := v.Int64()
+		return int(n)
+	case string:
+		n, _ := strconv.Atoi(v)
+		return n
+	default:
+		return 0
+	}
+}
+
+// mergePlatforms overlays freshly measured platform outcomes onto the inherited
+// baseline. Returns a new map; never mutates its inputs.
+func mergePlatforms(base, fresh map[string]PlatformOutcome) map[string]PlatformOutcome {
+	merged := make(map[string]PlatformOutcome, len(base)+len(fresh))
+	for k, v := range base {
+		merged[k] = v
+	}
+	for k, v := range fresh {
+		merged[k] = v
+	}
+	return merged
 }

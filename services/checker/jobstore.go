@@ -153,3 +153,88 @@ func (s *jobStore) insertResult(ctx context.Context, jobID, nodeID string, proxy
 	)
 	return err
 }
+
+// inheritedDims is a node's last-known measured values across the
+// subscription's prior jobs, used to fill dimensions a partial (e.g. alive-only)
+// run did not measure. Mirrors the read-time inheritance in GetResults so the
+// live SSE stream agrees with the results endpoint.
+type inheritedDims struct {
+	speedKbps       int
+	uploadSpeedKbps int
+	country         string
+	platforms       map[string]PlatformOutcome
+}
+
+// inheritanceBaseline maps a stable node identity (server:port, see
+// nodeIdentityKey) to its inherited dimensions.
+type inheritanceBaseline map[string]inheritedDims
+
+// loadInheritanceBaseline snapshots, per node identity, the latest non-empty
+// speed / upload / country and the latest value of each platform key across all
+// of the subscription's prior check results. Computed once at job start (before
+// this job has written any rows), it lets recordResult emit a fully inherited
+// result per node without an extra query per node.
+func (s *jobStore) loadInheritanceBaseline(ctx context.Context, subscriptionID string) (inheritanceBaseline, error) {
+	key := nodeIdentityKey("cr")
+	rows, err := db.Query(ctx, `
+		WITH hist AS (
+			SELECT `+key+` AS node_key, cr.speed_kbps, cr.upload_speed_kbps,
+			       cr.country, cr.platforms, cr.checked_at
+			FROM check_results cr
+			JOIN check_jobs cj ON cj.id = cr.job_id
+			WHERE cj.subscription_id = $1
+		),
+		spd AS (
+			SELECT DISTINCT ON (node_key) node_key, speed_kbps
+			FROM hist WHERE speed_kbps > 0 ORDER BY node_key, checked_at DESC
+		),
+		upl AS (
+			SELECT DISTINCT ON (node_key) node_key, upload_speed_kbps
+			FROM hist WHERE upload_speed_kbps > 0 ORDER BY node_key, checked_at DESC
+		),
+		ctry AS (
+			SELECT DISTINCT ON (node_key) node_key, country
+			FROM hist WHERE country <> '' ORDER BY node_key, checked_at DESC
+		),
+		plat_kv AS (
+			SELECT DISTINCT ON (node_key, kv.key) node_key, kv.key AS key, kv.value AS value
+			FROM hist
+			CROSS JOIN LATERAL jsonb_each(hist.platforms) AS kv(key, value)
+			WHERE hist.platforms IS NOT NULL AND hist.platforms <> '{}'::jsonb
+			ORDER BY node_key, kv.key, hist.checked_at DESC
+		),
+		plat AS (
+			SELECT node_key, jsonb_object_agg(key, value) AS platforms
+			FROM plat_kv GROUP BY node_key
+		)
+		SELECT k.node_key,
+		       COALESCE(spd.speed_kbps, 0),
+		       COALESCE(upl.upload_speed_kbps, 0),
+		       COALESCE(ctry.country, ''),
+		       COALESCE(plat.platforms, '{}'::jsonb)
+		FROM (SELECT DISTINCT node_key FROM hist) k
+		LEFT JOIN spd  ON spd.node_key  = k.node_key
+		LEFT JOIN upl  ON upl.node_key  = k.node_key
+		LEFT JOIN ctry ON ctry.node_key = k.node_key
+		LEFT JOIN plat ON plat.node_key = k.node_key
+	`, subscriptionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	baseline := inheritanceBaseline{}
+	for rows.Next() {
+		var nodeKey string
+		var dims inheritedDims
+		var platformsJSON []byte
+		if err := rows.Scan(&nodeKey, &dims.speedKbps, &dims.uploadSpeedKbps, &dims.country, &platformsJSON); err != nil {
+			return nil, err
+		}
+		if len(platformsJSON) > 0 {
+			_ = json.Unmarshal(platformsJSON, &dims.platforms)
+		}
+		baseline[nodeKey] = dims
+	}
+	return baseline, rows.Err()
+}
