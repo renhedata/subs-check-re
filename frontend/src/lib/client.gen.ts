@@ -337,6 +337,13 @@ export namespace checker {
     }
 
     /**
+     * ListNodesResponse is returned by GET /subscription/:subscriptionID/nodes.
+     */
+    export interface ListNodesResponse {
+        nodes: Node[]
+    }
+
+    /**
      * ListRulesResponse is returned by GET /platform-rules.
      */
     export interface ListRulesResponse {
@@ -357,6 +364,32 @@ export namespace checker {
         platforms: { [key: string]: PlatformOutcome }
         ip: string
         country: string
+    }
+
+    /**
+     * Node is a persisted node enriched with its latest-known result. Metrics are
+     * zero / Platforms empty / LastCheckedAt nil for a node that has never been
+     * checked. Inheritance mirrors GetResults: alive/latency/ip come from the most
+     * recent result row; speed/upload/country/platforms take the latest non-empty
+     * value per node identity (server:port).
+     */
+    export interface Node {
+        "node_id": string
+        "node_name": string
+        "node_type": string
+        enabled: boolean
+        alive: boolean
+        "latency_ms": number
+        "speed_kbps": number
+        "upload_speed_kbps": number
+        country: string
+        ip: string
+        server: string
+        port: number
+        config: string
+        platforms: { [key: string]: PlatformOutcome }
+        "traffic_bytes": number
+        "last_checked_at": string
     }
 
     /**
@@ -487,6 +520,7 @@ export namespace checker {
         "upload_speed_test": boolean
         "media_apps": string[]
         debug: boolean
+        "node_ids": string[]
     }
 
     /**
@@ -524,6 +558,7 @@ export namespace checker {
             this.ImportNodes = this.ImportNodes.bind(this)
             this.LatestJobs = this.LatestJobs.bind(this)
             this.ListJobs = this.ListJobs.bind(this)
+            this.ListNodes = this.ListNodes.bind(this)
             this.ListRules = this.ListRules.bind(this)
             this.ListTestNodes = this.ListTestNodes.bind(this)
             this.RefreshSubscription = this.RefreshSubscription.bind(this)
@@ -645,6 +680,17 @@ export namespace checker {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("GET", `/check/${encodeURIComponent(subscriptionID)}/jobs`, undefined, {query})
             return await resp.json() as ListJobsResponse
+        }
+
+        /**
+         * ListNodes returns the subscription's persisted nodes with their latest-known
+         * results, so the UI can display nodes immediately after fetch/import — before
+         * any check has run.
+         */
+        public async ListNodes(subscriptionID: string): Promise<ListNodesResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("GET", `/subscription/${encodeURIComponent(subscriptionID)}/nodes`)
+            return await resp.json() as ListNodesResponse
         }
 
         /**
