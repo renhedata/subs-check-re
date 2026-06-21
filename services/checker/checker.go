@@ -171,6 +171,7 @@ type TriggerParams struct {
 	UploadSpeedTest *bool    `json:"upload_speed_test"`
 	MediaApps       []string `json:"media_apps"`
 	Debug           *bool    `json:"debug"`
+	NodeIDs         []string `json:"node_ids"`
 }
 
 // --- Progress event payload ---
@@ -302,11 +303,17 @@ func TriggerCheck(ctx context.Context, subscriptionID string, p *TriggerParams) 
 	}
 	optsJSON, _ := json.Marshal(opts)
 
+	var nodeIDsArg any
+	if p != nil && len(p.NodeIDs) > 0 {
+		b, _ := json.Marshal(p.NodeIDs)
+		nodeIDsArg = string(b)
+	}
+
 	jobID := uuid.New().String()
 	if _, err := db.Exec(ctx, `
-		INSERT INTO check_jobs (id, subscription_id, user_id, sub_url, speed_test_url, latency_test_url, options_json, status, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, 'queued', $8)
-	`, jobID, subscriptionID, claims.UserID, sub.URL, speedTestURL, latencyTestURL, optsJSON, time.Now()); err != nil {
+		INSERT INTO check_jobs (id, subscription_id, user_id, sub_url, speed_test_url, latency_test_url, options_json, status, created_at, node_ids)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, 'queued', $8, $9::jsonb)
+	`, jobID, subscriptionID, claims.UserID, sub.URL, speedTestURL, latencyTestURL, optsJSON, time.Now(), nodeIDsArg); err != nil {
 		if isActiveJobConflict(err) {
 			return nil, errs.B().Code(errs.FailedPrecondition).Msg("a check is already running for this subscription").Err()
 		}
