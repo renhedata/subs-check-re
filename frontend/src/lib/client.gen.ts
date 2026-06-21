@@ -252,6 +252,25 @@ export namespace checker {
     }
 
     /**
+     * ImportNodesParams is the request body for ImportNodes.
+     */
+    export interface ImportNodesParams {
+        /**
+         * Content is a subscription payload pasted by the user: Clash YAML
+         * (proxies:) or a V2Ray base64 blob / share links — same formats the URL
+         * fetcher accepts.
+         */
+        content: string
+    }
+
+    /**
+     * ImportNodesResponse reports how many nodes were imported.
+     */
+    export interface ImportNodesResponse {
+        count: number
+    }
+
+    /**
      * Job represents a check job.
      */
     export interface Job {
@@ -399,6 +418,13 @@ export namespace checker {
     }
 
     /**
+     * RefreshResponse reports how many nodes a refresh produced.
+     */
+    export interface RefreshResponse {
+        count: number
+    }
+
+    /**
      * ResultsResponse is returned by GET /check/:subscriptionID/results.
      */
     export interface ResultsResponse {
@@ -411,6 +437,17 @@ export namespace checker {
      */
     export interface SetNodeEnabledParams {
         enabled: boolean
+    }
+
+    /**
+     * TestFetchResponse reports whether a dry-run fetch succeeded. A failure is
+     * returned in-band (HTTP 200, ok=false, error set) so the UI can show the exact
+     * reason instead of a generic request error.
+     */
+    export interface TestFetchResponse {
+        ok: boolean
+        count: number
+        error: string
     }
 
     /**
@@ -479,12 +516,15 @@ export namespace checker {
             this.GetLocalUnlock = this.GetLocalUnlock.bind(this)
             this.GetProgress = this.GetProgress.bind(this)
             this.GetResults = this.GetResults.bind(this)
+            this.ImportNodes = this.ImportNodes.bind(this)
             this.LatestJobs = this.LatestJobs.bind(this)
             this.ListJobs = this.ListJobs.bind(this)
             this.ListRules = this.ListRules.bind(this)
             this.ListTestNodes = this.ListTestNodes.bind(this)
+            this.RefreshSubscription = this.RefreshSubscription.bind(this)
             this.ResetRule = this.ResetRule.bind(this)
             this.SetNodeEnabled = this.SetNodeEnabled.bind(this)
+            this.TestFetch = this.TestFetch.bind(this)
             this.TestRule = this.TestRule.bind(this)
             this.TriggerCheck = this.TriggerCheck.bind(this)
             this.UpdateRule = this.UpdateRule.bind(this)
@@ -565,6 +605,18 @@ export namespace checker {
         }
 
         /**
+         * ImportNodes replaces a subscription's node list from pasted content instead of
+         * a URL fetch. Lets users populate subscriptions whose URL is unreachable from
+         * the server. The imported list persists until the next manual import or
+         * refresh — checks never overwrite it.
+         */
+        public async ImportNodes(subscriptionID: string, params: ImportNodesParams): Promise<ImportNodesResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("POST", `/subscription/${encodeURIComponent(subscriptionID)}/import-nodes`, JSON.stringify(params))
+            return await resp.json() as ImportNodesResponse
+        }
+
+        /**
          * LatestJobs returns the most recent check job per subscription for the
          * current user, with the alive-node average latency. Powers the workbench
          * subscription list and the scheduler's "Last check" column in one request.
@@ -610,6 +662,17 @@ export namespace checker {
         }
 
         /**
+         * RefreshSubscription re-fetches the subscription URL and replaces its node
+         * list. This is the explicit, manual counterpart to the old per-check fetch:
+         * nodes only change when the user asks for it.
+         */
+        public async RefreshSubscription(subscriptionID: string): Promise<RefreshResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("POST", `/subscription/${encodeURIComponent(subscriptionID)}/refresh`)
+            return await resp.json() as RefreshResponse
+        }
+
+        /**
          * ResetRule restores a built-in rule to its seeded default and clears the
          * customized flag. The enabled state is preserved.
          */
@@ -625,6 +688,17 @@ export namespace checker {
          */
         public async SetNodeEnabled(nodeID: string, params: SetNodeEnabledParams): Promise<void> {
             await this.baseClient.callTypedAPI("PATCH", `/nodes/${encodeURIComponent(nodeID)}`, JSON.stringify(params))
+        }
+
+        /**
+         * TestFetch tries to fetch the subscription URL without persisting anything, so
+         * the user can check whether the server can reach the provider and how many
+         * nodes it would get.
+         */
+        public async TestFetch(subscriptionID: string): Promise<TestFetchResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("POST", `/subscription/${encodeURIComponent(subscriptionID)}/test-fetch`)
+            return await resp.json() as TestFetchResponse
         }
 
         /**

@@ -15,6 +15,7 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { ExportPopover } from "@/components/workbench/export-popover";
+import { NodeSourceMenu } from "@/components/workbench/node-source-menu";
 import { RunCheckButton } from "@/components/workbench/run-check-button";
 import type { checker, subscription } from "@/lib/client.gen";
 
@@ -110,6 +111,8 @@ export function DetailHeader({
 						</SelectContent>
 					</Select>
 				) : null}
+
+				<NodeSourceMenu subscriptionId={sub.id} hasUrl={!!sub.url} />
 
 				<ExportPopover subscriptionId={sub.id} />
 

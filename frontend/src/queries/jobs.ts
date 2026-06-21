@@ -114,3 +114,33 @@ export function useSetNodeEnabled(subscriptionId: string) {
 		},
 	});
 }
+
+// useImportNodes replaces a subscription's nodes from pasted content.
+export function useImportNodes(subscriptionId: string) {
+	const qc = useQueryClient();
+	return useMutation({
+		mutationFn: (content: string) =>
+			client.checker.ImportNodes(subscriptionId, { content }),
+		onSuccess: () => {
+			qc.invalidateQueries({ queryKey: queryKeys.results(subscriptionId) });
+		},
+	});
+}
+
+// useRefreshSubscription re-fetches the URL and replaces the node list.
+export function useRefreshSubscription(subscriptionId: string) {
+	const qc = useQueryClient();
+	return useMutation({
+		mutationFn: () => client.checker.RefreshSubscription(subscriptionId),
+		onSuccess: () => {
+			qc.invalidateQueries({ queryKey: queryKeys.results(subscriptionId) });
+		},
+	});
+}
+
+// useTestFetch dry-runs the subscription fetch; read-only, returns ok/count/error.
+export function useTestFetch(subscriptionId: string) {
+	return useMutation({
+		mutationFn: () => client.checker.TestFetch(subscriptionId),
+	});
+}
