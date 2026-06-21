@@ -20,4 +20,5 @@ export const queryKeys = {
 	schedulerHistory: (subscriptionId: string) =>
 		["scheduler-history", subscriptionId] as const,
 	localUnlock: () => ["local-unlock"] as const,
+	nodes: (subscriptionId: string) => ["nodes", subscriptionId] as const,
 };
