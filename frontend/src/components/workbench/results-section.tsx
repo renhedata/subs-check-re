@@ -35,16 +35,47 @@ export function ResultsSection({
 	results,
 	rules = [],
 	onToggleEnabled,
+	selectable,
+	onCheck,
+	checkDisabled,
 }: {
 	results: NodeResult[];
 	rules?: PlatformRule[];
 	onToggleEnabled?: (nodeId: string, enabled: boolean) => void;
+	// When set, rows are selectable and a "Check selected" button appears.
+	selectable?: boolean;
+	onCheck?: (nodeIds: string[]) => void;
+	checkDisabled?: boolean;
 }) {
 	const [text, setText] = useState("");
 	const [aliveOnly, setAliveOnly] = useState(false);
 	const [platforms, setPlatforms] = useState<string[]>([]);
 	const [sortKey, setSortKey] = useState<SortKey>("latency");
 	const [sortDir, setSortDir] = useState<SortDir>("asc");
+	const [selected, setSelected] = useState<Set<string>>(new Set());
+
+	const toggleSelect = (id: string) =>
+		setSelected((prev) => {
+			const next = new Set(prev);
+			if (next.has(id)) {
+				next.delete(id);
+			} else {
+				next.add(id);
+			}
+			return next;
+		});
+	const toggleSelectAll = (ids: string[], select: boolean) =>
+		setSelected((prev) => {
+			const next = new Set(prev);
+			for (const id of ids) {
+				if (select) {
+					next.add(id);
+				} else {
+					next.delete(id);
+				}
+			}
+			return next;
+		});
 
 	const handleSort = (key: SortKey) => {
 		if (key === sortKey) {
@@ -190,7 +221,22 @@ export function ResultsSection({
 						</div>
 					</PopoverContent>
 				</Popover>
-				<span className="ml-auto text-[11px] text-muted-foreground tabular-nums">
+				{selectable && onCheck ? (
+					<button
+						type="button"
+						disabled={checkDisabled || selected.size === 0}
+						onClick={() => onCheck([...selected])}
+						className="ml-auto rounded-full border border-info-line bg-info-muted px-3 py-1 font-medium text-info text-xs transition-colors disabled:opacity-40"
+					>
+						Check selected{selected.size > 0 ? ` (${selected.size})` : ""}
+					</button>
+				) : null}
+				<span
+					className={cn(
+						"text-[11px] text-muted-foreground tabular-nums",
+						selectable && onCheck ? "" : "ml-auto",
+					)}
+				>
 					{visible.length} of {results.length} shown
 				</span>
 			</div>
@@ -209,6 +255,12 @@ export function ResultsSection({
 					sortDir={sortDir}
 					onSort={handleSort}
 					onToggleEnabled={onToggleEnabled}
+					selectable={selectable}
+					selectedIds={selected}
+					onToggleSelect={toggleSelect}
+					onToggleSelectAll={toggleSelectAll}
+					onCheckNode={onCheck ? (id) => onCheck([id]) : undefined}
+					checkDisabled={checkDisabled}
 				/>
 			)}
 		</div>
