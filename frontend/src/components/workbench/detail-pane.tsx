@@ -235,18 +235,10 @@ export function DetailPane({
 							rules={rulesQuery.data?.rules}
 						/>
 					) : null
-				) : resultsQuery.isLoading && !noChecksYet ? (
-					<div className="space-y-2">
-						<Skeleton className="h-8 w-2/3" />
-						<Skeleton className="h-40 w-full" />
-					</div>
-				) : noChecksYet ? (
-					<EmptyState
-						icon={PlayCircle}
-						title="No checks yet"
-						description="Run your first check to see node availability, latency and unlocks."
-					/>
 				) : showNodeList ? (
+					// Default view: the persisted node list is the source of truth,
+					// shown right after fetch/import — before any check has run. It
+					// must take priority over the results-404 "No checks yet" guard.
 					nodesQuery.isLoading ? (
 						<div className="space-y-2">
 							<Skeleton className="h-8 w-2/3" />
@@ -268,6 +260,17 @@ export function DetailPane({
 							checkDisabled={!!activeJobId}
 						/>
 					)
+				) : resultsQuery.isLoading ? (
+					<div className="space-y-2">
+						<Skeleton className="h-8 w-2/3" />
+						<Skeleton className="h-40 w-full" />
+					</div>
+				) : noChecksYet ? (
+					<EmptyState
+						icon={PlayCircle}
+						title="No checks yet"
+						description="Run your first check to see node availability, latency and unlocks."
+					/>
 				) : (
 					<ResultsSection
 						results={results}
