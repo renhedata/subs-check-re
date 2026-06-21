@@ -169,6 +169,40 @@ type inheritedDims struct {
 // nodeIdentityKey) to its inherited dimensions.
 type inheritanceBaseline map[string]inheritedDims
 
+// storedNode is a persisted node: its id and decoded proxy config.
+type storedNode struct {
+	id     string
+	config map[string]any
+}
+
+// loadNodes returns the subscription's current persisted nodes. A check tests
+// these as-is; the node list only changes via an explicit refresh or manual
+// import, never as a side effect of checking.
+func (s *jobStore) loadNodes(ctx context.Context, subscriptionID string) ([]storedNode, error) {
+	rows, err := db.Query(ctx, `SELECT id, config FROM nodes WHERE subscription_id=$1 ORDER BY name`, subscriptionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var nodes []storedNode
+	for rows.Next() {
+		var n storedNode
+		var cfgJSON []byte
+		if err := rows.Scan(&n.id, &cfgJSON); err != nil {
+			return nil, err
+		}
+		if len(cfgJSON) > 0 {
+			_ = json.Unmarshal(cfgJSON, &n.config)
+		}
+		if n.config == nil {
+			n.config = map[string]any{}
+		}
+		nodes = append(nodes, n)
+	}
+	return nodes, rows.Err()
+}
+
 // loadInheritanceBaseline snapshots, per node identity, the latest non-empty
 // speed / upload / country and the latest value of each platform key across all
 // of the subscription's prior check results. Computed once at job start (before

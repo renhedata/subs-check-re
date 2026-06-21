@@ -77,21 +77,41 @@ func (r *jobRunner) run(parentCtx context.Context, jobID, subscriptionID, userID
 		return
 	}
 
-	proxies, err := fetchWithRetry(ctx, r.fetcher, cfg.SubURL)
+	// A check tests the subscription's current persisted nodes; it never
+	// re-fetches or replaces them. Nodes change only via an explicit refresh or
+	// a manual import. The one exception is bootstrap: a subscription that has a
+	// URL but no nodes yet fetches once so the first check has something to test.
+	existing, err := r.store.loadNodes(context.Background(), subscriptionID)
 	if err != nil {
-		fail("fetch subscription", err)
+		fail("load nodes", err)
 		return
+	}
+
+	var proxies []map[string]any
+	var nodeIDs []string
+	if len(existing) == 0 && cfg.SubURL != "" {
+		proxies, err = fetchWithRetry(ctx, r.fetcher, cfg.SubURL)
+		if err != nil {
+			fail("fetch subscription", err)
+			return
+		}
+		nodeIDs, err = r.store.replaceNodes(context.Background(), subscriptionID, proxies)
+		if err != nil {
+			fail("replace nodes", err)
+			return
+		}
+	} else {
+		proxies = make([]map[string]any, len(existing))
+		nodeIDs = make([]string, len(existing))
+		for i, n := range existing {
+			proxies[i] = n.config
+			nodeIDs[i] = n.id
+		}
 	}
 
 	total := len(proxies)
 	if err := r.store.setTotal(context.Background(), jobID, total); err != nil {
 		rlog.Error("failed to persist job total", "job_id", jobID, "err", err)
-	}
-
-	nodeIDs, err := r.store.replaceNodes(context.Background(), subscriptionID, proxies)
-	if err != nil {
-		fail("replace nodes", err)
-		return
 	}
 
 	// Best-effort lookups: a failure degrades to built-in rules / default URLs.
