@@ -19,6 +19,7 @@ function LoginPage() {
 	const [username, setUsername] = useState("");
 	const [password, setPassword] = useState("");
 	const [remember, setRemember] = useState(false);
+	const [inviteCode, setInviteCode] = useState("");
 
 	const loginMut = useLogin();
 	const registerMut = useRegister();
@@ -48,7 +49,7 @@ function LoginPage() {
 			);
 		} else {
 			registerMut.mutate(
-				{ username, password },
+				{ username, password, invite_code: inviteCode },
 				{
 					onSuccess: () => {
 						toast.success("Account created — please sign in");
@@ -102,6 +103,18 @@ function LoginPage() {
 							onChange={(e) => setPassword(e.target.value)}
 						/>
 					</div>
+					{mode === "register" ? (
+						<div className="space-y-1.5">
+							<Label htmlFor="invite" className="text-xs">
+								Invite code
+							</Label>
+							<Input
+								id="invite"
+								value={inviteCode}
+								onChange={(e) => setInviteCode(e.target.value)}
+							/>
+						</div>
+					) : null}
 					{mode === "login" ? (
 						<label className="flex cursor-pointer items-center gap-2 text-muted-foreground text-xs">
 							<Checkbox
@@ -118,7 +131,7 @@ function LoginPage() {
 					variant="success"
 					className="mt-5 w-full"
 					loading={pending}
-					disabled={!username || !password}
+					disabled={!username || !password || (mode === "register" && !inviteCode)}
 				>
 					{mode === "login" ? "Sign in" : "Create account"}
 				</Button>
