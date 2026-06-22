@@ -39,9 +39,7 @@ services:
     restart: on-failure:5
 
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
+    image: ghcr.io/renhedata/subs-check-re-frontend:latest
     environment:
       ENCORE_URL: http://backend:8080
     ports:
