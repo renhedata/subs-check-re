@@ -98,7 +98,7 @@ export function NodeDetailDialog({
 }) {
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="sm:max-w-lg">
+			<DialogContent className="sm:max-w-3xl">
 				{result ? (
 					<>
 						<DialogTitle className="truncate pr-6 font-mono">
@@ -108,54 +108,58 @@ export function NodeDetailDialog({
 							{result.alive ? "Alive" : "Dead"} · {result.node_type || "—"}
 						</DialogDescription>
 
-						<div className="mt-4 max-h-[60vh] space-y-4 overflow-y-auto pr-1">
-							<section>
-								<p className="mb-1 font-medium text-[11px] text-muted-foreground uppercase tracking-[0.4px]">
-									Identity
-								</p>
-								<Row label="Protocol">{result.node_type || "—"}</Row>
-								<Row label="Server">
-									<span className="font-mono">
-										{result.server ? `${result.server}:${result.port}` : "—"}
-									</span>
-								</Row>
-								<Row label="Exit IP">
-									<span className="font-mono">{result.ip || "—"}</span>
-								</Row>
-								<Row label="Country">{result.country || "—"}</Row>
-							</section>
-
-							<section>
-								<p className="mb-1 font-medium text-[11px] text-muted-foreground uppercase tracking-[0.4px]">
-									Performance
-								</p>
-								<Row label="Latency">
-									{result.alive ? (
-										<span className={toneText[latencyTone(result.latency_ms)]}>
-											{result.latency_ms}ms
+						<div className="mt-4 space-y-4">
+							<div className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
+								<section>
+									<p className="mb-1 font-medium text-[11px] text-muted-foreground uppercase tracking-[0.4px]">
+										Identity
+									</p>
+									<Row label="Protocol">{result.node_type || "—"}</Row>
+									<Row label="Server">
+										<span className="font-mono">
+											{result.server ? `${result.server}:${result.port}` : "—"}
 										</span>
-									) : (
-										"—"
-									)}
-								</Row>
-								<Row label="Download">
-									{result.alive && result.speed_kbps
-										? formatSpeed(result.speed_kbps)
-										: "—"}
-								</Row>
-								<Row label="Upload">
-									{result.alive && result.upload_speed_kbps
-										? formatSpeed(result.upload_speed_kbps)
-										: "—"}
-								</Row>
-								<Row label="Traffic">{formatBytes(result.traffic_bytes)}</Row>
-							</section>
+									</Row>
+									<Row label="Exit IP">
+										<span className="font-mono">{result.ip || "—"}</span>
+									</Row>
+									<Row label="Country">{result.country || "—"}</Row>
+								</section>
+
+								<section>
+									<p className="mb-1 font-medium text-[11px] text-muted-foreground uppercase tracking-[0.4px]">
+										Performance
+									</p>
+									<Row label="Latency">
+										{result.alive ? (
+											<span
+												className={toneText[latencyTone(result.latency_ms)]}
+											>
+												{result.latency_ms}ms
+											</span>
+										) : (
+											"—"
+										)}
+									</Row>
+									<Row label="Download">
+										{result.alive && result.speed_kbps
+											? formatSpeed(result.speed_kbps)
+											: "—"}
+									</Row>
+									<Row label="Upload">
+										{result.alive && result.upload_speed_kbps
+											? formatSpeed(result.upload_speed_kbps)
+											: "—"}
+									</Row>
+									<Row label="Traffic">{formatBytes(result.traffic_bytes)}</Row>
+								</section>
+							</div>
 
 							<section>
 								<p className="mb-1.5 font-medium text-[11px] text-muted-foreground uppercase tracking-[0.4px]">
 									Platforms
 								</p>
-								<div className="flex flex-col gap-1">
+								<div className="grid grid-cols-1 gap-x-8 gap-y-1 sm:grid-cols-2">
 									{platformRows(result, rules).map((p) => (
 										<div
 											key={p.key}
