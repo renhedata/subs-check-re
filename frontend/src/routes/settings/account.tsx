@@ -82,7 +82,11 @@ function AccountSettingsPage() {
 	});
 	const passwordForm = useForm<PasswordValues>({
 		resolver: zodResolver(passwordSchema),
-		defaultValues: { current_password: "", new_password: "", confirm_password: "" },
+		defaultValues: {
+			current_password: "",
+			new_password: "",
+			confirm_password: "",
+		},
 	});
 
 	const me = meQuery.data;
@@ -105,7 +109,10 @@ function AccountSettingsPage() {
 
 	const onPassword = (values: PasswordValues) => {
 		passwordMut.mutate(
-			{ current_password: values.current_password, new_password: values.new_password },
+			{
+				current_password: values.current_password,
+				new_password: values.new_password,
+			},
 			{
 				onSuccess: () => {
 					toast.success("Password changed");
@@ -132,20 +139,34 @@ function AccountSettingsPage() {
 	return (
 		<div className="space-y-4">
 			<form onSubmit={profileForm.handleSubmit(onProfile)}>
-				<Section title="Profile" description="Your account name and contact details.">
+				<Section
+					title="Profile"
+					description="Your account name and contact details."
+				>
 					<Field label="Username" error={pErr.username?.message}>
-						<Input {...profileForm.register("username")} autoComplete="username" />
+						<Input
+							{...profileForm.register("username")}
+							autoComplete="username"
+						/>
 					</Field>
 					<div className="grid gap-3 sm:grid-cols-2">
 						<Field label="Display name" error={pErr.display_name?.message}>
 							<Input {...profileForm.register("display_name")} />
 						</Field>
 						<Field label="Email" error={pErr.email?.message}>
-							<Input {...profileForm.register("email")} type="email" autoComplete="email" />
+							<Input
+								{...profileForm.register("email")}
+								type="email"
+								autoComplete="email"
+							/>
 						</Field>
 					</div>
 					<div className="flex justify-end pt-1">
-						<Button type="submit" variant="success" loading={updateMut.isPending}>
+						<Button
+							type="submit"
+							variant="success"
+							loading={updateMut.isPending}
+						>
 							Save profile
 						</Button>
 					</div>
@@ -153,8 +174,14 @@ function AccountSettingsPage() {
 			</form>
 
 			<form onSubmit={passwordForm.handleSubmit(onPassword)}>
-				<Section title="Password" description="Change the password you use to sign in.">
-					<Field label="Current password" error={wErr.current_password?.message}>
+				<Section
+					title="Password"
+					description="Change the password you use to sign in."
+				>
+					<Field
+						label="Current password"
+						error={wErr.current_password?.message}
+					>
 						<Input
 							type="password"
 							autoComplete="current-password"
@@ -169,7 +196,10 @@ function AccountSettingsPage() {
 								{...passwordForm.register("new_password")}
 							/>
 						</Field>
-						<Field label="Confirm new password" error={wErr.confirm_password?.message}>
+						<Field
+							label="Confirm new password"
+							error={wErr.confirm_password?.message}
+						>
 							<Input
 								type="password"
 								autoComplete="new-password"
@@ -178,7 +208,11 @@ function AccountSettingsPage() {
 						</Field>
 					</div>
 					<div className="flex justify-end pt-1">
-						<Button type="submit" variant="success" loading={passwordMut.isPending}>
+						<Button
+							type="submit"
+							variant="success"
+							loading={passwordMut.isPending}
+						>
 							Change password
 						</Button>
 					</div>

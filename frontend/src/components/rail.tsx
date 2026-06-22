@@ -141,7 +141,9 @@ export function Rail() {
 					<div className="px-2 py-1.5 text-muted-foreground text-xs">
 						Signed in as <span className="font-medium">{username}</span>
 					</div>
-					<DropdownMenuItem onClick={() => navigate({ to: "/settings/account" })}>
+					<DropdownMenuItem
+						onClick={() => navigate({ to: "/settings/account" })}
+					>
 						<Settings size={14} /> Account settings
 					</DropdownMenuItem>
 					<DropdownMenuItem onClick={logout}>

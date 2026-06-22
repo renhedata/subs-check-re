@@ -131,7 +131,9 @@ function LoginPage() {
 					variant="success"
 					className="mt-5 w-full"
 					loading={pending}
-					disabled={!username || !password || (mode === "register" && !inviteCode)}
+					disabled={
+						!username || !password || (mode === "register" && !inviteCode)
+					}
 				>
 					{mode === "login" ? "Sign in" : "Create account"}
 				</Button>
