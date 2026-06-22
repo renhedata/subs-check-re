@@ -255,9 +255,9 @@ function TraceView({
 	}
 
 	return (
-		<div className="flex max-h-[60vh]">
+		<div className="flex flex-col sm:flex-row sm:max-h-[60vh]">
 			{/* Step list */}
-			<div className="w-2/5 overflow-y-auto border-white/5 border-r">
+			<div className="w-full sm:w-2/5 overflow-y-auto border-white/5 border-b sm:border-b-0 sm:border-r max-h-48 sm:max-h-none">
 				{trace && (
 					<div className="border-white/5 border-b px-3 py-1.5">
 						<span className="text-[#858585] text-[10px]">
@@ -286,7 +286,7 @@ function TraceView({
 			</div>
 
 			{/* Detail panel */}
-			<div className="w-3/5 overflow-y-auto">
+			<div className="w-full sm:w-3/5 overflow-y-auto">
 				{steps[selected] ? (
 					<StepDetail step={steps[selected]} />
 				) : (
