@@ -89,7 +89,7 @@ export function Rail() {
 	const navigate = useNavigate();
 	const { theme, toggle } = useTheme();
 	const meQuery = useMe();
-	const username = meQuery.data?.username ?? "…";
+	const username = meQuery.data?.display_name || meQuery.data?.username || "…";
 
 	function logout() {
 		clearToken();
@@ -141,6 +141,9 @@ export function Rail() {
 					<div className="px-2 py-1.5 text-muted-foreground text-xs">
 						Signed in as <span className="font-medium">{username}</span>
 					</div>
+					<DropdownMenuItem onClick={() => navigate({ to: "/settings/account" })}>
+						<Settings size={14} /> Account settings
+					</DropdownMenuItem>
 					<DropdownMenuItem onClick={logout}>
 						<LogOut size={14} /> Log out
 					</DropdownMenuItem>

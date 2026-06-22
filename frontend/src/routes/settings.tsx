@@ -10,6 +10,7 @@ const TABS = [
 	{ to: "/settings/notify" as const, label: "Notifications" },
 	{ to: "/settings/export" as const, label: "Export API" },
 	{ to: "/settings/export-tags" as const, label: "Export Tags" },
+	{ to: "/settings/account" as const, label: "Account" },
 ];
 
 function SettingsLayout() {

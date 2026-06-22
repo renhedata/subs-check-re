@@ -21,6 +21,7 @@ import { Route as SettingsNotifyRouteImport } from './routes/settings/notify'
 import { Route as SettingsGeneralRouteImport } from './routes/settings/general'
 import { Route as SettingsExportTagsRouteImport } from './routes/settings/export-tags'
 import { Route as SettingsExportRouteImport } from './routes/settings/export'
+import { Route as SettingsAccountRouteImport } from './routes/settings/account'
 
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
@@ -82,6 +83,11 @@ const SettingsExportRoute = SettingsExportRouteImport.update({
   path: '/export',
   getParentRoute: () => SettingsRoute,
 } as any)
+const SettingsAccountRoute = SettingsAccountRouteImport.update({
+  id: '/account',
+  path: '/account',
+  getParentRoute: () => SettingsRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -89,6 +95,7 @@ export interface FileRoutesByFullPath {
   '/rules': typeof RulesRoute
   '/scheduler': typeof SchedulerRoute
   '/settings': typeof SettingsRouteWithChildren
+  '/settings/account': typeof SettingsAccountRoute
   '/settings/export': typeof SettingsExportRoute
   '/settings/export-tags': typeof SettingsExportTagsRoute
   '/settings/general': typeof SettingsGeneralRoute
@@ -102,6 +109,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/rules': typeof RulesRoute
   '/scheduler': typeof SchedulerRoute
+  '/settings/account': typeof SettingsAccountRoute
   '/settings/export': typeof SettingsExportRoute
   '/settings/export-tags': typeof SettingsExportTagsRoute
   '/settings/general': typeof SettingsGeneralRoute
@@ -117,6 +125,7 @@ export interface FileRoutesById {
   '/rules': typeof RulesRoute
   '/scheduler': typeof SchedulerRoute
   '/settings': typeof SettingsRouteWithChildren
+  '/settings/account': typeof SettingsAccountRoute
   '/settings/export': typeof SettingsExportRoute
   '/settings/export-tags': typeof SettingsExportTagsRoute
   '/settings/general': typeof SettingsGeneralRoute
@@ -133,6 +142,7 @@ export interface FileRouteTypes {
     | '/rules'
     | '/scheduler'
     | '/settings'
+    | '/settings/account'
     | '/settings/export'
     | '/settings/export-tags'
     | '/settings/general'
@@ -146,6 +156,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/rules'
     | '/scheduler'
+    | '/settings/account'
     | '/settings/export'
     | '/settings/export-tags'
     | '/settings/general'
@@ -160,6 +171,7 @@ export interface FileRouteTypes {
     | '/rules'
     | '/scheduler'
     | '/settings'
+    | '/settings/account'
     | '/settings/export'
     | '/settings/export-tags'
     | '/settings/general'
@@ -265,10 +277,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsExportRouteImport
       parentRoute: typeof SettingsRoute
     }
+    '/settings/account': {
+      id: '/settings/account'
+      path: '/account'
+      fullPath: '/settings/account'
+      preLoaderRoute: typeof SettingsAccountRouteImport
+      parentRoute: typeof SettingsRoute
+    }
   }
 }
 
 interface SettingsRouteChildren {
+  SettingsAccountRoute: typeof SettingsAccountRoute
   SettingsExportRoute: typeof SettingsExportRoute
   SettingsExportTagsRoute: typeof SettingsExportTagsRoute
   SettingsGeneralRoute: typeof SettingsGeneralRoute
@@ -277,6 +297,7 @@ interface SettingsRouteChildren {
 }
 
 const SettingsRouteChildren: SettingsRouteChildren = {
+  SettingsAccountRoute: SettingsAccountRoute,
   SettingsExportRoute: SettingsExportRoute,
   SettingsExportTagsRoute: SettingsExportTagsRoute,
   SettingsGeneralRoute: SettingsGeneralRoute,
