@@ -190,7 +190,7 @@ export function RuleInspector({
 	return (
 		<div className="flex h-full min-w-0 flex-1 flex-col">
 			{/* identity header */}
-			<div className="flex items-center gap-3 border-border border-b px-4 py-3">
+			<div className="flex flex-wrap items-center gap-3 border-border border-b px-4 py-3">
 				{onMobileBack && (
 					<button
 						type="button"
@@ -207,7 +207,7 @@ export function RuleInspector({
 					name={name}
 					size={40}
 				/>
-				<div className="min-w-0">
+				<div className="min-w-0 flex-1">
 					<input
 						value={name}
 						onChange={(e) => setName(e.target.value)}
@@ -231,15 +231,15 @@ export function RuleInspector({
 						)}
 					</div>
 				</div>
-				<div className="ml-auto flex items-center gap-2.5">
-					<div className="flex rounded-lg border border-border bg-background p-0.5">
+				<div className="flex w-full items-center gap-2.5 lg:ml-auto lg:w-auto">
+					<div className="flex min-w-0 flex-1 overflow-x-auto rounded-lg border border-border bg-background p-0.5 lg:flex-none">
 						{RULE_TYPES.map((t) => (
 							<button
 								key={t}
 								type="button"
 								onClick={() => changeType(t)}
 								className={cn(
-									"rounded-md px-2 py-1 text-[11px] transition-colors",
+									"shrink-0 whitespace-nowrap rounded-md px-2 py-1 text-[11px] transition-colors",
 									ruleType === t
 										? "bg-secondary text-foreground"
 										: "text-muted-foreground hover:text-foreground",
