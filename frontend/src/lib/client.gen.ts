@@ -117,6 +117,11 @@ export interface ClientOptions {
  * services/auth/auth.go
  */
 export namespace auth {
+    export interface ChangePasswordParams {
+        "current_password": string
+        "new_password": string
+    }
+
     export interface LoginParams {
         username: string
         password: string
@@ -131,15 +136,24 @@ export namespace auth {
     export interface MeResponse {
         "user_id": string
         username: string
+        email: string
+        "display_name": string
     }
 
     export interface RegisterParams {
         username: string
         password: string
+        "invite_code": string
     }
 
     export interface RegisterResponse {
         "user_id": string
+    }
+
+    export interface UpdateProfileParams {
+        username: string
+        email: string
+        "display_name": string
     }
 
     export class ServiceClient {
@@ -147,9 +161,15 @@ export namespace auth {
 
         constructor(baseClient: BaseClient) {
             this.baseClient = baseClient
+            this.ChangePassword = this.ChangePassword.bind(this)
             this.Login = this.Login.bind(this)
             this.Me = this.Me.bind(this)
             this.Register = this.Register.bind(this)
+            this.UpdateProfile = this.UpdateProfile.bind(this)
+        }
+
+        public async ChangePassword(params: ChangePasswordParams): Promise<void> {
+            await this.baseClient.callTypedAPI("POST", `/auth/change-password`, JSON.stringify(params))
         }
 
         public async Login(params: LoginParams): Promise<LoginResponse> {
@@ -168,6 +188,12 @@ export namespace auth {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("POST", `/auth/register`, JSON.stringify(params))
             return await resp.json() as RegisterResponse
+        }
+
+        public async UpdateProfile(params: UpdateProfileParams): Promise<MeResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("PATCH", `/auth/profile`, JSON.stringify(params))
+            return await resp.json() as MeResponse
         }
     }
 }
