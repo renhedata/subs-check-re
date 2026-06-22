@@ -150,3 +150,12 @@ func TestChangePasswordWrongCurrent(t *testing.T) {
 		t.Error("expected error for wrong current password")
 	}
 }
+
+func TestUpdateProfileRejectsDisplayNameEmail(t *testing.T) {
+	ctx := context.Background()
+	reg, _ := Register(ctx, &RegisterParams{Username: "dnemail", Password: "pass1234", InviteCode: "ashark"})
+	_, err := updateProfile(ctx, reg.UserID, &UpdateProfileParams{Username: "dnemail", Email: "Foo Bar <x@example.com>"})
+	if err == nil {
+		t.Error("expected error for display-name-form email")
+	}
+}

@@ -139,7 +139,8 @@ func updateProfile(ctx context.Context, userID string, p *UpdateProfileParams) (
 		return nil, errs.B().Code(errs.InvalidArgument).Msg("username required").Err()
 	}
 	if p.Email != "" {
-		if _, err := mail.ParseAddress(p.Email); err != nil {
+		addr, err := mail.ParseAddress(p.Email)
+		if err != nil || addr.Address != p.Email {
 			return nil, errs.B().Code(errs.InvalidArgument).Msg("invalid email address").Err()
 		}
 	}
