@@ -172,7 +172,7 @@ export function RuleListPane({
 	const custom = filtered.filter((r) => !r.is_default);
 
 	return (
-		<div className="flex h-full flex-col">
+		<div className="flex h-full w-full flex-col">
 			<div className="flex items-center gap-2 border-border border-b p-2.5">
 				<div className="flex flex-1 items-center gap-1.5 rounded-lg border border-border bg-background px-2.5">
 					<Search size={13} className="text-muted-foreground" />
